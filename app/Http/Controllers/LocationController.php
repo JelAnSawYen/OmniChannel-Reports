@@ -1,0 +1,279 @@
+<?php
+namespace App\Http\Controllers;
+
+use App\Models\MediaGateway;
+use App\Services\AuditLogger;
+use App\Services\NotificationService;
+use App\Services\XlsxService;
+use App\Support\InventoryImportCatalog;
+use App\Support\OperationCatalog;
+use App\Support\PublicError;
+use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Validation\Rule;
+use Illuminate\View\View;
+
+class LocationController extends Controller
+{
+    use HandlesInventoryImport;
+    private const COLUMNS = [
+        'site_name' => 'Site Name',
+        'site_code' => 'Site Code',
+        'ip_address' => 'IP Address',
+        'username' => 'Username',
+        'database' => 'Database',
+    ];
+
+    public function index(Request $request): View
+    {
+        $search = trim((string) $request->query('search'));
+        $status = (string) $request->query('status', '');
+        $locationFilter = (string) $request->query('location', '');
+
+        $rows = collect(OperationCatalog::locations())->map(function (string $name, string $slug) {
+            $query = MediaGateway::query()->where('site_name', $name);
+
+            return [
+                'slug' => $slug,
+                'name' => $name,
+                'code' => strtoupper($slug),
+                'gateways' => (clone $query)->count(),
+                'updated_at' => (clone $query)->max('updated_at'),
+            ];
+        })->values();
+
+        if ($search !== '') {
+            $needle = mb_strtolower($search);
+            $rows = $rows->filter(fn (array $row) => str_contains(mb_strtolower($row['name']), $needle)
+                || str_contains(mb_strtolower($row['code']), $needle));
+        }
+
+        if (isset(OperationCatalog::locations()[$locationFilter])) {
+            $rows = $rows->filter(fn (array $row) => $row['slug'] === $locationFilter);
+        }
+
+        if ($status === 'active') {
+            $rows = $rows->filter(fn (array $row) => $row['gateways'] > 0);
+        } elseif ($status === 'none') {
+            $rows = $rows->filter(fn (array $row) => $row['gateways'] === 0);
+        }
+
+        $rows = $rows->values();
+        $perPage = 10;
+        $page = LengthAwarePaginator::resolveCurrentPage();
+
+        $locations = new LengthAwarePaginator(
+            $rows->forPage($page, $perPage)->values(),
+            $rows->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
+        return view('locations.index', [
+            'locations' => $locations,
+            'search' => $search,
+            'status' => $status,
+            'locationFilter' => $locationFilter,
+            'locationOptions' => OperationCatalog::locations(),
+        ]);
+    }
+
+    public function show(string $location): View
+    {
+        $name = $this->locationName($location);
+        $search = trim((string) request('search'));
+        $perPage = (int) request('per_page', 10);
+        if (! in_array($perPage, [5, 10, 25, 50], true)) {
+            $perPage = 10;
+        }
+
+        $records = $this->query($name, $search)
+            ->orderBy('site_code')
+            ->paginate($perPage)
+            ->withQueryString();
+
+        return view('locations.show', [
+            'locationSlug' => $location,
+            'locationName' => $name,
+            'locations' => OperationCatalog::locations(),
+            'columns' => self::COLUMNS,
+            'records' => $records,
+            'search' => $search,
+            'perPage' => $perPage,
+        ]);
+    }
+
+    public function store(Request $request, string $location)
+    {
+        $name = $this->locationName($location);
+        $this->guardMutation('media.create');
+
+        $data = $this->validatePayload($request, $name);
+
+        if ($error = $this->duplicateError($data)) {
+            return back()->with('error', $error)->withInput();
+        }
+
+        $gateway = MediaGateway::create($data);
+        AuditLogger::log('Added', 'GSM Gateways', 'Added gateway '.$gateway->site_code.' to '.$data['site_name'], $gateway->id, $request);
+
+        return back()->with('success', 'GSM Gateway added to '.$data['site_name'].' successfully.');
+    }
+
+    public function update(Request $request, string $location, string $gateway)
+    {
+        $name = $this->locationName($location);
+        $this->guardMutation('media.edit');
+
+        $record = $this->gatewayInLocation($name, (int) $gateway);
+        $data = $this->validatePayload($request, $name, $record->id);
+
+        if ($error = $this->duplicateError($data, $record->id)) {
+            return back()->with('error', $error)->withInput();
+        }
+
+        $record->update($data);
+        AuditLogger::log('Updated', 'GSM Gateways', 'Updated gateway '.$record->site_code.' in '.$data['site_name'], $record->id, $request);
+
+        return back()->with('success', 'GSM Gateway updated successfully.');
+    }
+
+    public function destroy(Request $request, string $location, string $gateway)
+    {
+        $name = $this->locationName($location);
+        $this->guardMutation('media.delete');
+
+        $record = $this->gatewayInLocation($name, (int) $gateway);
+        $code = $record->site_code;
+        $id = $record->id;
+        $record->delete();
+
+        AuditLogger::log('Deleted', 'GSM Gateways', 'Deleted gateway '.$code, $id, $request);
+
+        return back()->with('success', 'GSM Gateway deleted successfully.');
+    }
+
+    public function export(Request $request, string $location, XlsxService $xlsx)
+    {
+        $name = $this->locationName($location);
+        $search = trim((string) $request->query('search'));
+
+        try {
+            $columns = $this->exportColumns($request->user());
+            $sequence = 0;
+            $path = $xlsx->export(
+                array_merge(['Id'], array_values($columns)),
+                $this->query($name, $search)
+                    ->orderBy('site_code')
+                    ->get()
+                    ->map(function (MediaGateway $gateway) use ($columns, &$sequence) {
+                        $sequence++;
+
+                        return array_merge([$sequence], collect(array_keys($columns))->map(fn ($field) => $gateway->{$field})->all());
+                    }),
+                $location.'.xlsx'
+            );
+        } catch (\Throwable $exception) {
+            NotificationService::exportFailed($name, 'Export failed.', 'program-location');
+
+            return back()->with('error', PublicError::failed('Export', $exception));
+        }
+
+        AuditLogger::log('Exported', 'GSM Gateways', 'Exported '.$name.' GSM Gateway records', null, $request);
+
+        return response()->download($path, $location.'-gsm-gateways.xlsx')->deleteFileAfterSend(true);
+    }
+
+    private function query(string $name, string $search)
+    {
+        $query = MediaGateway::query()->where('site_name', $name);
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                foreach (array_keys(self::COLUMNS) as $index => $field) {
+                    $index === 0
+                        ? $q->where($field, 'like', "%{$search}%")
+                        : $q->orWhere($field, 'like', "%{$search}%");
+                }
+            });
+        }
+
+        return $query;
+    }
+
+    private function locationName(string $location): string
+    {
+        $names = OperationCatalog::locations();
+        abort_unless(isset($names[$location]), 404);
+
+        return $names[$location];
+    }
+
+    private function gatewayInLocation(string $locationName, int $id): MediaGateway
+    {
+        return MediaGateway::query()
+            ->where('site_name', $locationName)
+            ->whereKey($id)
+            ->firstOrFail();
+    }
+
+    private function exportColumns($user): array
+    {
+        if ($user?->canExportGatewaySecrets()) {
+            return self::COLUMNS;
+        }
+
+        return array_diff_key(self::COLUMNS, array_flip(['username', 'database']));
+    }
+
+    private function guardMutation(string $permission): void
+    {
+        $user = auth()->user();
+        abort_unless($user && $user->hasPermission($permission), 403, 'You do not have permission to perform this action.');
+    }
+
+    private function validatePayload(Request $request, string $locationName, ?int $id = null): array
+    {
+        $request->merge([
+            'site_name' => trim((string) $request->input('site_name')) !== ''
+                ? $request->input('site_name')
+                : $locationName,
+        ]);
+
+        return $request->validate($this->rules($id));
+    }
+
+    private function rules(?int $id = null): array
+    {
+        return [
+            'site_name' => ['required', 'string', 'max:255', Rule::in(array_values(OperationCatalog::locations()))],
+            'site_code' => ['required', 'string', 'max:255', Rule::unique('media_gateways', 'site_code')->ignore($id)],
+            'ip_address' => ['required', 'ip', Rule::unique('media_gateways', 'ip_address')->ignore($id)],
+            'username' => ['required', 'string', 'max:255'],
+            'database' => ['required', 'string', 'max:255'],
+        ];
+    }
+
+    private function duplicateError(array $data, ?int $id = null): ?string
+    {
+        $exists = MediaGateway::query()
+            ->where(function ($query) use ($data) {
+                $query->where('site_code', $data['site_code'] ?? '')
+                    ->orWhere('ip_address', $data['ip_address'] ?? '');
+            })
+            ->when($id, fn ($query) => $query->where('id', '!=', $id))
+            ->exists();
+
+        return $exists
+            ? 'A GSM Gateway with the same Site Code or IP Address already exists.'
+            : null;
+    }
+
+    protected function inventoryImportConfig(Request $request): array
+    {
+        $slug = (string) $request->route('location');
+
+        return InventoryImportCatalog::location($slug, $this->locationName($slug));
+    }
+}

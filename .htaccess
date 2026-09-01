@@ -1,0 +1,19 @@
+<IfModule mod_authz_core.c>
+    <FilesMatch "(^\.env|\.env\..*|composer\.(json|lock)|artisan|phpunit\.xml)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+    <FilesMatch "(^\.env|\.env\..*|composer\.(json|lock)|artisan|phpunit\.xml)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+RedirectMatch 403 /(?:\.git|storage|vendor|bootstrap|database|tests|node_modules)(/|$)
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(public)($|/) - [L]
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
