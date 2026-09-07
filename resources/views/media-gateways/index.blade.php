@@ -1,5 +1,19 @@
 @extends('layouts.app')
 @section('content')
+@php
+    $gatewayColumns = [
+        'ip_address' => 'Hostname IP',
+        'site_code' => 'Serial Number',
+        'plan' => 'Plan',
+        'port' => 'Port',
+        'network' => 'Network',
+        'device_function' => 'Function',
+        'site_name' => 'Site',
+        'username' => 'User',
+        'password' => 'Password',
+    ];
+    $previewHeaders = array_values(\App\Support\InventoryImportCatalog::gateway($resource['index'] === 'gsm-gateways.index' ? 'gsm-gateways' : 'media-gateways')['fields']);
+@endphp
 <div class="page-head">
     <div>
         <h1 class="page-title">{{ $resource['title'] }}</h1>
@@ -24,7 +38,7 @@
             'previewUrl' => (auth()->user()->hasPermission('media.create') && auth()->user()->canMutateGateways()) ? route($resource['index'] === 'gsm-gateways.index' ? 'gsm-gateways.import.preview' : 'media-gateways.import.preview') : '',
             'confirmUrl' => (auth()->user()->hasPermission('media.create') && auth()->user()->canMutateGateways()) ? route($resource['index'] === 'gsm-gateways.index' ? 'gsm-gateways.import.confirm' : 'media-gateways.import.confirm') : '',
             'errorsUrl' => (auth()->user()->hasPermission('media.create') && auth()->user()->canMutateGateways()) ? route($resource['index'] === 'gsm-gateways.index' ? 'gsm-gateways.import.errors' : 'media-gateways.import.errors') : '',
-            'previewHeaders' => ['Site Name', 'Site Code', 'IP Address', 'Username', 'Database'],
+            'previewHeaders' => $previewHeaders,
             'entityTitle' => $resource['plural'],
         ])
         @endif
@@ -35,30 +49,39 @@
 </div>
 
 <div class="table-card table-wrap">
-<table aria-label="{{ $resource['title'] }}">
+<table class="gsm-table" aria-label="{{ $resource['title'] }}">
 <thead>
 <tr>
-    @foreach(['id'=>'Id','site_name'=>'Site Name','site_code'=>'Site Code','ip_address'=>'IP Address','username'=>'Username','database'=>'Database'] as $field=>$label)
+    @foreach($gatewayColumns as $field=>$label)
         <th><button type="button" class="sortable-button" data-sort="{{ $field }}"><span>{{ $label }}</span></button></th>
     @endforeach
-    <th>Last Updated</th>
     <th class="actions-column">Actions</th>
 </tr>
 </thead>
 <tbody id="mediaGatewayRows">
 @forelse($mediaGateways as $gateway)
 <tr>
-    <td>{{ ($mediaGateways->firstItem() ?? 1) + $loop->index }}</td>
-    <td>{{ $gateway->site_name }}</td>
-    <td>{{ $gateway->site_code }}</td>
     <td>{{ $gateway->ip_address }}</td>
+    <td>{{ $gateway->site_code }}</td>
+    <td>{{ $gateway->plan ?: '—' }}</td>
+    <td>{{ $gateway->port ?: '—' }}</td>
+    <td>{{ $gateway->network ?: '—' }}</td>
+    <td>{{ $gateway->device_function ?: '—' }}</td>
+    <td>{{ $gateway->site_name }}</td>
     <td>{{ $gateway->username }}</td>
-    <td>{{ $gateway->database }}</td>
-    <td>{{ $gateway->updated_at?->format('M d, Y h:i A') ?? '—' }}</td>
+    <td>
+        <span class="pdc-secret">
+            <span class="pdc-secret-mask">••••••</span>
+            <span class="pdc-secret-value" hidden>{{ $gateway->password }}</span>
+            <button type="button" class="pdc-secret-toggle" title="Show password" aria-label="Show password">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+        </span>
+    </td>
     <td class="actions-column">
         <div class="row-actions">
             @if(auth()->user()->hasPermission('media.edit') && auth()->user()->canMutateGateways())
-                <button type="button" class="action-btn edit" data-edit-id="{{ $gateway->id }}" data-edit-site_name="{{ $gateway->site_name }}" data-edit-site_code="{{ $gateway->site_code }}" data-edit-ip_address="{{ $gateway->ip_address }}" data-edit-username="{{ $gateway->username }}" data-edit-database="{{ $gateway->database }}" title="Edit {{ $resource['entity'] }}" aria-label="Edit {{ $resource['entity'] }}">
+                <button type="button" class="action-btn edit" data-edit-id="{{ $gateway->id }}" data-edit-site_name="{{ $gateway->site_name }}" data-edit-site_code="{{ $gateway->site_code }}" data-edit-ip_address="{{ $gateway->ip_address }}" data-edit-plan="{{ $gateway->plan }}" data-edit-port="{{ $gateway->port }}" data-edit-network="{{ $gateway->network }}" data-edit-device_function="{{ $gateway->device_function }}" data-edit-username="{{ $gateway->username }}" data-edit-password="{{ $gateway->password }}" title="Edit {{ $resource['entity'] }}" aria-label="Edit {{ $resource['entity'] }}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
                 </button>
             @endif
@@ -71,7 +94,7 @@
     </td>
 </tr>
 @empty
-<tr><td colspan="8"><div class="empty-state">{{ $resource['empty'] }}</div></td></tr>
+<tr><td colspan="10"><div class="empty-state">{{ $resource['empty'] }}</div></td></tr>
 @endforelse
 </tbody>
 </table>
@@ -114,14 +137,38 @@
             <div class="modal-body">
                 <div id="formErrors"></div>
                 <div class="form-grid">
-                    <div class="form-group full"><label for="site_name">Site Name</label><input class="form-control" id="site_name" name="site_name" required></div>
-                    <div class="form-group"><label for="site_code">Site Code</label><input class="form-control" id="site_code" name="site_code" required></div>
-                    <div class="form-group"><label for="ip_address">IP Address</label><input class="form-control" id="ip_address" name="ip_address" required></div>
-                    <div class="form-group"><label for="username">Username</label><input class="form-control" id="username" name="username" required></div>
-                    <div class="form-group"><label for="database">Database</label><input class="form-control" id="database" name="database" required></div>
+                    <div class="form-group"><label for="ip_address">Hostname IP</label><input class="form-control" id="ip_address" name="ip_address" required></div>
+                    <div class="form-group"><label for="site_code">Serial Number</label><input class="form-control" id="site_code" name="site_code" required></div>
+                    <div class="form-group"><label for="plan">Plan</label><input class="form-control" id="plan" name="plan"></div>
+                    <div class="form-group"><label for="port">Port</label><input class="form-control" id="port" name="port"></div>
+                    <div class="form-group"><label for="network">Network</label><input class="form-control" id="network" name="network"></div>
+                    <div class="form-group"><label for="device_function">Function</label><input class="form-control" id="device_function" name="device_function"></div>
+                    @if(($resource['index'] ?? '') === 'gsm-gateways.index')
+                        <div class="form-group">
+                            <label for="site_name">Site</label>
+                            <select class="form-control" id="site_name" name="site_name" required>
+                                <option value="">Select Site</option>
+                                @foreach(($locations ?? []) as $slug => $name)
+                                    <option value="{{ $name }}">{{ $name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    @else
+                        <div class="form-group"><label for="site_name">Site</label><input class="form-control" id="site_name" name="site_name" required></div>
+                    @endif
+                    <div class="form-group"><label for="username">User</label><input class="form-control" id="username" name="username" required></div>
+                    <div class="form-group full">
+                        <label for="password">Password</label>
+                        <div class="pdc-password-field">
+                            <input class="form-control" type="password" id="password" name="password" autocomplete="new-password">
+                            <button type="button" class="pdc-secret-toggle" data-toggle-input="password" title="Show password" aria-label="Show password">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="modal-footer"><button type="button" class="btn secondary" data-close="mediaGatewayModal">Cancel</button><button type="submit" class="btn primary">Save {{ $resource['entity'] }}</button></div>
+            <div class="modal-footer"><button type="button" class="btn secondary" data-close="mediaGatewayModal">Cancel</button><button type="submit" class="btn primary">Save</button></div>
         </form>
     </div>
 </div>
@@ -140,6 +187,6 @@
     'previewUrl' => (auth()->user()->hasPermission('media.create') && auth()->user()->canMutateGateways()) ? route($resource['index'] === 'gsm-gateways.index' ? 'gsm-gateways.import.preview' : 'media-gateways.import.preview') : '',
     'confirmUrl' => (auth()->user()->hasPermission('media.create') && auth()->user()->canMutateGateways()) ? route($resource['index'] === 'gsm-gateways.index' ? 'gsm-gateways.import.confirm' : 'media-gateways.import.confirm') : '',
     'errorsUrl' => (auth()->user()->hasPermission('media.create') && auth()->user()->canMutateGateways()) ? route($resource['index'] === 'gsm-gateways.index' ? 'gsm-gateways.import.errors' : 'media-gateways.import.errors') : '',
-    'previewFields' => ['site_name', 'site_code', 'ip_address', 'username', 'database'],
+    'previewFields' => ['ip_address', 'site_code', 'plan', 'port', 'network', 'device_function', 'site_name', 'username', 'password'],
 ])
 @endpush

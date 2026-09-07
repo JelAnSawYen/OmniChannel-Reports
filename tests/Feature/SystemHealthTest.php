@@ -164,8 +164,8 @@ class SystemHealthTest extends TestCase
             'status' => 'Open',
         ]);
         GlobeSim::create([
-            'sim_number' => '09170009991',
-            'imsi' => '51502000009991',
+            'imei' => '356938035643991',
+            'mobile_number' => '09170009991',
             'location' => 'CTN',
             'status' => 'Inactive',
         ]);

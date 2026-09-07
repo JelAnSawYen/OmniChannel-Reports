@@ -66,8 +66,10 @@ class RoleAccessAndWorkflowTest extends TestCase
         $json = $this->getJson('/media-gateways?sort_by=id&sort_dir=asc')->assertOk()->json();
 
         $this->assertSame(2, $json['pagination']['total']);
-        $this->assertSame([1, 2], array_column($json['records'], 'display_id'));
-        $this->assertNotSame([1, 2], array_column($json['records'], 'id'));
+        $this->assertCount(2, $json['records']);
+        $this->assertSame(['B1', 'C1'], array_column($json['records'], 'site_code'));
+        $this->assertArrayNotHasKey('display_id', $json['records'][0]);
+        $this->assertNotEmpty($json['records'][0]['id']);
     }
 
     public function test_system_admin_can_manage_users_roles_and_maintenance(): void

@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\ChannelAllocation;
+use App\Models\ChannelAllocationCampaign;
 use App\Models\MediaGateway;
 use App\Models\PdcServer;
 
@@ -16,12 +17,18 @@ class InventoryImportCatalog
         $modules = OperationCatalog::modules();
         abort_unless(isset($modules[$module]), 404);
         $config = $modules[$module];
+        $extras = self::operationExtras($module);
+        $fields = $config['columns'];
+        if (! empty($extras['extra_fields']) && is_array($extras['extra_fields'])) {
+            $fields = array_merge($fields, $extras['extra_fields']);
+            unset($extras['extra_fields']);
+        }
 
-        return array_merge(self::operationExtras($module), [
+        return array_merge($extras, [
             'key' => $module,
             'title' => $config['title'],
             'model' => $config['model'],
-            'fields' => $config['columns'],
+            'fields' => $fields,
             'filename' => $module,
         ]);
     }
@@ -38,15 +45,20 @@ class InventoryImportCatalog
             'title' => $title,
             'model' => MediaGateway::class,
             'fields' => [
-                'site_name' => 'Site Name',
-                'site_code' => 'Site Code',
-                'ip_address' => 'IP Address',
-                'username' => 'Username',
-                'database' => 'Database',
+                'ip_address' => 'Hostname IP',
+                'site_code' => 'Serial Number',
+                'plan' => 'Plan',
+                'port' => 'Port',
+                'network' => 'Network',
+                'device_function' => 'Function',
+                'site_name' => 'Site',
+                'username' => 'User',
+                'password' => 'Password',
             ],
-            'required' => ['site_name', 'site_code', 'ip_address', 'username', 'database'],
+            'required' => ['ip_address', 'site_code', 'site_name', 'username'],
             'ip_fields' => ['ip_address'],
             'unique' => ['site_code'],
+            'include_id' => false,
             'filename' => $key,
         ];
     }
@@ -72,6 +84,31 @@ class InventoryImportCatalog
             'unique' => ['site_code'],
             'fixed' => ['site_name' => $name],
             'filename' => $slug.'-gsm-gateways',
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function campaigns(): array
+    {
+        return [
+            'key' => 'campaigns',
+            'title' => 'Campaigns',
+            'model' => ChannelAllocationCampaign::class,
+            'fields' => [
+                'name' => 'Campaigns',
+                'fte' => 'FTE',
+                'location' => 'Location',
+            ],
+            'required' => ['name', 'fte', 'location'],
+            'integer_fields' => ['fte'],
+            'unique' => ['name'],
+            'options' => [
+                'location' => OperationCatalog::locationNames(),
+            ],
+            'include_id' => false,
+            'filename' => 'campaigns',
         ];
     }
 
@@ -128,31 +165,22 @@ class InventoryImportCatalog
                 'status_options' => ['Active', 'Inactive'],
             ],
             'pdc-servers' => [
-                'required' => ['hostname', 'ip_address', 'status'],
+                'required' => ['hostname', 'ip_address'],
                 'ip_fields' => ['ip_address'],
-                'unique' => ['hostname'],
-                'status_options' => ['Active', 'Inactive'],
+                'unique' => ['hostname', 'ip_address'],
             ],
             'sip-channels' => [
-                'required' => ['channel', 'status'],
-                'unique' => ['channel'],
-                'status_options' => ['Active', 'Inactive'],
+                'required' => ['etpi_sip_name'],
+                'unique' => ['etpi_sip_name'],
+                'integer_fields' => ['channel_count'],
+                'date_fields' => ['date_activation'],
             ],
             'archive-recordings' => [
-                'required' => ['server', 'storage_path', 'status'],
-                'integer_fields' => ['retention_days'],
-                'status_options' => ['Active', 'Inactive'],
+                'required' => ['file_name', 'called_at'],
+                'date_fields' => ['called_at'],
             ],
-            'globe-sim' => [
-                'required' => ['sim_number', 'status'],
-                'unique' => ['sim_number'],
-                'status_options' => ['Active', 'Inactive'],
-            ],
-            'smart-sim' => [
-                'required' => ['sim_number', 'status'],
-                'unique' => ['sim_number'],
-                'status_options' => ['Active', 'Inactive'],
-            ],
+            'globe-sim' => self::simImportExtras(),
+            'smart-sim' => self::simImportExtras(),
             'program-inbound-numbers' => [
                 'required' => ['number', 'status'],
                 'unique' => ['number'],
@@ -170,5 +198,19 @@ class InventoryImportCatalog
             ],
             default => [],
         };
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function simImportExtras(): array
+    {
+        return [
+            'required' => ['imei', 'mobile_number'],
+            'unique' => ['imei', 'mobile_number'],
+            'ip_fields' => ['ip_address'],
+            'mdy_date_fields' => ['contract_start', 'contract_end'],
+            'include_id' => false,
+        ];
     }
 }

@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Route;
 class MediaGatewayController extends Controller
 {
     use HandlesInventoryImport;
-    private const SORTABLE_COLUMNS = ['id', 'site_name', 'site_code', 'ip_address', 'username', 'database'];
+    private const SORTABLE_COLUMNS = ['id', 'ip_address', 'site_code', 'plan', 'port', 'network', 'device_function', 'site_name', 'username'];
 
     public function index(Request $request)
     {
@@ -37,14 +37,15 @@ class MediaGatewayController extends Controller
 
         $resource = $this->resource();
         $data = compact('mediaGateways', 'search', 'sortBy', 'sortDir', 'perPage', 'resource');
+        if ($this->isGsm()) {
+            $data['locations'] = \App\Support\OperationCatalog::locations();
+        }
 
         if ($request->expectsJson()) {
-            $first = (int) ($mediaGateways->firstItem() ?? 1);
-
             return response()->json([
                 'records' => $mediaGateways->getCollection()
                     ->values()
-                    ->map(fn (MediaGateway $gateway, $index) => $this->jsonRecord($gateway, $first + $index))
+                    ->map(fn (MediaGateway $gateway) => $this->jsonRecord($gateway))
                     ->values(),
                 'pagination' => [
                     'current_page' => $mediaGateways->currentPage(),
@@ -60,17 +61,20 @@ class MediaGatewayController extends Controller
         return view('media-gateways.index', $data);
     }
 
-    private function jsonRecord(MediaGateway $gateway, int $displayId): array
+    private function jsonRecord(MediaGateway $gateway): array
     {
         return [
             'id' => $gateway->id,
-            'display_id' => $displayId,
-            'site_name' => $gateway->site_name,
-            'site_code' => $gateway->site_code,
             'ip_address' => $gateway->ip_address,
+            'site_code' => $gateway->site_code,
+            'plan' => $gateway->plan,
+            'port' => $gateway->port,
+            'network' => $gateway->network,
+            'device_function' => $gateway->device_function,
+            'site_name' => $gateway->site_name,
             'username' => $gateway->username,
+            'password' => $gateway->password,
             'database' => $gateway->database,
-            'last_updated' => $gateway->updated_at?->format('M d, Y h:i A'),
         ];
     }
 
@@ -190,25 +194,35 @@ class MediaGatewayController extends Controller
 
         try {
             $includeSecrets = $request->user()?->canExportGatewaySecrets() ?? false;
-            $headers = $includeSecrets
-                ? ['Id', 'Site Name', 'Site Code', 'IP Address', 'Username', 'Database', 'Last Updated']
-                : ['Id', 'Site Name', 'Site Code', 'IP Address', 'Last Updated'];
-            $sequence = 0;
+            $headers = [
+                'Hostname IP',
+                'Serial Number',
+                'Plan',
+                'Port',
+                'Network',
+                'Function',
+                'Site',
+            ];
+            if ($includeSecrets) {
+                $headers[] = 'User';
+                $headers[] = 'Password';
+            }
             $path = $xlsx->export(
                 $headers,
-                $query->cursor()->map(function ($gateway) use ($includeSecrets, &$sequence) {
-                    $sequence++;
+                $query->cursor()->map(function ($gateway) use ($includeSecrets) {
                     $row = [
-                        $sequence,
-                        $gateway->site_name,
-                        $gateway->site_code,
                         $gateway->ip_address,
+                        $gateway->site_code,
+                        $gateway->plan,
+                        $gateway->port,
+                        $gateway->network,
+                        $gateway->device_function,
+                        $gateway->site_name,
                     ];
                     if ($includeSecrets) {
                         $row[] = $gateway->username;
-                        $row[] = $gateway->database;
+                        $row[] = $gateway->password;
                     }
-                    $row[] = $gateway->updated_at?->format('Y-m-d H:i:s');
 
                     return $row;
                 }),
@@ -292,8 +306,11 @@ class MediaGatewayController extends Controller
                 $query->where('site_name', 'like', "%{$search}%")
                     ->orWhere('site_code', 'like', "%{$search}%")
                     ->orWhere('ip_address', 'like', "%{$search}%")
-                    ->orWhere('username', 'like', "%{$search}%")
-                    ->orWhere('database', 'like', "%{$search}%");
+                    ->orWhere('plan', 'like', "%{$search}%")
+                    ->orWhere('port', 'like', "%{$search}%")
+                    ->orWhere('network', 'like', "%{$search}%")
+                    ->orWhere('device_function', 'like', "%{$search}%")
+                    ->orWhere('username', 'like', "%{$search}%");
             });
         }
 

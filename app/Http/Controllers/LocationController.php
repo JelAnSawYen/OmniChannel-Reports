@@ -40,7 +40,7 @@ class LocationController extends Controller
                 'gateways' => (clone $query)->count(),
                 'updated_at' => (clone $query)->max('updated_at'),
             ];
-        })->values();
+        });
 
         if ($search !== '') {
             $needle = mb_strtolower($search);
@@ -58,7 +58,9 @@ class LocationController extends Controller
             $rows = $rows->filter(fn (array $row) => $row['gateways'] === 0);
         }
 
-        $rows = $rows->values();
+        $rows = $rows
+            ->sortBy(fn (array $row) => mb_strtolower($row['name']), SORT_NATURAL)
+            ->values();
         $perPage = 10;
         $page = LengthAwarePaginator::resolveCurrentPage();
 

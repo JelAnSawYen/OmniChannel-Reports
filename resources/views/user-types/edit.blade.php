@@ -114,7 +114,7 @@
                 <a class="btn secondary" href="{{ $selectedUser ? route('user-types.edit', array_filter(['userType'=>$userType,'user'=>$selectedUser->id,'search'=>request('search'),'page'=>request('page')])) : route('user-types.index') }}">Cancel</a>
                 <button class="btn primary" type="submit" {{ $canSave ? '' : 'disabled' }}>
                     <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v13a2 2 0 0 1-2 2Z"></path><path d="M17 21v-8H7v8"></path><path d="M7 3v5h8"></path></svg>
-                    Save Changes
+                    Save
                 </button>
             </div>
         </form>

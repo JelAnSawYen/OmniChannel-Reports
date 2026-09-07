@@ -36,7 +36,6 @@ class TransferSqliteToMysql extends Command
         'user_types',
         'users',
         'media_gateways',
-        'pdc_servers',
         'sip_channels',
         'archive_recordings',
         'globe_sims',
@@ -50,6 +49,8 @@ class TransferSqliteToMysql extends Command
         'network_prefixes',
         'channel_allocation_campaigns',
         'channel_allocations',
+        'pdc_groups',
+        'pdc_servers',
         'notifications',
         'notification_recipients',
         'audit_logs',
@@ -72,6 +73,10 @@ class TransferSqliteToMysql extends Command
     /** @var array<string, list<string>> */
     private const DATE_ONLY_COLUMNS = [
         'defective_gsms' => ['reported_on'],
+        'pdc_groups' => ['date_endorse'],
+        'sip_channels' => ['date_activation'],
+        'globe_sims' => ['contract_start', 'contract_end'],
+        'smart_sims' => ['contract_start', 'contract_end'],
     ];
 
     private ?PDO $sqlite = null;

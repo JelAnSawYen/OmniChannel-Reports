@@ -31,6 +31,7 @@ class AppLayoutComposer
             'pdc-servers' => ['pdc-servers', 'PDC Servers'],
             'sip-channels' => ['sip-channels', 'SIP Channels'],
             'channel-allocation' => ['channel-allocation', 'Channel Allocation'],
+            'campaigns' => ['campaigns', 'Campaigns'],
             'archive-recordings' => ['archive-recordings', 'Archive Recordings'],
             'globe-sim' => ['globe-sim', 'Globe SIM'],
             'smart-sim' => ['smart-sim', 'Smart SIM'],

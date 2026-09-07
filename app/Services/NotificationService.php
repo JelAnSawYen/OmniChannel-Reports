@@ -242,7 +242,7 @@ class NotificationService
                 'unit' => 'channel',
                 'location' => false,
                 'stock' => null,
-                'required' => ['peer', 'context'],
+                'required' => ['etpi_sip_name', 'campaign_id'],
             ],
             'Archive Recordings' => [
                 'model' => ArchiveRecording::class,
@@ -257,16 +257,16 @@ class NotificationService
                 'route' => 'globe-sim',
                 'unit' => 'SIM',
                 'location' => true,
-                'stock' => 'assigned_to',
-                'required' => ['imsi', 'location'],
+                'stock' => 'account_number',
+                'required' => ['imei', 'mobile_number'],
             ],
             'Smart SIM' => [
                 'model' => SmartSim::class,
                 'route' => 'smart-sim',
                 'unit' => 'SIM',
                 'location' => true,
-                'stock' => 'assigned_to',
-                'required' => ['imsi', 'location'],
+                'stock' => 'account_number',
+                'required' => ['imei', 'mobile_number'],
             ],
             'Program Inbound Numbers' => [
                 'model' => ProgramInboundNumber::class,
@@ -563,6 +563,12 @@ class NotificationService
     private static function statusCounts(string $model): array
     {
         $counts = ['total' => 0, 'inactive' => 0, 'maintenance' => 0];
+        $table = (new $model)->getTable();
+        if (! Schema::hasColumn($table, 'status')) {
+            $counts['total'] = $model::query()->count();
+
+            return $counts;
+        }
 
         foreach ($model::query()->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status') as $status => $total) {
             $total = (int) $total;

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ChannelAllocationCampaign;
 use App\Models\MediaGateway;
 use App\Models\SipChannel;
 use App\Models\User;
@@ -48,12 +49,15 @@ class ProgramLocationAndDataTransferTest extends TestCase
     {
         $this->actingAs($this->admin);
         $this->gateway();
+        $campaign = ChannelAllocationCampaign::create(['name' => 'Layout Campaign']);
         SipChannel::create([
-            'channel' => 'SIP-LAYOUT',
-            'peer' => 'peer-a',
-            'context' => 'from-internal',
-            'codec' => 'ulaw',
-            'status' => 'Active',
+            'campaign_id' => $campaign->id,
+            'etpi_sip_name' => 'SIP-LAYOUT',
+            'pilot_number' => '100',
+            'channel_count' => 2,
+            'channel_range' => '100 - 101',
+            'network' => 'ETPI',
+            'date_activation' => '2026-07-09',
         ]);
 
         $markers = ['class="page-head"', 'class="search-box', 'class="table-card table-wrap"', 'class="table-footer"', 'id="transferButton"', 'class="plus-btn"', 'class="actions-column"', 'class="row-actions"'];
@@ -84,9 +88,38 @@ class ProgramLocationAndDataTransferTest extends TestCase
             ->assertSee('class="search-clear"', false)
             ->assertSee('data-clear-search', false)
             ->assertSee('Manage')
+            ->assertSee('PDC')
             ->assertSee('Skyrise')
             ->assertDontSee('Add Program Location')
             ->assertDontSee('id="programLocationAddButton"', false);
+
+        $indexHtml = $this->get('/program-location')->assertOk()->getContent();
+        $alcar = strpos($indexHtml, 'title="Manage Alcar"');
+        $ctn = strpos($indexHtml, 'title="Manage CTN"');
+        $estancia = strpos($indexHtml, 'title="Manage Estancia"');
+        $pdc = strpos($indexHtml, 'title="Manage PDC"');
+        $scs = strpos($indexHtml, 'title="Manage SCS"');
+        $skyrise = strpos($indexHtml, 'title="Manage Skyrise"');
+        $this->assertNotFalse($alcar);
+        $this->assertGreaterThan($alcar, $ctn);
+        $this->assertGreaterThan($ctn, $estancia);
+        $this->assertGreaterThan($estancia, $pdc);
+        $this->assertGreaterThan($pdc, $scs);
+        $this->assertGreaterThan($scs, $skyrise);
+
+        $sidebar = $this->get('/dashboard')->assertOk()->getContent();
+        $subAlcar = strpos($sidebar, route('program-location.show', 'alcar'));
+        $subCtn = strpos($sidebar, route('program-location.show', 'ctn'));
+        $subEstancia = strpos($sidebar, route('program-location.show', 'estancia'));
+        $subPdc = strpos($sidebar, route('program-location.show', 'pdc'));
+        $subScs = strpos($sidebar, route('program-location.show', 'scs'));
+        $subSkyrise = strpos($sidebar, route('program-location.show', 'skyrise'));
+        $this->assertNotFalse($subAlcar);
+        $this->assertGreaterThan($subAlcar, $subCtn);
+        $this->assertGreaterThan($subCtn, $subEstancia);
+        $this->assertGreaterThan($subEstancia, $subPdc);
+        $this->assertGreaterThan($subPdc, $subScs);
+        $this->assertGreaterThan($subScs, $subSkyrise);
     }
 
     public function test_program_location_index_supports_search_status_and_location_filters(): void
@@ -104,7 +137,7 @@ class ProgramLocationAndDataTransferTest extends TestCase
             ->assertSee('1 Active')
             ->assertSee('0 None')
             ->assertSee(route('program-location.show', 'skyrise'), false)
-            ->assertSee('Showing 1 to 5 of 5 entries');
+            ->assertSee('Showing 1 to 6 of 6 entries');
 
         $this->get('/program-location?search=sky')
             ->assertOk()
@@ -264,14 +297,18 @@ class ProgramLocationAndDataTransferTest extends TestCase
         $this->actingAs($this->admin);
 
         foreach (array_keys(OperationCatalog::modules()) as $module) {
-            $this->get('/'.$module)
-                ->assertOk()
-                ->assertSee('Export Data')
-                ->assertSee('Import Data')
-                ->assertSee('Data Transfer')
-                ->assertDontSee('Download Sample Template')
-                ->assertSee('Download Excel Template')
-                ->assertSee('id="importModal"', false);
+            $page = $this->get('/'.$module)->assertOk();
+            if ($module === 'archive-recordings') {
+                $page->assertDontSee('Data Transfer')
+                    ->assertDontSee('id="transferButton"', false);
+            } else {
+                $page->assertSee('Export Data')
+                    ->assertSee('Import Data')
+                    ->assertSee('Data Transfer')
+                    ->assertDontSee('Download Sample Template')
+                    ->assertSee('Download Excel Template')
+                    ->assertSee('id="importModal"', false);
+            }
 
             $this->get('/'.$module.'/export')->assertOk();
             $this->get('/'.$module.'/import/template')->assertOk();

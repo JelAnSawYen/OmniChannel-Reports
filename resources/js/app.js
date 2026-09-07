@@ -1,7 +1,34 @@
 const qs=(s,r=document)=>r.querySelector(s), qsa=(s,r=document)=>[...r.querySelectorAll(s)];
 const csrf=()=>qs('meta[name="csrf-token"]')?.content||'';
-const showModal=(id)=>qs('#'+id)?.classList.add('visible');
-const hideModal=(id)=>qs('#'+id)?.classList.remove('visible');
+const expandedViewKey='omnichannel.expandedView';
+function readPageScroll(){
+    const se=document.scrollingElement||document.documentElement;
+    return {x:window.scrollX||0,y:window.scrollY||se.scrollTop||0};
+}
+function writePageScroll(pos){
+    if(!pos)return;
+    const x=Number(pos.x)||0;
+    const y=Number(pos.y)||0;
+    window.scrollTo(x,y);
+    if(document.scrollingElement)document.scrollingElement.scrollTop=y;
+}
+let pinnedPageScroll=null;
+function pinPageScroll(pos){
+    pinnedPageScroll=pos||readPageScroll();
+}
+function restorePinnedPageScroll(){
+    if(!pinnedPageScroll)return;
+    writePageScroll(pinnedPageScroll);
+}
+function withPinnedPageScroll(fn){
+    const pos=pinnedPageScroll||readPageScroll();
+    fn();
+    writePageScroll(pos);
+    pinnedPageScroll=pos;
+    requestAnimationFrame(()=>writePageScroll(pos));
+}
+const showModal=(id)=>withPinnedPageScroll(()=>qs('#'+id)?.classList.add('visible'));
+const hideModal=(id)=>withPinnedPageScroll(()=>qs('#'+id)?.classList.remove('visible'));
 
 function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
 
@@ -101,7 +128,10 @@ function initGlobal(){
         showModal(el.dataset.open);
     }));
     qsa('.modal-backdrop').forEach(m=>m.addEventListener('click',e=>{
-        if(e.target===m)m.classList.remove('visible');
+        if(e.target===m){
+            if(m.id)hideModal(m.id);
+            else withPinnedPageScroll(()=>m.classList.remove('visible'));
+        }
     }));
 
     qsa('[data-clear-search]').forEach(button=>{
@@ -140,6 +170,57 @@ function initGlobal(){
 
     initConfirm();
     initNotifications();
+    initPreserveExpandedView();
+}
+
+function initPreserveExpandedView(){
+    const here=()=>location.pathname+location.search;
+    const openPanels=()=>qsa('[id^="ca-panel-"],[id^="pdc-panel-"]').filter(el=>!el.hasAttribute('hidden')).map(el=>el.id);
+    const persist=()=>{
+        sessionStorage.setItem(expandedViewKey,JSON.stringify({path:here(),scroll:readPageScroll(),panels:openPanels()}));
+    };
+    const restorePanels=(ids)=>{
+        (ids||[]).forEach(id=>{
+            const panel=document.getElementById(id);
+            if(!panel||!panel.hasAttribute('hidden'))return;
+            const toggleId=id.replace(/^(ca|pdc)-panel-/,'');
+            qs('[data-ca-toggle="'+toggleId+'"]')?.click();
+        });
+    };
+    const relock=()=>restorePinnedPageScroll();
+
+    document.addEventListener('click',event=>{
+        const target=event.target instanceof Element?event.target:null;
+        if(!target)return;
+        if(!target.closest('.action-btn,.ca-menu-item,[data-allocation-edit],[data-pdc-server-edit],[data-pdc-group-edit],[data-campaign-edit],[data-sip-edit],[data-operation-edit],[data-location-edit],[data-edit-id],[data-close],#confirmModalOk,#confirmModalCancel,#confirmModalDismiss'))return;
+        pinPageScroll();
+        relock();
+        requestAnimationFrame(relock);
+        window.setTimeout(relock,0);
+    },true);
+
+    qsa('.modal-backdrop').forEach(modal=>{
+        new MutationObserver(()=>{
+            relock();
+            requestAnimationFrame(relock);
+        }).observe(modal,{attributes:true,attributeFilter:['class']});
+    });
+
+    document.addEventListener('submit',persist,true);
+
+    const raw=sessionStorage.getItem(expandedViewKey);
+    if(!raw)return;
+    sessionStorage.removeItem(expandedViewKey);
+    try{
+        const state=JSON.parse(raw);
+        const same=state.path===here()||(typeof state.path==='string'&&state.path.split('?')[0]===here().split('?')[0]);
+        if(!same)return;
+        restorePanels(state.panels);
+        pinPageScroll(state.scroll);
+        writePageScroll(state.scroll);
+        requestAnimationFrame(()=>writePageScroll(state.scroll));
+        window.setTimeout(()=>writePageScroll(state.scroll),0);
+    }catch(e){}
 }
 
 function initConfirm(){
@@ -375,15 +456,25 @@ async function initMedia(){
 
         dom.rows.innerHTML=records.length
             ? records.map(g=>`<tr>
-                <td>${escapeHtml(g.display_id ?? g.id)}</td>
-                <td>${escapeHtml(g.site_name)}</td>
-                <td>${escapeHtml(g.site_code)}</td>
                 <td>${escapeHtml(g.ip_address)}</td>
+                <td>${escapeHtml(g.site_code)}</td>
+                <td>${escapeHtml(g.plan||'—')}</td>
+                <td>${escapeHtml(g.port||'—')}</td>
+                <td>${escapeHtml(g.network||'—')}</td>
+                <td>${escapeHtml(g.device_function||'—')}</td>
+                <td>${escapeHtml(g.site_name)}</td>
                 <td>${escapeHtml(g.username)}</td>
-                <td>${escapeHtml(g.database)}</td>
-                <td>${escapeHtml(g.last_updated||'—')}</td>
+                <td>
+                    <span class="pdc-secret">
+                        <span class="pdc-secret-mask">••••••</span>
+                        <span class="pdc-secret-value" hidden>${escapeHtml(g.password||'')}</span>
+                        <button type="button" class="pdc-secret-toggle" title="Show password" aria-label="Show password">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                    </span>
+                </td>
                 <td><div class="row-actions">
-                    ${canEdit?`<button type="button" class="action-btn edit" data-edit-id="${escapeHtml(g.id)}" data-edit-site_name="${escapeHtml(g.site_name)}" data-edit-site_code="${escapeHtml(g.site_code)}" data-edit-ip_address="${escapeHtml(g.ip_address)}" data-edit-username="${escapeHtml(g.username)}" data-edit-database="${escapeHtml(g.database)}" title="Edit ${entity}" aria-label="Edit ${entity}">
+                    ${canEdit?`<button type="button" class="action-btn edit" data-edit-id="${escapeHtml(g.id)}" data-edit-site_name="${escapeHtml(g.site_name)}" data-edit-site_code="${escapeHtml(g.site_code)}" data-edit-ip_address="${escapeHtml(g.ip_address)}" data-edit-plan="${escapeHtml(g.plan||'')}" data-edit-port="${escapeHtml(g.port||'')}" data-edit-network="${escapeHtml(g.network||'')}" data-edit-device_function="${escapeHtml(g.device_function||'')}" data-edit-username="${escapeHtml(g.username)}" data-edit-password="${escapeHtml(g.password||'')}" title="Edit ${entity}" aria-label="Edit ${entity}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
                     </button>`:''}
                     ${canDelete?`<button type="button" class="action-btn delete" data-delete-id="${escapeHtml(g.id)}" title="Delete ${entity}" aria-label="Delete ${entity}">
@@ -391,7 +482,7 @@ async function initMedia(){
                     </button>`:''}
                 </div></td>
             </tr>`).join('')
-            : `<tr><td colspan="8"><div class="empty-state">No ${entity}s Found</div></td></tr>`;
+            : `<tr><td colspan="10"><div class="empty-state">No ${entity}s Found</div></td></tr>`;
 
         dom.summary.textContent=`Showing ${data.pagination?.from||0} to ${data.pagination?.to||0} of ${data.pagination?.total||0} entries`;
 
@@ -454,6 +545,8 @@ async function initMedia(){
         dom.gatewayId.value='';
         dom.formMethod.value='POST';
         if(dom.form)dom.form.action=base;
+        const password=qs('#password');
+        if(password)password.type='password';
         showModal('mediaGatewayModal');
     }
 
@@ -463,10 +556,23 @@ async function initMedia(){
         dom.gatewayId.value=id;
         dom.formMethod.value='PUT';
         if(dom.form)dom.form.action=base+'/'+encodeURIComponent(id);
-        ['site_name','site_code','ip_address','username','database'].forEach(field=>{
+        ['site_name','site_code','ip_address','plan','port','network','device_function','username','password'].forEach(field=>{
             const element=qs('#'+field);
-            if(element)element.value=button.dataset['edit'+field.charAt(0).toUpperCase()+field.slice(1)]||'';
+            if(!element)return;
+            const value=button.dataset['edit'+field.charAt(0).toUpperCase()+field.slice(1)]||'';
+            if(field==='site_name' && element.tagName==='SELECT' && value){
+                const exists=[...element.options].some((option)=>option.value===value);
+                if(!exists){
+                    const option=document.createElement('option');
+                    option.value=value;
+                    option.textContent=value;
+                    element.appendChild(option);
+                }
+            }
+            element.value=value;
         });
+        const password=qs('#password');
+        if(password)password.type='password';
         showModal('mediaGatewayModal');
     }
 
@@ -526,6 +632,22 @@ async function initMedia(){
         }
     }
 
+    function bindPasswordToggles(){
+        qsa('#mediaGatewayRows .pdc-secret-toggle').forEach(button=>{
+            button.onclick=()=>{
+                const wrap=button.closest('.pdc-secret');
+                const mask=qs('.pdc-secret-mask',wrap);
+                const value=qs('.pdc-secret-value',wrap);
+                if(!mask||!value)return;
+                const showing=!value.hasAttribute('hidden');
+                value.toggleAttribute('hidden',showing);
+                mask.toggleAttribute('hidden',!showing);
+                button.setAttribute('title',showing?'Show password':'Hide password');
+                button.setAttribute('aria-label',showing?'Show password':'Hide password');
+            };
+        });
+    }
+
     function bindRowEvents(){
         qsa('#mediaGatewayRows [data-edit-id]').forEach(button=>button.onclick=()=>openEdit(button));
         qsa('#mediaGatewayRows [data-delete-id]').forEach(button=>button.onclick=()=>{
@@ -536,9 +658,15 @@ async function initMedia(){
             event.preventDefault();
             load(Number(button.dataset.page));
         });
+        bindPasswordToggles();
     }
 
     qs('[data-open-modal="add-media-gateway"]')?.addEventListener('click',openAdd);
+    qs('#mediaGatewayForm .pdc-secret-toggle[data-toggle-input="password"]')?.addEventListener('click',()=>{
+        const input=qs('#password');
+        if(!input)return;
+        input.type=input.type==='password'?'text':'password';
+    });
     dom.form?.addEventListener('submit',save);
     dom.deleteConfirm?.addEventListener('click',remove);
 

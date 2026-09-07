@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\ChannelAllocation;
 use App\Models\ChannelAllocationCampaign;
+use App\Models\MediaGateway;
+use App\Models\SipChannel;
 use App\Services\ChannelAllocationImportService;
 use App\Services\AuditLogger;
 use App\Services\NotificationService;
@@ -44,9 +46,21 @@ class ChannelAllocationController extends Controller
         }
 
         $campaigns = $query->paginate($perPage)->withQueryString();
+        $masterCampaigns = ChannelAllocationCampaign::optionsForDropdown();
+        $sipChannels = SipChannel::query()
+            ->whereNotNull('etpi_sip_name')
+            ->where('etpi_sip_name', '!=', '')
+            ->orderBy('etpi_sip_name')
+            ->get(['etpi_sip_name', 'network', 'channel_count']);
+        $gsmGateways = MediaGateway::query()
+            ->orderBy('site_code')
+            ->get(['site_code', 'site_name']);
 
         return view('channel-allocations.index', [
             'campaigns' => $campaigns,
+            'masterCampaigns' => $masterCampaigns,
+            'sipChannels' => $sipChannels,
+            'gsmGateways' => $gsmGateways,
             'search' => $search,
             'perPage' => $perPage,
         ]);
@@ -54,22 +68,20 @@ class ChannelAllocationController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $data = $request->validate($this->campaignRules());
+        $data = $request->validate($this->campaignRules(true));
         $allocation = $this->optionalAllocation($request);
+        $campaign = ChannelAllocationCampaign::query()->findOrFail((int) $data['campaign_id']);
 
-        $campaign = ChannelAllocationCampaign::query()->create([
-            'name' => $data['name'],
+        $campaign->update([
             'media_gateway' => $data['media_gateway'] ?? null,
-            'total_channels_allocated' => $data['total_channels_allocated'] ?? null,
-            'fte' => $data['fte'] ?? null,
+            'total_channels_allocated' => $data['total_channels_allocated'] ?? $campaign->total_channels_allocated,
             'caller_id' => $data['caller_id'] ?? null,
             'prefix' => $data['prefix'] ?? null,
             'remarks' => $data['remarks'] ?? null,
-            'sort_order' => (int) ChannelAllocationCampaign::query()->max('sort_order') + 1,
         ]);
 
         if ($allocation !== null) {
-            $allocation['sort_order'] = 1;
+            $allocation['sort_order'] = (int) $campaign->allocations()->max('sort_order') + 1;
             $campaign->allocations()->create($allocation);
             $campaign->refreshTotalChannelsAllocated();
         }
@@ -81,12 +93,10 @@ class ChannelAllocationController extends Controller
 
     public function update(Request $request, ChannelAllocationCampaign $campaign): RedirectResponse
     {
-        $data = $request->validate($this->campaignRules($campaign->id));
+        $data = $request->validate($this->campaignRules());
         $campaign->update([
-            'name' => $data['name'],
             'media_gateway' => $data['media_gateway'] ?? null,
             'total_channels_allocated' => $data['total_channels_allocated'] ?? null,
-            'fte' => $data['fte'] ?? null,
             'caller_id' => $data['caller_id'] ?? null,
             'prefix' => $data['prefix'] ?? null,
             'remarks' => $data['remarks'] ?? null,
@@ -107,25 +117,30 @@ class ChannelAllocationController extends Controller
 
     public function storeAllocation(Request $request, ChannelAllocationCampaign $campaign): RedirectResponse
     {
-        $data = $request->validate($this->allocationRules());
+        $data = $this->validatedAllocationFromSip($request);
         $data['media_gateway'] = ($data['media_gateway'] ?? null) ?: $campaign->media_gateway;
         $data['sort_order'] = (int) $campaign->allocations()->max('sort_order') + 1;
         $campaign->allocations()->create($data);
         $campaign->refreshTotalChannelsAllocated();
         AuditLogger::log('Added', 'Channel Allocation', 'Allocation added', $campaign->id, $request);
 
-        return back()->with('success', 'Channel allocation added successfully.');
+        return back()
+            ->with('success', 'Channel allocation added successfully.')
+            ->with('ca_expanded', $campaign->id);
     }
 
     public function updateAllocation(Request $request, ChannelAllocationCampaign $campaign, ChannelAllocation $allocation): RedirectResponse
     {
         abort_unless($allocation->campaign_id === $campaign->id, 404);
-        $data = $request->validate($this->allocationRules());
+        $data = $this->validatedAllocationFromSip($request);
         $allocation->update($data);
         $campaign->refreshTotalChannelsAllocated();
         AuditLogger::log('Updated', 'Channel Allocation', 'Allocation updated', $allocation->id, $request);
 
-        return back()->with('success', 'Channel allocation updated successfully.');
+        return back()
+            ->with('success', 'Channel allocation updated successfully.')
+            ->with('ca_expanded', $campaign->id)
+            ->with('ca_edit_allocation', $allocation->id);
     }
 
     public function destroyAllocation(Request $request, ChannelAllocationCampaign $campaign, ChannelAllocation $allocation): RedirectResponse
@@ -136,7 +151,9 @@ class ChannelAllocationController extends Controller
         $campaign->refreshTotalChannelsAllocated();
         AuditLogger::log('Deleted', 'Channel Allocation', 'Allocation deleted', $id, $request);
 
-        return back()->with('success', 'Channel allocation deleted successfully.');
+        return back()
+            ->with('success', 'Channel allocation deleted successfully.')
+            ->with('ca_expanded', $campaign->id);
     }
 
     public function export(Request $request, XlsxService $xlsx): BinaryFileResponse|RedirectResponse
@@ -348,17 +365,20 @@ class ChannelAllocationController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function campaignRules(?int $id = null): array
+    private function campaignRules(bool $creating = false): array
     {
-        return [
-            'name' => ['required', 'string', 'max:255', Rule::unique('channel_allocation_campaigns', 'name')->ignore($id)],
+        $rules = [
             'media_gateway' => 'nullable|string|max:255',
             'total_channels_allocated' => 'nullable|integer|min:0',
-            'fte' => 'nullable|integer|min:0',
             'caller_id' => 'nullable|string|max:255',
             'prefix' => 'nullable|string|max:100',
             'remarks' => 'nullable|string|max:2000',
         ];
+        if ($creating) {
+            $rules['campaign_id'] = ['required', 'integer', Rule::exists('channel_allocation_campaigns', 'id')];
+        }
+
+        return $rules;
     }
 
     /**
@@ -377,6 +397,27 @@ class ChannelAllocationController extends Controller
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    private function validatedAllocationFromSip(Request $request): array
+    {
+        $data = $request->validate([
+            'media_gateway' => 'nullable|string|max:255',
+            'channel_allocation' => ['required', 'string', 'max:255', Rule::exists('sip_channels', 'etpi_sip_name')],
+            'line_priority' => 'nullable|integer|min:0',
+        ]);
+
+        $sip = SipChannel::query()
+            ->where('etpi_sip_name', $data['channel_allocation'])
+            ->first();
+
+        $data['network'] = $sip?->network ?: null;
+        $data['total_channel_allocated'] = $sip?->channel_count;
+
+        return $data;
+    }
+
+    /**
      * @return array<string, mixed>|null
      */
     private function optionalAllocation(Request $request): ?array
@@ -385,8 +426,7 @@ class ChannelAllocationController extends Controller
             return null;
         }
 
-        $data = $request->validate($this->allocationRules());
-        $data['media_gateway'] = $data['media_gateway'] ?: $request->input('media_gateway');
+        $data = $this->validatedAllocationFromSip($request);
         if ($request->filled('allocation_remarks') && empty($data['remarks'])) {
             $data['remarks'] = $request->input('allocation_remarks');
         }

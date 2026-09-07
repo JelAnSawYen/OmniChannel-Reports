@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\ChannelAllocationCampaign;
 use App\Models\MediaGateway;
+use App\Models\PdcGroup;
 use App\Models\PdcServer;
 use App\Models\User;
 use App\Models\UserType;
@@ -31,49 +33,22 @@ class OperationsCrudSearchTest extends TestCase
     public static function inventoryModules(): array
     {
         return [
-            'pdc-servers' => ['pdc-servers', [
-                'create' => ['hostname' => 'pdc-alpha', 'ip_address' => '10.1.1.10', 'location' => 'Estancia', 'role' => 'Primary', 'status' => 'Active'],
-                'other' => ['hostname' => 'pdc-beta', 'ip_address' => '10.1.1.11', 'location' => 'Alcar', 'role' => 'Backup', 'status' => 'Active'],
-                'update' => ['hostname' => 'pdc-alpha-updated', 'ip_address' => '10.1.1.10', 'location' => 'Estancia', 'role' => 'Primary', 'status' => 'Inactive'],
-                'updated' => ['hostname' => 'pdc-alpha-updated', 'status' => 'Inactive'],
-                'kept' => ['hostname' => 'pdc-beta'],
-                'search' => 'pdc-alpha-updated',
-                'hidden' => 'pdc-beta',
-            ]],
-            'sip-channels' => ['sip-channels', [
-                'create' => ['channel' => 'SIP-ALPHA', 'peer' => 'peer-a', 'context' => 'from-internal', 'codec' => 'ulaw', 'status' => 'Active'],
-                'other' => ['channel' => 'SIP-BETA', 'peer' => 'peer-b', 'context' => 'from-external', 'codec' => 'alaw', 'status' => 'Active'],
-                'update' => ['channel' => 'SIP-ALPHA-UPDATED', 'peer' => 'peer-a', 'context' => 'from-internal', 'codec' => 'ulaw', 'status' => 'Inactive'],
-                'updated' => ['channel' => 'SIP-ALPHA-UPDATED', 'status' => 'Inactive'],
-                'kept' => ['channel' => 'SIP-BETA'],
-                'search' => 'SIP-ALPHA-UPDATED',
-                'hidden' => 'SIP-BETA',
-            ]],
-            'archive-recordings' => ['archive-recordings', [
-                'create' => ['server' => 'arc-alpha', 'storage_path' => '/recordings/a', 'retention_days' => 30, 'status' => 'Active'],
-                'other' => ['server' => 'arc-beta', 'storage_path' => '/recordings/b', 'retention_days' => 60, 'status' => 'Active'],
-                'update' => ['server' => 'arc-alpha-updated', 'storage_path' => '/recordings/a', 'retention_days' => 90, 'status' => 'Inactive'],
-                'updated' => ['server' => 'arc-alpha-updated', 'retention_days' => 90],
-                'kept' => ['server' => 'arc-beta'],
-                'search' => 'arc-alpha-updated',
-                'hidden' => 'arc-beta',
-            ]],
             'globe-sim' => ['globe-sim', [
-                'create' => ['sim_number' => '09170000001', 'imsi' => '515020000000001', 'assigned_to' => 'Alpha', 'location' => 'Estancia', 'status' => 'Active'],
-                'other' => ['sim_number' => '09170000002', 'imsi' => '515020000000002', 'assigned_to' => 'Beta', 'location' => 'Alcar', 'status' => 'Active'],
-                'update' => ['sim_number' => '09170000001', 'imsi' => '515020000000001', 'assigned_to' => 'Alpha Updated', 'location' => 'Estancia', 'status' => 'Inactive'],
-                'updated' => ['assigned_to' => 'Alpha Updated', 'status' => 'Inactive'],
-                'kept' => ['sim_number' => '09170000002'],
-                'search' => 'Alpha Updated',
+                'create' => ['imei' => '356938035643809', 'mobile_number' => '09170000001', 'network' => 'Globe', 'plan' => 'Plan A', 'ip_address' => '10.70.0.1', 'account_number' => 'ACC-ALPHA', 'contract_start' => '1/1/2026', 'contract_end' => '12/31/2026'],
+                'other' => ['imei' => '356938035643810', 'mobile_number' => '09170000002', 'network' => 'Globe', 'plan' => 'Plan B', 'ip_address' => '10.70.0.2', 'account_number' => 'ACC-BETA', 'contract_start' => '2/1/2026', 'contract_end' => '11/30/2026'],
+                'update' => ['imei' => '356938035643809', 'mobile_number' => '09170000001', 'network' => 'Globe', 'plan' => 'Plan A', 'ip_address' => '10.70.0.1', 'account_number' => 'ACC-ALPHA-UPD', 'contract_start' => '1/1/2026', 'contract_end' => '12/31/2026'],
+                'updated' => ['account_number' => 'ACC-ALPHA-UPD', 'plan' => 'Plan A'],
+                'kept' => ['mobile_number' => '09170000002'],
+                'search' => 'ACC-ALPHA-UPD',
                 'hidden' => '09170000002',
             ]],
             'smart-sim' => ['smart-sim', [
-                'create' => ['sim_number' => '09280000001', 'imsi' => '515030000000001', 'assigned_to' => 'Alpha', 'location' => 'CTN', 'status' => 'Active'],
-                'other' => ['sim_number' => '09280000002', 'imsi' => '515030000000002', 'assigned_to' => 'Beta', 'location' => 'SCS', 'status' => 'Active'],
-                'update' => ['sim_number' => '09280000001', 'imsi' => '515030000000001', 'assigned_to' => 'Alpha Updated', 'location' => 'CTN', 'status' => 'Inactive'],
-                'updated' => ['assigned_to' => 'Alpha Updated', 'status' => 'Inactive'],
-                'kept' => ['sim_number' => '09280000002'],
-                'search' => 'Alpha Updated',
+                'create' => ['imei' => '356938035643901', 'mobile_number' => '09280000001', 'network' => 'Smart', 'plan' => 'Plan A', 'ip_address' => '10.80.0.1', 'account_number' => 'ACC-ALPHA', 'contract_start' => '1/1/2026', 'contract_end' => '12/31/2026'],
+                'other' => ['imei' => '356938035643902', 'mobile_number' => '09280000002', 'network' => 'Smart', 'plan' => 'Plan B', 'ip_address' => '10.80.0.2', 'account_number' => 'ACC-BETA', 'contract_start' => '2/1/2026', 'contract_end' => '11/30/2026'],
+                'update' => ['imei' => '356938035643901', 'mobile_number' => '09280000001', 'network' => 'Smart', 'plan' => 'Plan A', 'ip_address' => '10.80.0.1', 'account_number' => 'ACC-ALPHA-UPD', 'contract_start' => '1/1/2026', 'contract_end' => '12/31/2026'],
+                'updated' => ['account_number' => 'ACC-ALPHA-UPD', 'plan' => 'Plan A'],
+                'kept' => ['mobile_number' => '09280000002'],
+                'search' => 'ACC-ALPHA-UPD',
                 'hidden' => '09280000002',
             ]],
             'program-inbound-numbers' => ['program-inbound-numbers', [
@@ -143,40 +118,65 @@ class OperationsCrudSearchTest extends TestCase
     public function test_pdc_server_add_edit_delete_and_search(): void
     {
         $this->actingAs($this->admin);
+        $campaign = ChannelAllocationCampaign::create(['name' => 'BPI Collection']);
+        $other = ChannelAllocationCampaign::create(['name' => 'Atome']);
 
         $this->post('/pdc-servers', [
+            'campaign_id' => $campaign->id,
+            'location' => 'Estancia',
+            'date_endorse' => '9/3/2026',
+            'dns' => 'pdc-bpicollections.teamssg.com',
+        ])->assertRedirect();
+
+        $group = PdcGroup::where('campaign_id', $campaign->id)->firstOrFail();
+        $this->post('/pdc-servers/'.$group->id.'/servers', [
             'hostname' => 'pdc-alpha',
             'ip_address' => '10.1.1.10',
-            'location' => 'Estancia',
-            'role' => 'Primary',
-            'status' => 'Active',
+            'os' => 'Linux',
+            'ram' => '12GB',
+            'cpu' => '8cores',
+            'storage' => '120GB',
+            'admin_username' => 'admin',
+            'password' => 'P@ss!word',
+            'sql_db_password' => 'Sql#1',
         ])->assertRedirect();
 
         $this->post('/pdc-servers', [
+            'campaign_id' => $other->id,
+            'location' => 'Alcar',
+            'date_endorse' => '9/4/2026',
+            'dns' => 'pdc-atome.teamssg.com',
+        ])->assertRedirect();
+        $otherGroup = PdcGroup::where('campaign_id', $other->id)->firstOrFail();
+        $this->post('/pdc-servers/'.$otherGroup->id.'/servers', [
             'hostname' => 'pdc-beta',
             'ip_address' => '10.1.1.11',
-            'location' => 'Alcar',
-            'role' => 'Backup',
-            'status' => 'Active',
         ])->assertRedirect();
 
         $record = PdcServer::where('hostname', 'pdc-alpha')->firstOrFail();
 
-        $this->put('/pdc-servers/'.$record->id, [
+        $this->put('/pdc-servers/'.$group->id.'/servers/'.$record->id, [
             'hostname' => 'pdc-alpha-updated',
             'ip_address' => '10.1.1.10',
-            'location' => 'Estancia',
-            'role' => 'Primary',
-            'status' => 'Inactive',
+            'os' => 'Linux',
+            'ram' => '16GB',
+            'cpu' => '8cores',
+            'storage' => '120GB',
+            'admin_username' => 'admin',
         ])->assertRedirect();
 
         $this->assertDatabaseHas('pdc_servers', [
             'id' => $record->id,
             'hostname' => 'pdc-alpha-updated',
-            'status' => 'Inactive',
+            'pdc_group_id' => $group->id,
         ]);
 
-        $this->delete('/pdc-servers/'.$record->id)->assertRedirect();
+        $this->get('/pdc-servers?search=pdc-alpha-updated')
+            ->assertOk()
+            ->assertSee('pdc-alpha-updated')
+            ->assertDontSee('pdc-beta');
+
+        $this->delete('/pdc-servers/'.$group->id.'/servers/'.$record->id)->assertRedirect();
         $this->assertDatabaseMissing('pdc_servers', ['id' => $record->id]);
         $this->assertDatabaseHas('pdc_servers', ['hostname' => 'pdc-beta']);
     }
@@ -186,27 +186,32 @@ class OperationsCrudSearchTest extends TestCase
         $this->actingAs($this->admin);
 
         $keep = MediaGateway::create([
-            'site_name' => 'Keep Site',
+            'site_name' => 'Alcar',
             'site_code' => 'KEEP01',
             'ip_address' => '10.2.2.2',
             'username' => 'root',
             'database' => 'asteriskcdrdb',
         ]);
         $target = MediaGateway::create([
-            'site_name' => 'Target Site',
+            'site_name' => 'Estancia',
             'site_code' => 'TGT001',
             'ip_address' => '10.2.2.3',
             'username' => 'root',
             'database' => 'asteriskcdrdb',
         ]);
 
-        $this->get('/gsm-gateways')
-            ->assertOk()
-            ->assertSee('data-edit-id="'.$target->id.'"', false)
-            ->assertSee('data-delete-id="'.$target->id.'"', false);
+        $page = $this->get('/gsm-gateways')->assertOk();
+        $page->assertSee('data-edit-id="'.$target->id.'"', false)
+            ->assertSee('data-delete-id="'.$target->id.'"', false)
+            ->assertSee('id="site_name"', false)
+            ->assertSee('<select class="form-control" id="site_name" name="site_name" required>', false)
+            ->assertDontSee('<input class="form-control" id="site_name" name="site_name" required>', false);
+        foreach (array_values(OperationCatalog::locations()) as $name) {
+            $page->assertSee('>'.$name.'</option>', false);
+        }
 
         $this->putJson('/gsm-gateways/'.$target->id, [
-            'site_name' => 'Target Updated',
+            'site_name' => 'CTN',
             'site_code' => 'TGT001',
             'ip_address' => '10.2.2.3',
             'username' => 'root',
@@ -215,16 +220,23 @@ class OperationsCrudSearchTest extends TestCase
 
         $this->assertDatabaseHas('media_gateways', [
             'id' => $target->id,
-            'site_name' => 'Target Updated',
+            'site_name' => 'CTN',
         ]);
         $this->assertDatabaseHas('media_gateways', [
             'id' => $keep->id,
-            'site_name' => 'Keep Site',
+            'site_name' => 'Alcar',
         ]);
 
         $this->deleteJson('/gsm-gateways/'.$target->id)->assertOk();
         $this->assertDatabaseMissing('media_gateways', ['id' => $target->id]);
         $this->assertDatabaseHas('media_gateways', ['id' => $keep->id]);
+
+        $this->postJson('/gsm-gateways', [
+            'site_name' => 'Not A Location',
+            'site_code' => 'BAD001',
+            'ip_address' => '10.2.2.9',
+            'username' => 'root',
+        ])->assertUnprocessable()->assertJsonValidationErrors('site_name');
     }
 
     public function test_edit_and_delete_buttons_use_the_compact_outline_style(): void
@@ -235,7 +247,13 @@ class OperationsCrudSearchTest extends TestCase
         $this->assertStringContainsString('background:#fff; color:#0b70f7', $css);
         $this->assertStringContainsString('background:#fff; color:#ef4444', $css);
 
+        $campaign = ChannelAllocationCampaign::create(['name' => 'Style Campaign']);
+        $group = PdcGroup::create([
+            'campaign_id' => $campaign->id,
+            'location' => 'Estancia',
+        ]);
         PdcServer::create([
+            'pdc_group_id' => $group->id,
             'hostname' => 'pdc-style',
             'ip_address' => '10.9.9.9',
             'location' => 'Estancia',

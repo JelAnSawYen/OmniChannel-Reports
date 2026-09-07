@@ -47,7 +47,12 @@
 <table class="ca-table" aria-label="Channel Allocation">
 <thead>
 <tr>
-    <th>Campaign</th>
+    <th>
+        <span class="ca-campaign-cell">
+            <span class="ca-toggle" aria-hidden="true"></span>
+            <span class="ca-campaign-identity">Campaign</span>
+        </span>
+    </th>
     <th class="num-col">Allocations</th>
     <th class="num-col">Total Channels</th>
     <th class="num-col">FTE</th>
@@ -61,8 +66,8 @@
 @forelse($campaigns as $campaign)
 @php
     $allocCount = $campaign->allocations->count();
-    $keepCampaignInline = str_replace(' ', '', (string) $campaign->name) === 'BPISales_Outbound';
     $campaignValues = [
+        'id' => $campaign->id,
         'name' => $campaign->name,
         'media_gateway' => $campaign->media_gateway,
         'total_channels_allocated' => $campaign->total_channels_allocated,
@@ -73,12 +78,16 @@
     ];
 @endphp
 <tr class="ca-campaign-row" data-campaign="{{ $campaign->id }}">
-    <td @class(['ca-campaign-cell-inline' => $keepCampaignInline])>
-        <button type="button" class="ca-toggle" data-ca-toggle="{{ $campaign->id }}" aria-expanded="false" aria-controls="ca-panel-{{ $campaign->id }}" title="Expand {{ $campaign->name }}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"></path></svg>
-        </button>
-        <button type="button" class="ca-campaign-link" data-ca-toggle="{{ $campaign->id }}">{{ $campaign->name }}</button>
-        <span class="ca-count">{{ $allocCount }} {{ $allocCount === 1 ? 'allocation' : 'allocations' }}</span>
+    <td>
+        <span class="ca-campaign-cell">
+            <button type="button" class="ca-toggle" data-ca-toggle="{{ $campaign->id }}" aria-expanded="false" aria-controls="ca-panel-{{ $campaign->id }}" title="Expand {{ $campaign->name }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"></path></svg>
+            </button>
+            <span class="ca-campaign-identity">
+                <button type="button" class="ca-campaign-link" data-ca-toggle="{{ $campaign->id }}">{{ $campaign->name }}</button>
+                <span class="ca-count">{{ $allocCount }} {{ $allocCount === 1 ? 'allocation' : 'allocations' }}</span>
+            </span>
+        </span>
     </td>
     <td class="num-col"><span class="num-align" data-label="Allocations">{{ $allocCount }}</span></td>
     <td class="num-col"><span class="num-align ca-total" data-label="Total Channels">{{ $campaign->total_channels_allocated ?? '—' }}</span></td>
@@ -96,7 +105,7 @@
                 @if(auth()->user()->hasPermission('media.edit'))
                     <button class="ca-menu-item edit" type="button" role="menuitem" data-campaign-edit data-id="{{ $campaign->id }}" data-values='@json($campaignValues)'>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
-                        Edit Campaign
+                        Edit
                     </button>
                 @endif
                 @if(auth()->user()->hasPermission('media.delete'))
@@ -105,7 +114,7 @@
                         @method('DELETE')
                         <button class="ca-menu-item delete" type="submit" role="menuitem">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="m6 7 1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>
-                            Delete Campaign
+                            Delete
                         </button>
                     </form>
                 @endif
@@ -120,8 +129,8 @@
             <table aria-label="{{ $campaign->name }} allocations">
                 <thead>
                     <tr>
-                        <th>Media Gateway</th>
-                        <th>Channel Allocation</th>
+                        <th>SIP Channel</th>
+                        <th>GSM Gateway</th>
                         <th>Network</th>
                         <th class="num-col">Line Priority</th>
                         <th class="num-col">Total Channel Allocated</th>
@@ -148,8 +157,8 @@
                         ];
                     @endphp
                     <tr>
-                        <td><span class="num-align" data-label="Media Gateway">{{ $allocation->media_gateway ?: '—' }}</span></td>
-                        <td><span class="num-align" data-label="Channel Allocation">{{ $allocation->channel_allocation }}</span></td>
+                        <td><span class="num-align" data-label="SIP Channel">{{ $allocation->channel_allocation }}</span></td>
+                        <td><span class="num-align" data-label="GSM Gateway">{{ $allocation->media_gateway ?: '—' }}</span></td>
                         <td><span class="num-align" data-label="Network">{{ $allocation->network ?: '—' }}</span></td>
                         <td class="num-col"><span class="num-align" data-label="Line Priority">{{ $allocation->line_priority ?? '—' }}</span></td>
                         <td class="num-col"><span class="num-align" data-label="Total Channel Allocated">{{ $allocation->total_channel_allocated ?? '—' }}</span></td>
@@ -231,22 +240,59 @@
             <input type="hidden" name="_method" id="campaignMethod" value="POST">
             <div class="modal-body">
                 <div class="form-grid">
-                    <div class="form-group"><label for="campaign_name">Campaign</label><input class="form-control" name="name" id="campaign_name" required></div>
-                    <div class="form-group"><label for="campaign_media_gateway">Media Gateway</label><input class="form-control" name="media_gateway" id="campaign_media_gateway"></div>
+                    <div class="form-group">
+                        <label for="campaign_id">Campaign</label>
+                        <select class="form-control" name="campaign_id" id="campaign_id" required>
+                            <option value="">Select Campaign</option>
+                            @foreach($masterCampaigns as $master)
+                                <option value="{{ $master->id }}" data-fte="{{ $master->fte ?? '' }}">{{ $master->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="form-group" data-campaign-media-gateway><label for="campaign_media_gateway">Media Gateway</label><input class="form-control" name="media_gateway" id="campaign_media_gateway"></div>
                     <div class="form-group" data-campaign-total-channels><label for="campaign_total_channels_allocated">Total Channels Allocated</label><input class="form-control" type="number" min="0" name="total_channels_allocated" id="campaign_total_channels_allocated"></div>
-                    <div class="form-group"><label for="campaign_fte">FTE</label><input class="form-control" type="number" min="0" name="fte" id="campaign_fte"></div>
+                    <div class="form-group"><label for="campaign_fte">FTE</label><input class="form-control" type="number" min="0" id="campaign_fte" readonly tabindex="-1"></div>
                     <div class="form-group"><label for="campaign_caller_id">Caller ID</label><input class="form-control" name="caller_id" id="campaign_caller_id"></div>
                     <div class="form-group"><label for="campaign_prefix">Prefix</label><input class="form-control" name="prefix" id="campaign_prefix"></div>
                     <div class="form-group full"><label for="campaign_remarks">Remarks</label><textarea class="form-control" name="remarks" id="campaign_remarks"></textarea></div>
-                    <div class="form-group" data-first-allocation><label for="campaign_channel_allocation">Channel Allocation</label><input class="form-control" name="channel_allocation" id="campaign_channel_allocation"></div>
-                    <div class="form-group" data-first-allocation><label for="campaign_network">Network</label><input class="form-control" name="network" id="campaign_network"></div>
-                    <div class="form-group" data-first-allocation><label for="campaign_line_priority">Line Priority</label><input class="form-control" type="number" min="0" name="line_priority" id="campaign_line_priority"></div>
-                    <div class="form-group" data-first-allocation><label for="campaign_total_channel_allocated">Total Channel Allocated</label><input class="form-control" type="number" min="0" name="total_channel_allocated" id="campaign_total_channel_allocated"></div>
+                    <div class="form-group" data-first-allocation>
+                        <label for="campaign_channel_allocation">SIP Channel</label>
+                        <select class="form-control" name="channel_allocation" id="campaign_channel_allocation">
+                            <option value="">Select SIP Channel</option>
+                            @foreach($sipChannels as $sip)
+                                <option value="{{ $sip->etpi_sip_name }}" data-network="{{ $sip->network }}" data-channel-count="{{ $sip->channel_count }}">{{ $sip->etpi_sip_name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="form-group" data-first-allocation>
+                        <label for="campaign_alloc_media_gateway">GSM Gateway</label>
+                        <select class="form-control" name="media_gateway" id="campaign_alloc_media_gateway">
+                            <option value="">Select GSM Gateway</option>
+                            @foreach($gsmGateways as $gateway)
+                                @php $gatewayLabel = $gateway->site_code ?: $gateway->site_name; @endphp
+                                @if($gatewayLabel)
+                                    <option value="{{ $gatewayLabel }}">{{ $gatewayLabel }}</option>
+                                @endif
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="form-group" data-first-allocation>
+                        <label for="campaign_network">Network</label>
+                        <input class="form-control" name="network" id="campaign_network" readonly tabindex="-1">
+                    </div>
+                    <div class="form-group" data-first-allocation>
+                        <label for="campaign_line_priority">Line Priority</label>
+                        <input class="form-control" type="number" min="0" name="line_priority" id="campaign_line_priority">
+                    </div>
+                    <div class="form-group" data-first-allocation>
+                        <label for="campaign_total_channel_allocated">Total Channel Allocated</label>
+                        <input class="form-control" type="number" min="0" name="total_channel_allocated" id="campaign_total_channel_allocated" readonly tabindex="-1">
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn secondary" data-close="campaignModal">Cancel</button>
-                <button class="btn primary" type="submit">Save Campaign</button>
+                <button class="btn primary" type="submit">Save</button>
             </div>
         </form>
     </div>
@@ -263,17 +309,45 @@
             <input type="hidden" name="_method" id="allocationMethod" value="POST">
             <div class="modal-body">
                 <div class="form-grid">
-                    <div class="form-group"><label for="alloc_media_gateway">Media Gateway</label><input class="form-control" name="media_gateway" id="alloc_media_gateway"></div>
-                    <div class="form-group"><label for="alloc_channel_allocation">Channel Allocation</label><input class="form-control" name="channel_allocation" id="alloc_channel_allocation" required></div>
-                    <div class="form-group"><label for="alloc_network">Network</label><input class="form-control" name="network" id="alloc_network"></div>
-                    <div class="form-group"><label for="alloc_line_priority">Line Priority</label><input class="form-control" type="number" min="0" name="line_priority" id="alloc_line_priority"></div>
-                    <div class="form-group"><label for="alloc_total_channel_allocated">Total Channel Allocated</label><input class="form-control" type="number" min="0" name="total_channel_allocated" id="alloc_total_channel_allocated"></div>
+                    <div class="form-group">
+                        <label for="alloc_channel_allocation">SIP Channel</label>
+                        <select class="form-control" name="channel_allocation" id="alloc_channel_allocation" required>
+                            <option value="">Select SIP Channel</option>
+                            @foreach($sipChannels as $sip)
+                                <option value="{{ $sip->etpi_sip_name }}" data-network="{{ $sip->network }}" data-channel-count="{{ $sip->channel_count }}">{{ $sip->etpi_sip_name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="alloc_media_gateway">GSM Gateway</label>
+                        <select class="form-control" name="media_gateway" id="alloc_media_gateway">
+                            <option value="">Select GSM Gateway</option>
+                            @foreach($gsmGateways as $gateway)
+                                @php $gatewayLabel = $gateway->site_code ?: $gateway->site_name; @endphp
+                                @if($gatewayLabel)
+                                    <option value="{{ $gatewayLabel }}">{{ $gatewayLabel }}</option>
+                                @endif
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="alloc_network">Network</label>
+                        <input class="form-control" name="network" id="alloc_network" readonly tabindex="-1">
+                    </div>
+                    <div class="form-group">
+                        <label for="alloc_line_priority">Line Priority</label>
+                        <input class="form-control" type="number" min="0" name="line_priority" id="alloc_line_priority">
+                    </div>
+                    <div class="form-group">
+                        <label for="alloc_total_channel_allocated">Total Channel Allocated</label>
+                        <input class="form-control" type="number" min="0" name="total_channel_allocated" id="alloc_total_channel_allocated" readonly tabindex="-1">
+                    </div>
                     <div class="form-group full" data-alloc-remarks><label for="alloc_remarks">Remarks</label><textarea class="form-control" name="remarks" id="alloc_remarks"></textarea></div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn secondary" data-close="allocationModal">Cancel</button>
-                <button class="btn primary" type="submit">Save Allocation</button>
+                <button class="btn primary" type="submit">Save</button>
             </div>
         </form>
     </div>
@@ -391,6 +465,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    document.querySelectorAll('tr.ca-campaign-row[data-campaign]').forEach((row) => {
+        row.addEventListener('click', (event) => {
+            if (!(event.target instanceof Element)) return;
+            if (event.target.closest('.actions-column, .ca-menu, a, input, select, textarea, label, .action-btn, .plus-btn')) return;
+            if (event.target.closest('[data-ca-toggle]')) return;
+            row.querySelector('[data-ca-toggle]')?.click();
+        });
+    });
+
     const closeCaMenus = (except) => {
         document.querySelectorAll('.ca-menu.open').forEach((menu) => {
             if (menu === except) return;
@@ -458,17 +541,52 @@ document.addEventListener('DOMContentLoaded', () => {
     const campaignMethod = document.getElementById('campaignMethod');
     const storeAction = @json(route('channel-allocation.store'));
     const updateBase = @json(url('/channel-allocation'));
+    const campaignSelect = document.getElementById('campaign_id');
+    const campaignFteField = document.getElementById('campaign_fte');
+
+    function fillMasterFte() {
+        const option = campaignSelect?.selectedOptions?.[0];
+        if (campaignFteField) campaignFteField.value = option?.getAttribute('data-fte') || '';
+    }
+
+    campaignSelect?.addEventListener('change', fillMasterFte);
+
+    const campaignSipSelect = document.getElementById('campaign_channel_allocation');
+    const campaignNetworkField = document.getElementById('campaign_network');
+    const campaignTotalField = document.getElementById('campaign_total_channel_allocated');
+
+    function fillSipDerived(sipSelect, networkField, totalField) {
+        const option = sipSelect?.selectedOptions?.[0];
+        if (networkField) networkField.value = option?.getAttribute('data-network') || '';
+        if (totalField) totalField.value = option?.getAttribute('data-channel-count') || '';
+    }
 
     function showFirstAllocation(show) {
         document.querySelectorAll('[data-first-allocation]').forEach((el) => {
             el.hidden = !show;
-            el.querySelectorAll('input').forEach((input) => { if (!show) input.value = ''; });
+            el.querySelectorAll('input, select, textarea').forEach((field) => {
+                field.disabled = !show;
+                if (!show) field.value = '';
+            });
         });
+        if (show) fillSipDerived(campaignSipSelect, campaignNetworkField, campaignTotalField);
     }
 
     function setCampaignTotalChannelsVisible(show) {
         const group = document.querySelector('[data-campaign-total-channels]');
         const field = document.getElementById('campaign_total_channels_allocated');
+        if (!group) return;
+        group.hidden = !show;
+        group.style.display = show ? '' : 'none';
+        if (field) {
+            field.disabled = !show;
+            if (!show) field.value = '';
+        }
+    }
+
+    function setCampaignMediaGatewayVisible(show) {
+        const group = document.querySelector('[data-campaign-media-gateway]');
+        const field = document.getElementById('campaign_media_gateway');
         if (!group) return;
         group.hidden = !show;
         group.style.display = show ? '' : 'none';
@@ -484,8 +602,11 @@ document.addEventListener('DOMContentLoaded', () => {
         campaignForm.action = storeAction;
         document.getElementById('campaignModalTitle').textContent = 'Add Campaign';
         campaignForm.reset();
+        if (campaignSelect) campaignSelect.disabled = false;
+        fillMasterFte();
         showFirstAllocation(true);
         setCampaignTotalChannelsVisible(false);
+        setCampaignMediaGatewayVisible(false);
         campaignModal?.classList.add('visible');
     });
 
@@ -499,7 +620,13 @@ document.addEventListener('DOMContentLoaded', () => {
         campaignForm.action = updateBase + '/' + recordId;
         showFirstAllocation(false);
         setCampaignTotalChannelsVisible(true);
-        ['name','media_gateway','total_channels_allocated','fte','caller_id','prefix','remarks'].forEach((key) => {
+        setCampaignMediaGatewayVisible(true);
+        if (campaignSelect) {
+            campaignSelect.disabled = true;
+            campaignSelect.value = values.id ?? '';
+        }
+        fillMasterFte();
+        ['media_gateway','total_channels_allocated','caller_id','prefix','remarks'].forEach((key) => {
             const field = document.getElementById('campaign_' + key);
             if (field) field.value = values[key] ?? '';
         });
@@ -509,6 +636,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const allocationModal = document.getElementById('allocationModal');
     const allocationForm = document.getElementById('allocationForm');
     const allocationMethod = document.getElementById('allocationMethod');
+    const allocSipSelect = document.getElementById('alloc_channel_allocation');
+    const allocGatewaySelect = document.getElementById('alloc_media_gateway');
+    const allocNetworkField = document.getElementById('alloc_network');
+    const allocTotalField = document.getElementById('alloc_total_channel_allocated');
 
     function setAllocRemarksVisible(show) {
         const remarksGroup = document.querySelector('[data-alloc-remarks]');
@@ -521,6 +652,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function ensureSelectValue(select, value, extra = {}) {
+        if (!select) return;
+        const next = value == null ? '' : String(value);
+        if (next === '') {
+            select.value = '';
+            return;
+        }
+        const exists = Array.from(select.options).some((option) => option.value === next);
+        if (!exists) {
+            const option = document.createElement('option');
+            option.value = next;
+            option.textContent = next;
+            if (extra.network != null) option.setAttribute('data-network', extra.network);
+            if (extra.channelCount != null) option.setAttribute('data-channel-count', extra.channelCount);
+            select.appendChild(option);
+        }
+        select.value = next;
+    }
+
+    function fillAllocationFromSip() {
+        fillSipDerived(allocSipSelect, allocNetworkField, allocTotalField);
+    }
+
+    allocSipSelect?.addEventListener('change', fillAllocationFromSip);
+    campaignSipSelect?.addEventListener('change', () => fillSipDerived(campaignSipSelect, campaignNetworkField, campaignTotalField));
+    ['alloc_network', 'alloc_total_channel_allocated', 'campaign_network', 'campaign_total_channel_allocated'].forEach((id) => {
+        document.getElementById(id)?.addEventListener('keydown', (event) => event.preventDefault());
+        document.getElementById(id)?.addEventListener('paste', (event) => event.preventDefault());
+    });
+
     document.querySelectorAll('[data-allocation-add]').forEach((button) => button.addEventListener('click', () => {
         const campaignId = Number(button.dataset.campaign);
         if (!Number.isInteger(campaignId) || campaignId < 1) return;
@@ -528,7 +689,8 @@ document.addEventListener('DOMContentLoaded', () => {
         allocationForm.action = updateBase + '/' + campaignId + '/allocations';
         document.getElementById('allocationModalTitle').textContent = 'Add Allocation';
         allocationForm.reset();
-        document.getElementById('alloc_media_gateway').value = button.dataset.gateway || '';
+        ensureSelectValue(allocGatewaySelect, button.dataset.gateway || '');
+        fillAllocationFromSip();
         setAllocRemarksVisible(false);
         allocationModal?.classList.add('visible');
     }));
@@ -542,10 +704,14 @@ document.addEventListener('DOMContentLoaded', () => {
         allocationForm.action = updateBase + '/' + campaignId + '/allocations/' + recordId;
         document.getElementById('allocationModalTitle').textContent = 'Edit Allocation';
         setAllocRemarksVisible(false);
-        ['media_gateway','channel_allocation','network','line_priority','total_channel_allocated'].forEach((key) => {
-            const field = document.getElementById('alloc_' + key);
-            if (field) field.value = values[key] ?? '';
+        ensureSelectValue(allocSipSelect, values.channel_allocation || '', {
+            network: values.network || '',
+            channelCount: values.total_channel_allocated ?? ''
         });
+        ensureSelectValue(allocGatewaySelect, values.media_gateway || '');
+        const linePriority = document.getElementById('alloc_line_priority');
+        if (linePriority) linePriority.value = values.line_priority ?? '';
+        fillAllocationFromSip();
         allocationModal?.classList.add('visible');
     }));
 
@@ -750,6 +916,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     document.getElementById('importSuccessClose')?.addEventListener('click', finishImportSuccess);
     document.getElementById('importSuccessDismiss')?.addEventListener('click', finishImportSuccess);
+
+    const restoreExpanded = @json(session('ca_expanded'));
+    const restoreEditAllocation = @json(session('ca_edit_allocation'));
+    if (restoreExpanded) {
+        document.querySelector('[data-ca-toggle="' + restoreExpanded + '"]')?.click();
+    }
+    if (restoreEditAllocation) {
+        document.querySelector('[data-allocation-edit][data-id="' + restoreEditAllocation + '"]')?.click();
+    }
 });
 </script>
 @endpush

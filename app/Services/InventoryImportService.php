@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\InventoryImportCatalog;
+use App\Support\PdcEndorseDate;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -18,7 +19,12 @@ class InventoryImportService
      */
     public function templateHeaders(array $config): array
     {
-        return array_merge(['Id'], array_values($config['fields']));
+        $headers = array_values($config['fields']);
+        if (($config['include_id'] ?? true) === false) {
+            return $headers;
+        }
+
+        return array_merge(['Id'], $headers);
     }
 
     /**
@@ -27,7 +33,7 @@ class InventoryImportService
      */
     public function templateRows(array $config): array
     {
-        $width = count($config['fields']) + 1;
+        $width = count($this->templateHeaders($config));
         $rows = [];
         for ($i = 0; $i < self::TEMPLATE_BLANK_ROWS; $i++) {
             $rows[] = array_fill(0, $width, '');
@@ -71,6 +77,8 @@ class InventoryImportService
         $integerFields = $config['integer_fields'] ?? [];
         $numericFields = $config['numeric_fields'] ?? [];
         $dateFields = $config['date_fields'] ?? [];
+        $mdyDateFields = $config['mdy_date_fields'] ?? [];
+        $skipSave = $config['skip_save'] ?? [];
 
         foreach ($rawRows as $offset => $raw) {
             $excelRow = $offset + 2;
@@ -198,6 +206,9 @@ class InventoryImportService
             }
 
             foreach ($dateFields as $field) {
+                if (in_array($field, $mdyDateFields, true)) {
+                    continue;
+                }
                 $value = trim((string) ($values[$field] ?? ''));
                 if ($value === '') {
                     continue;
@@ -207,11 +218,53 @@ class InventoryImportService
                 }
             }
 
+            $isoDates = [];
+            foreach ($mdyDateFields as $field) {
+                $parsed = PdcEndorseDate::parse((string) ($values[$field] ?? ''));
+                if (! $parsed['valid']) {
+                    $errors[] = ($config['fields'][$field] ?? $field).' must be a valid date on or after 1/1/2000';
+                    continue;
+                }
+                if ($parsed['empty']) {
+                    $values[$field] = '';
+                    $isoDates[$field] = null;
+                    continue;
+                }
+                $values[$field] = $parsed['display'];
+                $isoDates[$field] = $parsed['iso'];
+            }
+
             if ($statusOptions !== [] && ($values['status'] ?? '') !== '' && ! in_array($values['status'], $statusOptions, true)) {
                 $errors[] = 'Status is invalid';
             }
 
-            if (isset($values['contract_start'], $values['contract_end'])
+            foreach ($config['options'] ?? [] as $field => $allowed) {
+                $value = trim((string) ($values[$field] ?? ''));
+                if ($value === '') {
+                    continue;
+                }
+                $canonical = null;
+                foreach ((array) $allowed as $option) {
+                    if (strcasecmp((string) $option, $value) === 0) {
+                        $canonical = (string) $option;
+                        break;
+                    }
+                }
+                if ($canonical === null) {
+                    $errors[] = ($config['fields'][$field] ?? $field).' must match a Program Location';
+                } else {
+                    $values[$field] = $canonical;
+                }
+            }
+
+            if (isset($isoDates['contract_start'], $isoDates['contract_end'])
+                && $isoDates['contract_start']
+                && $isoDates['contract_end']
+                && $isoDates['contract_end'] < $isoDates['contract_start']
+            ) {
+                $errors[] = 'Contract end date must be on or after the contract start date.';
+            } elseif (isset($values['contract_start'], $values['contract_end'])
+                && $mdyDateFields === []
                 && $values['contract_start'] !== ''
                 && $values['contract_end'] !== ''
                 && strtotime((string) $values['contract_end']) < strtotime((string) $values['contract_start'])
@@ -234,6 +287,13 @@ class InventoryImportService
             if ($ok) {
                 $record = [];
                 foreach (array_keys($config['fields']) as $field) {
+                    if (in_array($field, $skipSave, true)) {
+                        continue;
+                    }
+                    if (array_key_exists($field, $isoDates)) {
+                        $record[$field] = $isoDates[$field];
+                        continue;
+                    }
                     $value = $values[$field] ?? '';
                     $record[$field] = $value === '' ? null : $value;
                 }
@@ -241,7 +301,10 @@ class InventoryImportService
             }
 
             foreach (array_keys($config['fields']) as $field) {
-                if (! in_array($field, $ipFields, true) && ($values[$field] ?? '') !== '') {
+                if (in_array($field, $skipSave, true) || in_array($field, $ipFields, true)) {
+                    continue;
+                }
+                if (($values[$field] ?? '') !== '') {
                     $carry[$field] = $values[$field];
                 }
             }

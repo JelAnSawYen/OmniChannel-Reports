@@ -65,7 +65,6 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertFalse($preview['valid']);
         $this->assertSame(2, $preview['summary']['errors']);
         $this->assertStringContainsString('Missing Media Gateway', $preview['rows'][0]['error']);
-        $this->assertStringContainsString('FTE is required', $preview['rows'][1]['error']);
         $this->assertStringContainsString('Total Channel Allocated is required', $preview['rows'][1]['error']);
         $this->assertTrue($preview['rows'][2]['valid']);
         $this->assertSame('InvalidNet', $preview['rows'][2]['network']);
@@ -104,7 +103,7 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertSame(1, ChannelAllocationCampaign::where('name', 'Alpha Import')->count());
         $this->assertSame(2, $alpha->allocations()->count());
         $this->assertSame(32, $alpha->fresh()->total_channels_allocated);
-        $this->assertSame(4, $alpha->fte);
+        $this->assertNull($alpha->fte);
         $this->assertTrue($alpha->allocations()->where('channel_allocation', 'CH-A1')->exists());
         $this->assertTrue($alpha->allocations()->where('channel_allocation', 'CH-A2')->exists());
 
@@ -258,41 +257,37 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertStringContainsString('Media Gateway must contain 1 or 2 IPv4 addresses', $preview['rows'][4]['error']);
     }
 
-    public function test_fte_inherits_blank_uses_new_value_and_rejects_decimals(): void
+    public function test_import_uses_master_campaign_fte_and_ignores_file_fte(): void
     {
         $this->actingAs($this->admin);
+        ChannelAllocationCampaign::create([
+            'name' => 'Fte Import',
+            'fte' => 9,
+            'sort_order' => 1,
+        ]);
+
         $validPath = $this->makeSpreadsheet([
             ['Fte Import', '10.24.28.38', '4', '111', '300', '', 'CH-F1', 'DITO SIM', '1', '5'],
             ['Fte Import', '10.24.28.38', '', '111', '300', '', 'CH-F2', 'DITO SIM', '2', '6'],
             ['Fte Import', '10.24.28.38', '5', '111', '300', '', 'CH-F3', 'DITO SIM', '3', '7'],
-            ['Fte Import', '10.24.28.38', '', '111', '300', '', 'CH-F4', 'DITO SIM', '4', '8'],
+            ['Fte Import', '10.24.28.38', '4.5', '111', '300', '', 'CH-F4', 'DITO SIM', '4', '8'],
         ]);
 
         $preview = $this->postJson('/channel-allocation/import/preview', [
             'file' => $this->upload($validPath),
         ])->assertOk()->json();
 
-        $this->assertTrue($preview['valid']);
-        $this->assertSame('4', $preview['rows'][0]['fte']);
-        $this->assertSame('4', $preview['rows'][1]['fte']);
-        $this->assertSame('5', $preview['rows'][2]['fte']);
-        $this->assertSame('5', $preview['rows'][3]['fte']);
+        $this->assertTrue($preview['valid'], $preview['rows'][3]['error'] ?? '');
+        $this->assertSame('9', $preview['rows'][0]['fte']);
+        $this->assertSame('9', $preview['rows'][1]['fte']);
+        $this->assertSame('9', $preview['rows'][2]['fte']);
+        $this->assertSame('9', $preview['rows'][3]['fte']);
 
         $this->postJson('/channel-allocation/import/confirm', ['token' => $preview['token']])
             ->assertOk()
             ->assertJson(['ok' => true, 'allocations' => 4]);
 
-        $this->assertSame(5, ChannelAllocationCampaign::where('name', 'Fte Import')->value('fte'));
-
-        $invalidPath = $this->makeSpreadsheet([
-            ['Fte Bad', '10.24.28.38', '4.5', '111', '300', '', 'CH-F5', 'DITO SIM', '1', '5'],
-        ]);
-        $invalid = $this->postJson('/channel-allocation/import/preview', [
-            'file' => $this->upload($invalidPath),
-        ])->assertOk()->json();
-
-        $this->assertFalse($invalid['valid']);
-        $this->assertStringContainsString('FTE must be a whole number', $invalid['rows'][0]['error']);
+        $this->assertSame(9, ChannelAllocationCampaign::where('name', 'Fte Import')->value('fte'));
     }
 
     public function test_prefix_inherits_blank_and_uses_new_value(): void
@@ -375,7 +370,7 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertSame('', $preview['rows'][2]['fte']);
         $this->assertSame('', $preview['rows'][2]['network']);
         $this->assertSame('10.24.28.39', $preview['rows'][3]['media_gateway']);
-        $this->assertSame('5', $preview['rows'][3]['fte']);
+        $this->assertSame('', $preview['rows'][3]['fte']);
         $this->assertSame('TNT', $preview['rows'][3]['network']);
 
         $this->postJson('/channel-allocation/import/confirm', ['token' => $preview['token']])
@@ -383,7 +378,7 @@ class ChannelAllocationImportTest extends TestCase
             ->assertJson(['ok' => true, 'allocations' => 4]);
 
         $campaign = ChannelAllocationCampaign::where('name', 'Dash Import')->firstOrFail();
-        $this->assertSame(5, $campaign->fte);
+        $this->assertNull($campaign->fte);
         $this->assertSame('222', $campaign->caller_id);
         $this->assertSame('200', $campaign->prefix);
         $this->assertSame('-', $campaign->remarks);
@@ -433,7 +428,7 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertSame('10.24.28.38', $preview['rows'][0]['media_gateway']);
         $this->assertSame('10.24.28.39', $preview['rows'][1]['media_gateway']);
         $this->assertSame('10.24.28.40', $preview['rows'][2]['media_gateway']);
-        $this->assertSame('5', $preview['rows'][1]['fte']);
+        $this->assertSame('', $preview['rows'][1]['fte']);
         $this->assertSame('123456789', $preview['rows'][1]['caller_id']);
         $this->assertSame('100', $preview['rows'][1]['prefix']);
         $this->assertSame('1', $preview['rows'][0]['line_priority']);
@@ -448,7 +443,7 @@ class ChannelAllocationImportTest extends TestCase
         $campaign = ChannelAllocationCampaign::where('name', 'Campaign A')->firstOrFail();
         $this->assertSame(3, $campaign->allocations()->count());
         $this->assertSame(33, $campaign->fresh()->total_channels_allocated);
-        $this->assertSame(5, $campaign->fte);
+        $this->assertNull($campaign->fte);
         $this->assertTrue($campaign->allocations()->where('channel_allocation', 'CH-001')->exists());
         $this->assertTrue($campaign->allocations()->where('channel_allocation', 'CH-002')->exists());
         $this->assertTrue($campaign->allocations()->where('channel_allocation', 'CH-003')->exists());

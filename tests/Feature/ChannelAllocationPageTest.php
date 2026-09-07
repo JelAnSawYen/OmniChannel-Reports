@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\ChannelAllocation;
 use App\Models\ChannelAllocationCampaign;
+use App\Models\MediaGateway;
+use App\Models\SipChannel;
 use App\Models\User;
 use App\Models\UserType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -88,8 +90,21 @@ class ChannelAllocationPageTest extends TestCase
             ->assertSee('gsm_globe_est145')
             ->assertSee('data-ca-toggle', false)
             ->assertSee('class="ca-menu-btn"', false)
-            ->assertSee('Edit Campaign')
-            ->assertSee('Delete Campaign')
+            ->assertSee('class="ca-menu-item edit"', false)
+            ->assertSee('class="ca-menu-item delete"', false)
+            ->assertSee('>SIP Channel</th>', false)
+            ->assertSee('>GSM Gateway</th>', false)
+            ->assertSee('id="alloc_channel_allocation"', false)
+            ->assertSee('id="alloc_media_gateway"', false)
+            ->assertSee('id="campaign_channel_allocation"', false)
+            ->assertSee('id="campaign_alloc_media_gateway"', false)
+            ->assertSee('for="campaign_channel_allocation">SIP Channel', false)
+            ->assertSee('for="campaign_alloc_media_gateway">GSM Gateway', false)
+            ->assertDontSee('for="campaign_channel_allocation">Channel Allocation', false)
+            ->assertSee('id="alloc_network"', false)
+            ->assertSee('readonly', false)
+            ->assertSee('Allocations')
+            ->assertSee('Total Channels')
             ->assertSee('data-confirm-title="Delete Campaign"', false)
             ->assertSee('data-confirm-title="Delete Allocation"', false)
             ->assertSee('campaigns')
@@ -102,14 +117,31 @@ class ChannelAllocationPageTest extends TestCase
         $this->assertTrue(strpos($html, '>SIP Channels</span></a>') < strpos($html, '>Channel Allocation</span></a>'));
         $this->assertTrue(strpos($html, '>Channel Allocation</span></a>') < strpos($html, '>Archive Recordings</span></a>'));
         $this->assertStringContainsString('class="import-upload-error"', $html);
+        $this->assertMatchesRegularExpression('/id="campaign_fte"[^>]*\breadonly\b/', $html);
+        $this->assertDoesNotMatchRegularExpression('/id="campaign_fte"[^>]*\bname="fte"/', $html);
+        $this->assertStringContainsString('id="campaign_id"', $html);
+        $this->assertStringContainsString('>Select Campaign</option>', $html);
+        $this->assertStringContainsString('data-fte="5"', $html);
+        $this->assertStringContainsString('>Atome</option>', $html);
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertMatchesRegularExpression('/\.modal-backdrop\s*\{[^}]*visibility:\s*hidden/', $css);
+        $js = file_get_contents(resource_path('js/app.js'));
+        $this->assertStringContainsString('omnichannel.expandedView', $js);
+        $this->assertStringContainsString('initPreserveExpandedView', $js);
         $this->assertDoesNotMatchRegularExpression('/id="importUploadError"[^>]*\bflash\b/', $html);
 
         $this->assertEquals(1, ChannelAllocationCampaign::where('name', 'Atome')->count());
 
         $this->get('/channel-allocation?search=Atome')
             ->assertOk()
-            ->assertSee('Atome')
-            ->assertDontSee('RCBC Bankard');
+            ->assertSee('Atome');
+        $atomeTable = \Illuminate\Support\Str::between(
+            $this->get('/channel-allocation?search=Atome')->getContent(),
+            'class="ca-table"',
+            'class="table-footer"'
+        );
+        $this->assertStringContainsString('Atome</button>', $atomeTable);
+        $this->assertStringNotContainsString('RCBC Bankard</button>', $atomeTable);
 
         $this->get('/channel-allocation/export')->assertOk()->assertDownload('channel-allocation.xlsx');
         $this->get('/channel-allocation/import/template')->assertOk()->assertDownload('channel-allocation-template.xlsx');
@@ -120,9 +152,23 @@ class ChannelAllocationPageTest extends TestCase
     public function test_campaign_and_allocation_crud_with_delete_confirmation_attributes(): void
     {
         $this->actingAs($this->admin);
+        $this->createSipChannel('CH-A', 'Globe SIM', 20);
+        $this->createSipChannel('CH-A2', 'Eastern SIP', 20);
+        $this->createSipChannel('CH-A-UPDATED', 'Globe SIM', 25);
+        $this->createGsmGateway('PDC-MG1');
+
+        $alpha = ChannelAllocationCampaign::create([
+            'name' => 'Alpha Campaign',
+            'fte' => 4,
+            'sort_order' => 1,
+        ]);
+        $beta = ChannelAllocationCampaign::create([
+            'name' => 'Beta Campaign',
+            'sort_order' => 2,
+        ]);
 
         $this->post('/channel-allocation', [
-            'name' => 'Alpha Campaign',
+            'campaign_id' => $alpha->id,
             'media_gateway' => '10.0.0.1',
             'total_channels_allocated' => 40,
             'fte' => 4,
@@ -136,28 +182,29 @@ class ChannelAllocationPageTest extends TestCase
         ])->assertRedirect();
 
         $this->post('/channel-allocation', [
-            'name' => 'Beta Campaign',
+            'campaign_id' => $beta->id,
             'media_gateway' => '10.0.0.2',
-            'channel_allocation' => 'CH-B',
-            'network' => 'Smart SIM',
-            'line_priority' => 1,
-            'total_channel_allocated' => 10,
         ])->assertRedirect();
-
-        $alpha = ChannelAllocationCampaign::where('name', 'Alpha Campaign')->firstOrFail();
         $this->post('/channel-allocation/'.$alpha->id.'/allocations', [
-            'media_gateway' => '10.0.0.1',
+            'media_gateway' => 'PDC-MG1',
             'channel_allocation' => 'CH-A2',
-            'network' => 'Eastern SIP',
+            'network' => 'SHOULD-IGNORE',
             'line_priority' => 2,
-            'total_channel_allocated' => 20,
+            'total_channel_allocated' => 999,
         ])->assertRedirect();
 
         $this->assertSame(2, $alpha->allocations()->count());
+        $this->assertDatabaseHas('channel_allocations', [
+            'campaign_id' => $alpha->id,
+            'channel_allocation' => 'CH-A2',
+            'media_gateway' => 'PDC-MG1',
+            'network' => 'Eastern SIP',
+            'total_channel_allocated' => 20,
+        ]);
         $this->assertSame(40, $alpha->fresh()->total_channels_allocated);
 
         $this->put('/channel-allocation/'.$alpha->id, [
-            'name' => 'Alpha Campaign Updated',
+            'campaign_id' => $alpha->id,
             'media_gateway' => '10.0.0.1',
             'total_channels_allocated' => 40,
             'fte' => 5,
@@ -168,26 +215,28 @@ class ChannelAllocationPageTest extends TestCase
 
         $this->assertDatabaseHas('channel_allocation_campaigns', [
             'id' => $alpha->id,
-            'name' => 'Alpha Campaign Updated',
-            'fte' => 5,
+            'name' => 'Alpha Campaign',
         ]);
+        $this->assertSame(4, $alpha->fresh()->fte);
         $this->assertDatabaseHas('channel_allocation_campaigns', ['name' => 'Beta Campaign']);
 
         $keep = $alpha->allocations()->where('channel_allocation', 'CH-A2')->firstOrFail();
         $target = $alpha->allocations()->where('channel_allocation', 'CH-A')->firstOrFail();
 
         $this->put('/channel-allocation/'.$alpha->id.'/allocations/'.$target->id, [
-            'media_gateway' => '10.0.0.1',
+            'media_gateway' => 'PDC-MG1',
             'channel_allocation' => 'CH-A-UPDATED',
-            'network' => 'Globe SIM',
+            'network' => 'HACKED',
             'line_priority' => 1,
-            'total_channel_allocated' => 25,
+            'total_channel_allocated' => 1,
             'remarks' => 'line note',
-        ])->assertRedirect();
+        ])->assertRedirect()->assertSessionHas('ca_expanded', $alpha->id)->assertSessionHas('ca_edit_allocation', $target->id);
 
         $this->assertDatabaseHas('channel_allocations', [
             'id' => $target->id,
             'channel_allocation' => 'CH-A-UPDATED',
+            'media_gateway' => 'PDC-MG1',
+            'network' => 'Globe SIM',
             'total_channel_allocated' => 25,
         ]);
         $this->assertDatabaseHas('channel_allocations', ['id' => $keep->id, 'channel_allocation' => 'CH-A2']);
@@ -200,12 +249,12 @@ class ChannelAllocationPageTest extends TestCase
 
         $this->get('/channel-allocation?search=CH-A-UPDATED')
             ->assertOk()
-            ->assertSee('Alpha Campaign Updated');
+            ->assertSee('Alpha Campaign');
 
-        $this->assertStringNotContainsString('Beta Campaign', Str::between(
+        $this->assertStringNotContainsString('Beta Campaign</button>', \Illuminate\Support\Str::between(
             $this->get('/channel-allocation?search=CH-A-UPDATED')->getContent(),
-            '<tbody>',
-            '</tbody>'
+            'class="ca-table"',
+            'class="table-footer"'
         ));
 
         $this->delete('/channel-allocation/'.$alpha->id.'/allocations/'.$target->id)->assertRedirect();
@@ -271,5 +320,69 @@ class ChannelAllocationPageTest extends TestCase
         $this->get('/channel-allocation?per_page=5&page=3')
             ->assertOk()
             ->assertSee('Camp 11');
+    }
+
+    public function test_allocation_dropdowns_auto_fill_from_sip_channel(): void
+    {
+        $this->actingAs($this->admin);
+        $campaign = ChannelAllocationCampaign::create(['name' => 'Mynt', 'sort_order' => 1]);
+        $this->createSipChannel('ETPI_53235320', 'ETPI', 14);
+        $this->createGsmGateway('PDC-MG1');
+
+        $page = $this->get('/channel-allocation')->assertOk();
+        $page->assertSee('>SIP Channel</th>', false)
+            ->assertSee('>GSM Gateway</th>', false)
+            ->assertSee('id="campaign_channel_allocation"', false)
+            ->assertSee('id="campaign_alloc_media_gateway"', false)
+            ->assertSee('ETPI_53235320')
+            ->assertSee('PDC-MG1')
+            ->assertSee('readonly', false)
+            ->assertSee('id="alloc_line_priority"', false)
+            ->assertSee('class="ca-menu-item edit"', false)
+            ->assertSee('class="ca-menu-item delete"', false);
+
+        $this->post('/channel-allocation/'.$campaign->id.'/allocations', [
+            'media_gateway' => 'PDC-MG1',
+            'channel_allocation' => 'ETPI_53235320',
+            'network' => 'MANUAL',
+            'line_priority' => 1,
+            'total_channel_allocated' => 99,
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('channel_allocations', [
+            'campaign_id' => $campaign->id,
+            'channel_allocation' => 'ETPI_53235320',
+            'media_gateway' => 'PDC-MG1',
+            'network' => 'ETPI',
+            'line_priority' => 1,
+            'total_channel_allocated' => 14,
+        ]);
+        $this->assertSame(14, $campaign->fresh()->total_channels_allocated);
+
+        $this->post('/channel-allocation/'.$campaign->id.'/allocations', [
+            'media_gateway' => 'PDC-MG1',
+            'channel_allocation' => 'DOES-NOT-EXIST',
+            'line_priority' => 2,
+        ])->assertSessionHasErrors('channel_allocation');
+    }
+
+    private function createSipChannel(string $name, string $network, int $count): SipChannel
+    {
+        return SipChannel::create([
+            'etpi_sip_name' => $name,
+            'network' => $network,
+            'channel_count' => $count,
+        ]);
+    }
+
+    private function createGsmGateway(string $siteCode): MediaGateway
+    {
+        return MediaGateway::create([
+            'site_name' => 'PDC',
+            'site_code' => $siteCode,
+            'ip_address' => '10.24.28.'.random_int(20, 250),
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+        ]);
     }
 }

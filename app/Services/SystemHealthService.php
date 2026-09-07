@@ -294,14 +294,14 @@ class SystemHealthService
 
         foreach (OperationCatalog::modules() as $slug => $config) {
             $model = $config['model'];
-            $nameField = $config['fields'][0];
+            $nameField = $slug === 'sip-channels' ? 'etpi_sip_name' : $config['fields'][0];
             $sources[] = [
                 'module' => $config['title'],
                 'route' => $slug,
                 'icon' => $icons[$slug] ?? 'network',
                 'model' => $model,
                 'table' => (new $model)->getTable(),
-                'status' => 'status',
+                'status' => $slug === 'sip-channels' ? null : 'status',
                 'name' => function ($record) use ($nameField) {
                     $value = trim((string) ($record->{$nameField} ?? ''));
                     if ($value === '') {

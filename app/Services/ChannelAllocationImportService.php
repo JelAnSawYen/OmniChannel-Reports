@@ -71,7 +71,6 @@ class ChannelAllocationImportService
 
         $carryCampaign = '';
         $carryGateway = null;
-        $carryFte = null;
         $carryCaller = null;
         $carryPrefix = null;
         $carryNetwork = null;
@@ -81,7 +80,6 @@ class ChannelAllocationImportService
             $excelRow = $offset + 2;
             $campaignName = $this->cell($raw, $map, 'campaign');
             $rawGateway = $this->cell($raw, $map, 'media_gateway');
-            $rawFte = $this->cell($raw, $map, 'fte');
             $rawCaller = $this->cell($raw, $map, 'caller_id');
             $rawPrefix = $this->cell($raw, $map, 'prefix');
             $remarks = $this->cell($raw, $map, 'remarks');
@@ -94,7 +92,6 @@ class ChannelAllocationImportService
                 $campaignName = $carryCampaign;
             }
             $mediaGateway = $this->applyCarryForward($carryGateway, $rawGateway);
-            $fte = $this->applyCarryForward($carryFte, $rawFte);
             $callerId = $this->applyCarryForward($carryCaller, $rawCaller);
             $prefix = $this->applyCarryForward($carryPrefix, $rawPrefix);
             $network = $this->applyCarryForward($carryNetwork, $rawNetwork);
@@ -115,7 +112,6 @@ class ChannelAllocationImportService
                 $this->validateMediaGateway($mediaGateway, $errors);
             }
 
-            $fteValue = $this->parseInteger($fte, 'FTE', $rawFte !== '-' && $carryFte === null, $errors);
             $linePriorityValue = $this->parseInteger($linePriority, 'Line Priority', false, $errors);
             $totalValue = $this->parseInteger($totalAllocated, 'Total Channel Allocated', true, $errors);
 
@@ -146,12 +142,15 @@ class ChannelAllocationImportService
                 }
             }
 
+            $existing = $campaignName !== '' ? $existingCampaigns->get($campaignKey) : null;
+            $fteDisplay = ($existing && $existing->fte !== null) ? (string) $existing->fte : '';
+
             $ok = $errors === [];
             $previewRows[] = [
                 'row' => $excelRow,
                 'campaign' => $campaignName,
                 'media_gateway' => $mediaGateway,
-                'fte' => $fte,
+                'fte' => $fteDisplay,
                 'caller_id' => $callerId,
                 'prefix' => $prefix,
                 'channel_allocation' => $channelAllocation,
@@ -168,18 +167,12 @@ class ChannelAllocationImportService
                     $payloadCampaigns[$campaignKey] = [
                         'name' => $campaignName,
                         'media_gateway' => $mediaGateway !== '' ? $mediaGateway : null,
-                        'fte' => $fteValue,
                         'caller_id' => $callerId !== '' ? $callerId : null,
                         'prefix' => $prefix !== '' ? $prefix : null,
                         'remarks' => $remarks !== '' ? $remarks : null,
                         'allocations' => [],
                     ];
                 } else {
-                    if ($rawFte === '-') {
-                        $payloadCampaigns[$campaignKey]['fte'] = null;
-                    } elseif ($fteValue !== null) {
-                        $payloadCampaigns[$campaignKey]['fte'] = $fteValue;
-                    }
                     if ($rawPrefix === '-') {
                         $payloadCampaigns[$campaignKey]['prefix'] = null;
                     } elseif ($prefix !== '') {
@@ -203,7 +196,6 @@ class ChannelAllocationImportService
             if ($campaignName !== '') {
                 $carryCampaign = $campaignName;
                 $carryGateway = $this->nextCarry($carryGateway, $rawGateway, $mediaGateway);
-                $carryFte = $this->nextCarry($carryFte, $rawFte, $fte);
                 $carryCaller = $this->nextCarry($carryCaller, $rawCaller, $callerId);
                 $carryPrefix = $this->nextCarry($carryPrefix, $rawPrefix, $prefix);
                 $carryNetwork = $this->nextCarry($carryNetwork, $rawNetwork, $network);
@@ -252,7 +244,6 @@ class ChannelAllocationImportService
                     $campaign = ChannelAllocationCampaign::query()->create([
                         'name' => $item['name'],
                         'media_gateway' => $item['media_gateway'],
-                        'fte' => $item['fte'],
                         'caller_id' => $item['caller_id'],
                         'prefix' => $item['prefix'],
                         'remarks' => $item['remarks'],

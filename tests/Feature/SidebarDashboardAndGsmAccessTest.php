@@ -47,6 +47,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
 
         $pages = [
             '/dashboard' => 'Network Overview',
+            '/campaigns' => 'Campaigns',
             '/pdc-servers' => 'PDC Servers',
             '/sip-channels' => 'SIP Channels',
             '/channel-allocation' => 'Channel Allocation',
@@ -61,6 +62,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             '/program-location/alcar' => 'Alcar',
             '/program-location/ctn' => 'CTN',
             '/program-location/scs' => 'SCS',
+            '/program-location/pdc' => 'PDC',
             '/program-location/estancia' => 'Estancia',
             '/program-location/skyrise' => 'Skyrise',
         ];
@@ -90,6 +92,17 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             ->assertSee('class="plus-btn"', false)
             ->assertSee('class="table-card table-wrap"', false)
             ->assertSee('class="table-footer"', false)
+            ->assertSee('Hostname IP')
+            ->assertSee('Serial Number')
+            ->assertSee('>Plan<', false)
+            ->assertSee('>Port<', false)
+            ->assertSee('>Network<', false)
+            ->assertSee('>Function<', false)
+            ->assertSee('>Site<', false)
+            ->assertSee('>User<', false)
+            ->assertSee('>Password<', false)
+            ->assertSee('pdc-secret-toggle', false)
+            ->assertDontSee('>Id</span>', false)
             ->assertDontSee('>Media Gateways</span>', false)
             ->assertDontSee('>Users</span>', false)
             ->assertDontSee('>User Types</span>', false)
@@ -100,7 +113,13 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
     {
         $this->actingAs($this->user($this->systemType));
 
+        $campaign = \App\Models\ChannelAllocationCampaign::create(['name' => 'BPI Collection']);
+        $group = \App\Models\PdcGroup::create([
+            'campaign_id' => $campaign->id,
+            'location' => 'Estancia',
+        ]);
         \App\Models\PdcServer::create([
+            'pdc_group_id' => $group->id,
             'hostname' => 'pdc-core-01',
             'ip_address' => '10.10.10.10',
             'location' => 'Estancia',
@@ -109,6 +128,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         ]);
 
         $pages = [
+            '/campaigns',
             '/pdc-servers',
             '/sip-channels',
             '/channel-allocation',
@@ -136,7 +156,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             ->assertSee('class="plus-btn"', false)
             ->assertSee('id="transferButton"', false)
             ->assertSee('class="actions-column"', false)
-            ->assertSee('class="row-actions"', false)
+            ->assertSee('row-actions', false)
             ->assertSee('Hostname')
             ->assertDontSee('filter-row', false);
     }
@@ -233,14 +253,14 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
     public function test_sim_inventory_card_opens_a_selection_modal_for_globe_and_smart(): void
     {
         \App\Models\GlobeSim::create([
-            'sim_number' => '09170001111',
-            'imsi' => '51502000001111',
+            'imei' => '356938035643111',
+            'mobile_number' => '09170001111',
             'location' => 'Estancia',
             'status' => 'Active',
         ]);
         \App\Models\SmartSim::create([
-            'sim_number' => '09280002222',
-            'imsi' => '51503000002222',
+            'imei' => '356938035643222',
+            'mobile_number' => '09280002222',
             'location' => 'CTN',
             'status' => 'Active',
         ]);

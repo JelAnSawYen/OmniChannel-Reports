@@ -73,17 +73,18 @@ class NotificationPermissionTest extends TestCase
     {
         foreach (range(1, 3) as $index) {
             GlobeSim::create([
-                'sim_number' => '0917000000'.$index,
-                'imsi' => '515020000000'.$index,
-                'location' => 'Alcar',
+                'imei' => '35693803564380'.$index,
+                'mobile_number' => '0917000000'.$index,
+                'network' => 'Globe',
                 'status' => 'Active',
             ]);
         }
 
         GlobeSim::create([
-            'sim_number' => '09170000009',
-            'imsi' => '515020000009',
-            'assigned_to' => 'Alcar hotline',
+            'imei' => '356938035643809',
+            'mobile_number' => '09170000009',
+            'network' => 'Globe',
+            'account_number' => 'Alcar hotline',
             'location' => 'Alcar',
             'status' => 'Active',
         ]);

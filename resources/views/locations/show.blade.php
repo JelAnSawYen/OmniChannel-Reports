@@ -143,7 +143,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn secondary" data-close="locationModal">Cancel</button>
-                <button class="btn primary" type="submit">Save GSM Gateway</button>
+                <button class="btn primary" type="submit">Save</button>
             </div>
         </form>
     </div>

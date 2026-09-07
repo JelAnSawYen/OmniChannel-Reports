@@ -7,9 +7,11 @@ use App\Services\NotificationService;
 use App\Services\XlsxService;
 use App\Support\InventoryImportCatalog;
 use App\Support\OperationCatalog;
+use App\Support\PdcEndorseDate;
 use App\Support\PublicError;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class OperationsDataController extends Controller
 {
@@ -17,17 +19,12 @@ class OperationsDataController extends Controller
     public function index(Request $request, string $module)
     {
         $config=$this->config($module); $query=$config['model']::query();
-        if ($search=trim((string)$request->query('search'))) {
-            $query->where(function($q) use ($search,$config){ foreach(array_keys($config['columns']) as $i=>$field){ $i===0?$q->where($field,'like',"%$search%"): $q->orWhere($field,'like',"%$search%"); }});
-        }
-        if ($status=trim((string)$request->query('status'))) {
-            $query->where('status', $status);
-        }
+        $this->applyInventorySearch($query, $request, $config, $module);
         $perPage=(int)$request->query('per_page',10);
         if (!in_array($perPage,[5,10,25,50],true)) {
             $perPage=10;
         }
-        $search=$search ?: '';
+        $search=trim((string)$request->query('search'));
         $records=$query->latest()->paginate($perPage)->withQueryString();
         $gateways=MediaGateway::orderBy('site_code')->get(['site_code','site_name']);
         $statusOptions=$this->statusOptions($module);
@@ -37,6 +34,9 @@ class OperationsDataController extends Controller
     public function store(Request $request, string $module)
     {
         $config=$this->config($module); $data=$request->validate($this->rules($module));
+        if (OperationCatalog::isSim($module)) {
+            $data = $this->parseSimDates($data);
+        }
         if ($error=$this->integrityError($module,$data)) {
             return back()->with('error',$error)->withInput();
         }
@@ -48,6 +48,9 @@ class OperationsDataController extends Controller
     {
         [$config, $module, $id, $record] = $this->resolveRecord($request);
         $data = $request->validate($this->rules($module, $id));
+        if (OperationCatalog::isSim($module)) {
+            $data = $this->parseSimDates($data);
+        }
         if ($error = $this->integrityError($module, $data)) {
             return back()->with('error', $error)->withInput();
         }
@@ -70,23 +73,35 @@ class OperationsDataController extends Controller
     {
         $config=$this->config($module);
         $query=$config['model']::query();
-        if ($search=trim((string)$request->query('search'))) {
-            $query->where(function($q) use ($search,$config){ foreach(array_keys($config['columns']) as $i=>$field){ $i===0?$q->where($field,'like',"%$search%"): $q->orWhere($field,'like',"%$search%"); }});
-        }
-        if ($status=trim((string)$request->query('status'))) {
-            $query->where('status', $status);
-        }
+        $this->applyInventorySearch($query, $request, $config, $module);
 
-        $headers = array_merge(['Id'], array_values($config['columns']));
+        $isSim = OperationCatalog::isSim($module);
+        $headers = $isSim
+            ? array_values(OperationCatalog::simTransferColumns())
+            : array_merge(['Id'], array_values($config['columns']));
         $fields = array_keys($config['columns']);
         try {
             $sequence = 0;
             $path = $xlsx->export(
                 $headers,
-                $query->latest()->get()->map(function ($record) use ($fields, &$sequence) {
+                $query->latest()->get()->map(function ($record) use ($fields, $isSim, &$sequence) {
                     $sequence++;
+                    $values = collect($fields)->map(function ($field) use ($record, $isSim) {
+                        $value = $record->{$field};
+                        if ($value instanceof \DateTimeInterface) {
+                            return $isSim
+                                ? (PdcEndorseDate::display($value->format('Y-m-d')) ?: '')
+                                : $value->format('Y-m-d');
+                        }
 
-                    return array_merge([$sequence], collect($fields)->map(fn ($field) => $record->{$field})->all());
+                        return $value;
+                    })->all();
+
+                    if ($isSim) {
+                        return $values;
+                    }
+
+                    return array_merge([$sequence], $values);
                 }),
                 $module.'.xlsx'
             );
@@ -158,8 +173,67 @@ class OperationsDataController extends Controller
             'telco-cost'=>['Active','Inactive','Expiring'],
             'channel-port'=>['Available','In Use','Disabled'],
             'defective-gsm'=>['Open','In Repair','Replaced','Closed'],
+            'globe-sim','smart-sim'=>[],
             default=>['Active','Inactive'],
         };
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function simRules(string $table, ?int $id = null): array
+    {
+        return [
+            'imei' => ['required', 'string', 'max:50', Rule::unique($table, 'imei')->ignore($id)],
+            'mobile_number' => ['required', 'string', 'max:50', Rule::unique($table, 'mobile_number')->ignore($id)],
+            'network' => 'nullable|string|max:255',
+            'plan' => 'nullable|string|max:255',
+            'ip_address' => 'nullable|ipv4',
+            'account_number' => 'nullable|string|max:255',
+            'contract_start' => 'nullable|string',
+            'contract_end' => 'nullable|string',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function parseSimDates(array $data): array
+    {
+        foreach (['contract_start' => 'Contract Start', 'contract_end' => 'Contract End'] as $field => $label) {
+            $parsed = PdcEndorseDate::parse($data[$field] ?? '');
+            if (! $parsed['valid']) {
+                throw ValidationException::withMessages([
+                    $field => $label.' must be a valid date on or after 1/1/2000.',
+                ]);
+            }
+            $data[$field] = $parsed['iso'];
+        }
+
+        return $data;
+    }
+
+    private function applyInventorySearch($query, Request $request, array $config, string $module): void
+    {
+        if ($search = trim((string) $request->query('search'))) {
+            $query->where(function ($q) use ($search, $config, $module) {
+                foreach (array_keys($config['columns']) as $i => $field) {
+                    $i === 0 ? $q->where($field, 'like', "%$search%") : $q->orWhere($field, 'like', "%$search%");
+                }
+                if (OperationCatalog::isSim($module)) {
+                    $parsed = PdcEndorseDate::parse($search);
+                    if ($parsed['valid'] && ! $parsed['empty']) {
+                        $q->orWhereDate('contract_start', $parsed['iso'])->orWhereDate('contract_end', $parsed['iso']);
+                    }
+                }
+            });
+        }
+        if ($status = trim((string) $request->query('status'))) {
+            if (array_key_exists('status', $config['columns'])) {
+                $query->where('status', $status);
+            }
+        }
     }
 
     private function rules(string $module, ?int $id = null, array $context = []): array
@@ -186,21 +260,9 @@ class OperationsDataController extends Controller
                 'ip_address'=>['required','ip',Rule::unique('pdc_servers','ip_address')->ignore($id)],
                 'location'=>'nullable|string|max:255','role'=>'nullable|string|max:255','status'=>['required',Rule::in($this->statusOptions($module))],
             ],
-            'sip-channels'=>[
-                'channel'=>['required','string','max:255',Rule::unique('sip_channels','channel')->ignore($id)],
-                'peer'=>'nullable|string|max:255','context'=>'nullable|string|max:255','codec'=>'nullable|string|max:100','status'=>['required',Rule::in($this->statusOptions($module))],
-            ],
-            'archive-recordings'=>[
-                'server'=>'required|string|max:255','storage_path'=>'required|string|max:500','retention_days'=>'nullable|integer|min:1|max:3650','status'=>['required',Rule::in($this->statusOptions($module))],
-            ],
-            'globe-sim'=>[
-                'sim_number'=>['required','string','max:50',Rule::unique('globe_sims','sim_number')->ignore($id)],
-                'imsi'=>'nullable|string|max:50','assigned_to'=>'nullable|string|max:255','location'=>'nullable|string|max:255','status'=>['required',Rule::in($this->statusOptions($module))],
-            ],
-            'smart-sim'=>[
-                'sim_number'=>['required','string','max:50',Rule::unique('smart_sims','sim_number')->ignore($id)],
-                'imsi'=>'nullable|string|max:50','assigned_to'=>'nullable|string|max:255','location'=>'nullable|string|max:255','status'=>['required',Rule::in($this->statusOptions($module))],
-            ],
+            'archive-recordings'=>[],
+            'globe-sim'=>$this->simRules('globe_sims', $id),
+            'smart-sim'=>$this->simRules('smart_sims', $id),
             'program-inbound-numbers'=>[
                 'number'=>['required','string','max:50',Rule::unique('program_inbound_numbers','number')->ignore($id)],
                 'program'=>'nullable|string|max:255','location'=>'nullable|string|max:255','assigned_channel'=>'nullable|string|max:255','status'=>['required',Rule::in($this->statusOptions($module))],
@@ -219,7 +281,7 @@ class OperationsDataController extends Controller
 
     private function integrityError(string $module, array $data): ?string
     {
-        if ($module === 'telco-cost' && !empty($data['contract_start']) && !empty($data['contract_end']) && $data['contract_end'] < $data['contract_start']) {
+        if (in_array($module, ['telco-cost', 'globe-sim', 'smart-sim'], true) && !empty($data['contract_start']) && !empty($data['contract_end']) && $data['contract_end'] < $data['contract_start']) {
             return 'Contract end date must be on or after the contract start date.';
         }
 

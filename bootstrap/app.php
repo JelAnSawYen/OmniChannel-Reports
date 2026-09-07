@@ -24,6 +24,12 @@ return Application::configure(basePath: dirname(__DIR__))
             SecurityHeaders::class,
         ]);
         $middleware->replace(LaravelEnsureEmailIsVerified::class, EnsureEmailIsVerified::class);
+        $middleware->trimStrings(except: [
+            'current_password',
+            'password',
+            'password_confirmation',
+            'sql_db_password',
+        ]);
         $middleware->alias([
             'userType' => UserTypeMiddleware::class,
             'permission' => PermissionMiddleware::class,

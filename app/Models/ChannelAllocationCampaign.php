@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -12,6 +13,7 @@ class ChannelAllocationCampaign extends Model
         'media_gateway',
         'total_channels_allocated',
         'fte',
+        'location',
         'caller_id',
         'prefix',
         'remarks',
@@ -27,9 +29,41 @@ class ChannelAllocationCampaign extends Model
         ];
     }
 
+    /**
+     * Master Campaign dropdown options used across the app.
+     *
+     * @return Collection<int, $this>
+     */
+    public static function optionsForDropdown(): Collection
+    {
+        return static::query()->orderBy('name')->get(['id', 'name', 'fte']);
+    }
+
+    /**
+     * Master Campaign lookup keyed by lowercase name for imports and references.
+     *
+     * @return Collection<string, $this>
+     */
+    public static function keyedByName(): Collection
+    {
+        return static::query()
+            ->get(['id', 'name', 'fte'])
+            ->keyBy(fn (self $campaign) => mb_strtolower((string) $campaign->name));
+    }
+
     public function allocations(): HasMany
     {
         return $this->hasMany(ChannelAllocation::class, 'campaign_id')->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function pdcGroups(): HasMany
+    {
+        return $this->hasMany(PdcGroup::class, 'campaign_id');
+    }
+
+    public function archiveRecordings(): HasMany
+    {
+        return $this->hasMany(ArchiveRecording::class, 'campaign_id');
     }
 
     public function refreshTotalChannelsAllocated(): int

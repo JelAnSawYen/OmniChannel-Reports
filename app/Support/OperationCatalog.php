@@ -19,13 +19,42 @@ class OperationCatalog
 {
     public static function locations(): array
     {
-        return [
+        $locations = [
             'alcar' => 'Alcar',
             'ctn' => 'CTN',
-            'scs' => 'SCS',
             'estancia' => 'Estancia',
+            'pdc' => 'PDC',
+            'scs' => 'SCS',
             'skyrise' => 'Skyrise',
         ];
+
+        uasort($locations, fn (string $left, string $right) => strnatcasecmp($left, $right));
+
+        return $locations;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function locationNames(): array
+    {
+        return array_values(self::locations());
+    }
+
+    public static function canonicalLocationName(?string $name): ?string
+    {
+        $name = trim((string) $name);
+        if ($name === '') {
+            return null;
+        }
+
+        foreach (self::locationNames() as $label) {
+            if (strcasecmp($label, $name) === 0) {
+                return $label;
+            }
+        }
+
+        return null;
     }
 
     public static function modules(): array
@@ -61,38 +90,51 @@ class OperationCatalog
             ],
             'pdc-servers' => [
                 'title' => 'PDC Servers',
-                'description' => 'Manage PDC server inventory, addressing, and operational status.',
+                'description' => 'Manage PDC server inventory grouped by campaign.',
                 'model' => PdcServer::class,
                 'columns' => ['hostname' => 'Hostname', 'ip_address' => 'IP Address', 'location' => 'Location', 'role' => 'Role', 'status' => 'Status'],
                 'fields' => ['hostname', 'ip_address', 'location', 'role', 'status'],
             ],
             'sip-channels' => [
                 'title' => 'SIP Channels',
-                'description' => 'Manage SIP channel names, peers, codecs, and status.',
+                'description' => 'Manage SIP channel campaigns, ETPI names, ranges, and activation dates.',
                 'model' => SipChannel::class,
-                'columns' => ['channel' => 'Channel', 'peer' => 'Peer', 'context' => 'Context', 'codec' => 'Codec', 'status' => 'Status'],
-                'fields' => ['channel', 'peer', 'context', 'codec', 'status'],
+                'columns' => [
+                    'etpi_sip_name' => 'ETPI SIP NAME',
+                    'pilot_number' => 'Pilot Number',
+                    'channel_count' => 'Channel Count',
+                    'channel_range' => 'Channel Range',
+                    'network' => 'Network',
+                    'date_activation' => 'Date Activation',
+                ],
+                'fields' => ['campaign_id', 'etpi_sip_name', 'pilot_number', 'channel_count', 'channel_range', 'network', 'date_activation'],
             ],
             'archive-recordings' => [
                 'title' => 'Archive Recordings',
-                'description' => 'Manage recording archive servers, storage paths, and retention.',
+                'description' => 'Browse call recordings by campaign, year, and month.',
                 'model' => ArchiveRecording::class,
-                'columns' => ['server' => 'Server', 'storage_path' => 'Storage Path', 'retention_days' => 'Retention Days', 'status' => 'Status'],
-                'fields' => ['server', 'storage_path', 'retention_days', 'status'],
+                'columns' => [
+                    'file_name' => 'File Name',
+                    'called_at' => 'Call Date & Time',
+                    'caller_number' => 'Caller Number',
+                    'agent_number' => 'Agent Number',
+                    'duration' => 'Duration',
+                ],
+                'fields' => ['campaign_id', 'file_name', 'called_at', 'caller_number', 'agent_number', 'duration', 'storage_path'],
             ],
             'globe-sim' => [
                 'title' => 'Globe SIM',
                 'description' => 'Manage Globe SIM inventory and assignments.',
                 'model' => GlobeSim::class,
-                'columns' => ['sim_number' => 'SIM Number', 'imsi' => 'IMSI', 'assigned_to' => 'Assigned To', 'location' => 'Location', 'status' => 'Status'],
-                'fields' => ['sim_number', 'imsi', 'assigned_to', 'location', 'status'],
+                'columns' => self::simColumns(),
+                'fields' => array_keys(self::simColumns()),
             ],
             'smart-sim' => [
                 'title' => 'Smart SIM',
                 'description' => 'Manage Smart SIM inventory and assignments.',
                 'model' => SmartSim::class,
-                'columns' => ['sim_number' => 'SIM Number', 'imsi' => 'IMSI', 'assigned_to' => 'Assigned To', 'location' => 'Location', 'status' => 'Status'],
-                'fields' => ['sim_number', 'imsi', 'assigned_to', 'location', 'status'],
+                'columns' => self::simColumns(),
+                'fields' => array_keys(self::simColumns()),
             ],
             'program-inbound-numbers' => [
                 'title' => 'Program Inbound Numbers',
@@ -121,6 +163,7 @@ class OperationCatalog
     public static function sidebarModules(): array
     {
         return [
+            'campaigns' => 'Campaigns',
             'pdc-servers' => 'PDC Servers',
             'sip-channels' => 'SIP Channels',
             'channel-allocation' => 'Channel Allocation',
@@ -131,5 +174,39 @@ class OperationCatalog
             'signal-boosters' => 'Signal Boosters',
             'defective-gsm' => 'Defective GSM',
         ];
+    }
+
+    /**
+     * Shared Globe / Smart SIM field map. Keys are database columns; values are UI labels.
+     *
+     * @return array<string, string>
+     */
+    public static function simColumns(): array
+    {
+        return [
+            'imei' => 'IMEI',
+            'mobile_number' => 'Mobile Number',
+            'network' => 'Network',
+            'plan' => 'Plan',
+            'ip_address' => 'IP',
+            'account_number' => 'Account Number',
+            'contract_start' => 'Contract Start',
+            'contract_end' => 'Contract End',
+        ];
+    }
+
+    public static function isSim(string $module): bool
+    {
+        return in_array($module, ['globe-sim', 'smart-sim'], true);
+    }
+
+    /**
+     * Data Transfer columns match the table fields. No Id and no Last Updated.
+     *
+     * @return array<string, string>
+     */
+    public static function simTransferColumns(): array
+    {
+        return self::simColumns();
     }
 }

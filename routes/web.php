@@ -12,7 +12,11 @@ use App\Http\Controllers\MaintenanceController;
 use App\Http\Controllers\MediaGatewayController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OperationsDataController;
+use App\Http\Controllers\PdcServerController;
+use App\Http\Controllers\SipChannelController;
 use App\Http\Controllers\ChannelAllocationController;
+use App\Http\Controllers\ArchiveRecordingController;
+use App\Http\Controllers\CampaignController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SystemHealthController;
@@ -131,7 +135,63 @@ Route::middleware(['auth', 'account.active'])->group(function () {
             Route::delete('/{campaign}/allocations/{allocation}', [ChannelAllocationController::class, 'destroyAllocation'])->middleware('permission:media.delete')->whereNumber('campaign')->whereNumber('allocation')->name('channel-allocation.allocations.destroy');
         });
 
+        Route::prefix('campaigns')->group(function () {
+            Route::get('/', [CampaignController::class, 'index'])->middleware('permission:media.view')->name('campaigns');
+            Route::get('/export', [CampaignController::class, 'export'])->middleware('permission:media.export')->name('campaigns.export');
+            Route::get('/import/template', [CampaignController::class, 'importTemplate'])->middleware('permission:media.create')->name('campaigns.import.template');
+            Route::get('/import/errors', [CampaignController::class, 'importErrors'])->middleware('permission:media.create')->name('campaigns.import.errors');
+            Route::post('/import/preview', [CampaignController::class, 'importPreview'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('campaigns.import.preview');
+            Route::post('/import/confirm', [CampaignController::class, 'importConfirm'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('campaigns.import.confirm');
+            Route::post('/', [CampaignController::class, 'store'])->middleware('permission:media.create')->name('campaigns.store');
+            Route::put('/{campaign}', [CampaignController::class, 'update'])->middleware('permission:media.edit')->whereNumber('campaign')->name('campaigns.update');
+            Route::delete('/{campaign}', [CampaignController::class, 'destroy'])->middleware('permission:media.delete')->whereNumber('campaign')->name('campaigns.destroy');
+        });
+
+        Route::prefix('pdc-servers')->group(function () {
+            Route::get('/', [PdcServerController::class, 'index'])->middleware('permission:media.view')->name('pdc-servers');
+            Route::get('/export', [PdcServerController::class, 'export'])->middleware('permission:media.export')->name('pdc-servers.export');
+            Route::get('/import/template', [PdcServerController::class, 'importTemplate'])->middleware('permission:media.create')->name('pdc-servers.import.template');
+            Route::get('/import/errors', [PdcServerController::class, 'importErrors'])->middleware('permission:media.create')->name('pdc-servers.import.errors');
+            Route::post('/import/preview', [PdcServerController::class, 'importPreview'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('pdc-servers.import.preview');
+            Route::post('/import/confirm', [PdcServerController::class, 'importConfirm'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('pdc-servers.import.confirm');
+            Route::post('/', [PdcServerController::class, 'store'])->middleware('permission:media.create')->name('pdc-servers.store');
+            Route::put('/{group}', [PdcServerController::class, 'update'])->middleware('permission:media.edit')->whereNumber('group')->name('pdc-servers.update');
+            Route::delete('/{group}', [PdcServerController::class, 'destroy'])->middleware('permission:media.delete')->whereNumber('group')->name('pdc-servers.destroy');
+            Route::post('/{group}/servers', [PdcServerController::class, 'storeServer'])->middleware('permission:media.create')->whereNumber('group')->name('pdc-servers.servers.store');
+            Route::put('/{group}/servers/{server}', [PdcServerController::class, 'updateServer'])->middleware('permission:media.edit')->whereNumber('group')->whereNumber('server')->name('pdc-servers.servers.update');
+            Route::delete('/{group}/servers/{server}', [PdcServerController::class, 'destroyServer'])->middleware('permission:media.delete')->whereNumber('group')->whereNumber('server')->name('pdc-servers.servers.destroy');
+        });
+
+        Route::prefix('sip-channels')->group(function () {
+            Route::get('/', [SipChannelController::class, 'index'])->middleware('permission:media.view')->name('sip-channels');
+            Route::get('/export', [SipChannelController::class, 'export'])->middleware('permission:media.export')->name('sip-channels.export');
+            Route::get('/import/template', [SipChannelController::class, 'importTemplate'])->middleware('permission:media.create')->name('sip-channels.import.template');
+            Route::get('/import/errors', [SipChannelController::class, 'importErrors'])->middleware('permission:media.create')->name('sip-channels.import.errors');
+            Route::post('/import/preview', [SipChannelController::class, 'importPreview'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('sip-channels.import.preview');
+            Route::post('/import/confirm', [SipChannelController::class, 'importConfirm'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('sip-channels.import.confirm');
+            Route::post('/', [SipChannelController::class, 'store'])->middleware('permission:media.create')->name('sip-channels.store');
+            Route::put('/{sipChannel}', [SipChannelController::class, 'update'])->middleware('permission:media.edit')->whereNumber('sipChannel')->name('sip-channels.update');
+            Route::delete('/{sipChannel}', [SipChannelController::class, 'destroy'])->middleware('permission:media.delete')->whereNumber('sipChannel')->name('sip-channels.destroy');
+        });
+
+        Route::prefix('archive-recordings')->group(function () {
+            Route::get('/', [ArchiveRecordingController::class, 'index'])->middleware('permission:media.view')->name('archive-recordings');
+            Route::get('/export', [ArchiveRecordingController::class, 'export'])->middleware('permission:media.export')->name('archive-recordings.export');
+            Route::get('/import/template', [ArchiveRecordingController::class, 'importTemplate'])->middleware('permission:media.create')->name('archive-recordings.import.template');
+            Route::get('/import/errors', [ArchiveRecordingController::class, 'importErrors'])->middleware('permission:media.create')->name('archive-recordings.import.errors');
+            Route::post('/import/preview', [ArchiveRecordingController::class, 'importPreview'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('archive-recordings.import.preview');
+            Route::post('/import/confirm', [ArchiveRecordingController::class, 'importConfirm'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('archive-recordings.import.confirm');
+            Route::post('/import/audio', [ArchiveRecordingController::class, 'importAudio'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('archive-recordings.import.audio');
+            Route::get('/{recording}/play', [ArchiveRecordingController::class, 'play'])->middleware('permission:media.view')->whereNumber('recording')->name('archive-recordings.play');
+            Route::get('/{recording}/download', [ArchiveRecordingController::class, 'download'])->middleware('permission:media.view')->whereNumber('recording')->name('archive-recordings.download');
+            Route::delete('/bulk', [ArchiveRecordingController::class, 'bulkDestroy'])->middleware('permission:media.delete')->name('archive-recordings.bulk-destroy');
+            Route::delete('/{recording}', [ArchiveRecordingController::class, 'destroy'])->middleware('permission:media.delete')->whereNumber('recording')->name('archive-recordings.destroy');
+        });
+
         foreach (array_keys(OperationCatalog::modules()) as $module) {
+            if (in_array($module, ['pdc-servers', 'sip-channels', 'archive-recordings'], true)) {
+                continue;
+            }
             Route::get('/'.$module, [OperationsDataController::class, 'index'])->middleware('permission:media.view')->defaults('module', $module)->name($module);
             Route::get('/'.$module.'/export', [OperationsDataController::class, 'export'])->middleware('permission:media.export')->defaults('module', $module)->name($module.'.export');
             Route::get('/'.$module.'/import/template', [OperationsDataController::class, 'importTemplate'])->middleware('permission:media.create')->defaults('module', $module)->name($module.'.import.template');

@@ -15,7 +15,7 @@
             @endif
             <div class="form-actions">
                 <a class="btn secondary" href="{{ $profileReturnUrl }}">Cancel</a>
-                <button class="btn primary" type="submit">Save Profile</button>
+                <button class="btn primary" type="submit">Save</button>
             </div>
         </form>
     </div>
