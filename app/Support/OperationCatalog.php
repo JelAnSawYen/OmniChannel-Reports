@@ -34,6 +34,67 @@ class OperationCatalog
     }
 
     /**
+     * Map markers for Program Location. Coordinates come from published building
+     * listings / OpenStreetMap for each SSG site; the database has no lat/lng columns.
+     *
+     * @return array<string, array{name: string, address: string, lat: float, lng: float, assigned: bool}>
+     */
+    public static function locationMapSites(): array
+    {
+        return [
+            'alcar' => [
+                'name' => 'ALCAR',
+                'address' => 'G/F Alcar Building, 888 EDSA, Mandaluyong City',
+                'lat' => 14.57801,
+                'lng' => 121.05279,
+                'assigned' => true,
+            ],
+            'cg3' => [
+                'name' => 'CG3',
+                'address' => 'Robinsons Cybergate Center Tower 3, Pioneer St., Mandaluyong City',
+                'lat' => 14.5709738,
+                'lng' => 121.0499863,
+                'assigned' => true,
+            ],
+            'ctn' => [
+                'name' => 'CTN',
+                'address' => 'Citynet Building, 612–628 Sultan St., Mandaluyong City',
+                'lat' => 14.5812809,
+                'lng' => 121.0525056,
+                'assigned' => true,
+            ],
+            'estancia' => [
+                'name' => 'ESTANCIA',
+                'address' => '5th Floor, Estancia North Wing, Capitol Commons, Meralco Ave., Pasig City',
+                'lat' => 14.5762409,
+                'lng' => 121.0629435,
+                'assigned' => true,
+            ],
+            'scs' => [
+                'name' => 'SCS',
+                'address' => '3F Silver City 5 (formerly Transcom Building), Eulogio Rodriguez Jr. Ave., Pasig City',
+                'lat' => 14.5872126,
+                'lng' => 121.0788446,
+                'assigned' => true,
+            ],
+            'skyrise' => [
+                'name' => 'SKYRISE',
+                'address' => 'Skyrise Beta, Samar Loop, Cebu City, Cebu 6000',
+                'lat' => 10.3177541,
+                'lng' => 123.9089807,
+                'assigned' => true,
+            ],
+            'pdc' => [
+                'name' => 'PDC',
+                'address' => 'Ayala Triangle Gardens Tower 2, Paseo de Roxas corner Makati Avenue, Makati City 1226, Philippines',
+                'lat' => 14.5576051,
+                'lng' => 121.0254632,
+                'assigned' => false,
+            ],
+        ];
+    }
+
+    /**
      * @return list<string>
      */
     public static function locationNames(): array
@@ -141,20 +202,35 @@ class OperationCatalog
                 'description' => 'Manage inbound numbers assigned to programs and locations.',
                 'model' => ProgramInboundNumber::class,
                 'columns' => ['number' => 'Number', 'program' => 'Program', 'location' => 'Location', 'assigned_channel' => 'Assigned Channel', 'status' => 'Status'],
-                'fields' => ['number', 'program', 'location', 'assigned_channel', 'status'],
+                'fields' => ['campaign', 'mobile_numbers', 'landline_numbers', 'media_gateway_id', 'port', 'network', 'remarks'],
+                'table_columns' => [
+                    'campaign' => 'Campaign',
+                    'mobile' => 'Mobile',
+                    'landline' => 'Landline',
+                    'gsm_gateway' => 'GSM Gateway',
+                    'port' => 'Port',
+                    'network' => 'Network',
+                    'remarks' => 'Remarks',
+                ],
             ],
             'signal-boosters' => [
                 'title' => 'Signal Boosters',
                 'description' => 'Manage signal booster hardware by location.',
                 'model' => SignalBooster::class,
-                'columns' => ['model' => 'Model', 'serial_number' => 'Serial Number', 'location' => 'Location', 'status' => 'Status'],
-                'fields' => ['model', 'serial_number', 'location', 'status'],
+                'columns' => [
+                    'model' => 'Model',
+                    'specs' => 'Specifications',
+                    'serial_number' => 'Serial Number',
+                    'location' => 'Location',
+                    'status' => 'Status',
+                ],
+                'fields' => ['model', 'specs', 'serial_number', 'location', 'status'],
             ],
             'defective-gsm' => [
                 'title' => 'Defective GSM',
                 'description' => 'Track defective GSM assets, issues, and repair status.',
                 'model' => DefectiveGsm::class,
-                'columns' => ['asset_code' => 'Asset Code', 'location' => 'Location', 'issue' => 'Issue', 'reported_on' => 'Reported On', 'status' => 'Status'],
+                'columns' => ['asset_code' => 'Serial Tag', 'location' => 'Location', 'issue' => 'Issue', 'reported_on' => 'Reported On', 'status' => 'Status'],
                 'fields' => ['asset_code', 'location', 'issue', 'reported_on', 'status'],
             ],
         ];
@@ -198,6 +274,21 @@ class OperationCatalog
     public static function isSim(string $module): bool
     {
         return in_array($module, ['globe-sim', 'smart-sim'], true);
+    }
+
+    public static function isInbound(string $module): bool
+    {
+        return $module === 'program-inbound-numbers';
+    }
+
+    public static function isBooster(string $module): bool
+    {
+        return $module === 'signal-boosters';
+    }
+
+    public static function isDefective(string $module): bool
+    {
+        return $module === 'defective-gsm';
     }
 
     /**

@@ -71,7 +71,6 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
                 </span>
                 <input name="search" value="{{ $search }}" placeholder="Search module..." aria-label="Search module" autocomplete="off">
-                <button type="button" class="search-clear" data-clear-search aria-label="Clear search" title="Clear search">×</button>
                 @if($status !== '')<input type="hidden" name="status" value="{{ $status }}">@endif
                 @if($perPage !== 10)<input type="hidden" name="per_page" value="{{ $perPage }}">@endif
             </form>

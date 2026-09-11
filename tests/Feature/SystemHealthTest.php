@@ -28,31 +28,28 @@ class SystemHealthTest extends TestCase
         ]);
     }
 
-    public function test_dashboard_health_uses_live_equipment_status_not_a_fixed_score(): void
+    public function test_dashboard_does_not_embed_system_health_and_live_scores_remain_on_the_health_page(): void
     {
         $this->seedHealthRecords();
 
-        $page = $this->actingAs($this->admin)->get('/dashboard')->assertOk();
+        $this->actingAs($this->admin)->get('/dashboard')
+            ->assertOk()
+            ->assertDontSee('System Health')
+            ->assertDontSee('View detailed Health')
+            ->assertDontSee('data-tier="Critical"', false);
 
+        $page = $this->actingAs($this->admin)->get('/system-health')->assertOk();
         $page->assertSee('System Health')
-            ->assertSee('44%')
-            ->assertSee('data-tier="Critical"', false)
+            ->assertSee('44% Critical')
             ->assertSee('Excellent')
-            ->assertSee('1 (20%)')
             ->assertSee('Good')
-            ->assertSee('2 (40%)')
-            ->assertDontSee('90%')
-            ->assertSee('/system-health', false)
-            ->assertSee('status=critical', false)
-            ->assertSee('View detailed Health');
+            ->assertDontSee('90%');
 
         PdcServer::where('hostname', 'pdc-offline-01')->update(['status' => 'Active']);
 
-        $refreshed = $this->actingAs($this->admin)->get('/dashboard')->assertOk();
+        $refreshed = $this->actingAs($this->admin)->get('/system-health')->assertOk();
         $refreshed->assertSee('64%')
-            ->assertDontSee('44%')
-            ->assertSee('2 (40%)')
-            ->assertSee('1 (20%)');
+            ->assertDontSee('44% Critical');
     }
 
     public function test_detailed_health_page_lists_modules_with_live_scores(): void
@@ -109,14 +106,14 @@ class SystemHealthTest extends TestCase
             ->assertDontSee('class="health-view-btn" href="'.url('/channel-port').'"', false);
     }
 
-    public function test_standard_user_can_open_system_health_and_guests_cannot(): void
+    public function test_standard_user_cannot_open_system_health(): void
     {
         $standard = User::factory()->create([
             'user_type_id' => UserType::where('name', 'Standard User')->value('id'),
             'status' => 'Active',
         ]);
 
-        $this->actingAs($standard)->get('/system-health')->assertOk();
+        $this->actingAs($standard)->get('/system-health')->assertForbidden();
     }
 
     public function test_guests_cannot_open_system_health(): void

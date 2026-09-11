@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\MediaGateway;
 use App\Models\User;
 use App\Models\UserType;
+use App\Services\XlsxService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -12,7 +13,6 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
 {
     use RefreshDatabase;
 
-    private UserType $systemType;
     private UserType $adminType;
     private UserType $standardType;
 
@@ -20,7 +20,6 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
     {
         parent::setUp();
         $this->artisan('db:seed', ['--class' => 'Database\\Seeders\\UserTypeSeeder']);
-        $this->systemType = UserType::where('name', 'System Administrator')->firstOrFail();
         $this->adminType = UserType::where('name', 'Administrator')->firstOrFail();
         $this->standardType = UserType::where('name', 'Standard User')->firstOrFail();
     }
@@ -35,7 +34,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
 
     public function test_sidebar_operations_and_locations_are_reachable(): void
     {
-        $this->actingAs($this->user($this->systemType));
+        $this->actingAs($this->user($this->adminType));
 
         MediaGateway::create([
             'site_name' => 'Estancia',
@@ -46,7 +45,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         ]);
 
         $pages = [
-            '/dashboard' => 'Network Overview',
+            '/dashboard' => 'Total Campaigns',
             '/campaigns' => 'Campaigns',
             '/pdc-servers' => 'PDC Servers',
             '/sip-channels' => 'SIP Channels',
@@ -74,9 +73,12 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         $this->get('/program-location/estancia')
             ->assertOk()
             ->assertSee('Estancia')
-            ->assertSee('id="programLocationGroup"', false)
-            ->assertSee('nav-group open', false)
-            ->assertSee('nav-item nav-subitem active', false)
+            ->assertDontSee('id="programLocationGroup"', false)
+            ->assertDontSee('id="programLocationSub"', false)
+            ->assertDontSee('id="programLocationToggle"', false)
+            ->assertDontSee('Toggle Program Location')
+            ->assertSee('id="networkGroup"', false)
+            ->assertSee('id="networkToggle"', false)
             ->assertSee('id="sidebarNav"', false)
             ->assertSee('>Manage</div>', false)
             ->assertDontSee('>Operations</div>', false)
@@ -111,7 +113,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
 
     public function test_operational_pages_use_gsm_gateway_layout(): void
     {
-        $this->actingAs($this->user($this->systemType));
+        $this->actingAs($this->user($this->adminType));
 
         $campaign = \App\Models\ChannelAllocationCampaign::create(['name' => 'BPI Collection']);
         $group = \App\Models\PdcGroup::create([
@@ -142,10 +144,15 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         ];
 
         foreach ($pages as $url) {
-            $this->get($url)
-                ->assertOk()
-                ->assertSee('class="page-head"', false)
-                ->assertSee('class="search-box', false)
+            $page = $this->get($url)->assertOk()->assertSee('class="page-head"', false);
+            if ($url === '/archive-recordings') {
+                $page->assertSee('ar-tree-card', false)
+                    ->assertSee('id="arSearchInput"', false)
+                    ->assertSee('Search recordings...')
+                    ->assertDontSee('id="archiveSearchInput"', false);
+                continue;
+            }
+            $page->assertSee('class="search-box', false)
                 ->assertSee('class="table-card table-wrap"', false)
                 ->assertSee('class="table-footer"', false);
         }
@@ -161,44 +168,49 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             ->assertDontSee('filter-row', false);
     }
 
-    public function test_system_admin_and_admin_see_administration_and_can_manage_gsm(): void
+    public function test_admin_sees_user_management_and_can_manage_gsm(): void
     {
-        foreach ([$this->systemType, $this->adminType] as $type) {
-            $this->actingAs($this->user($type));
+        $this->actingAs($this->user($this->adminType));
 
-            $this->get('/dashboard')
-                ->assertOk()
-                ->assertDontSee('Administration')
-                ->assertSee('id="accountUserManagement"', false)
-                ->assertSee('User Management')
-                ->assertSee('>Users</a>', false)
-                ->assertSee('>User Types</a>', false)
-                ->assertSee('Recent System Activity')
-                ->assertSee('Program Location Overview')
-                ->assertSee('System Health')
-                ->assertSee('Network Overview')
-                ->assertSee('background:#dc2626', false)
-                ->assertSee('background:#92400e', false)
-                ->assertDontSee('stroke="#eab308"', false)
-                ->assertDontSee('Quick Actions')
-                ->assertSee('My Profile')
-                ->assertSee('Login History')
-                ->assertSee('id="notificationButton"', false)
-                ->assertSee('id="accountButton"', false)
-                ->assertDontSee('Activity Logs')
-                ->assertDontSee('Recent Login Activity');
+        $this->get('/dashboard')
+            ->assertOk()
+            ->assertDontSee('>Administration</div>', false)
+            ->assertSee('User Management')
+            ->assertSee('href="'.url('/users').'"', false)
+            ->assertSee('id="accountSettingsToggle"', false)
+            ->assertSee('account-group-caret', false)
+            ->assertDontSee('>User Types</a>', false)
+            ->assertSee('Total Campaigns')
+            ->assertSee('Total GSM Gateways')
+            ->assertSee('Total Channels')
+            ->assertSee('Total SIMs')
+            ->assertSee('Campaigns with Most Allocations')
+            ->assertSee('Channel Utilization')
+            ->assertSee('Allocation Trends')
+            ->assertDontSee('Quick Insights')
+            ->assertDontSee('Recent System Activity')
+            ->assertDontSee('Program Location Overview')
+            ->assertDontSee('System Health')
+            ->assertDontSee('Network Overview')
+            ->assertDontSee('Quick Actions')
+            ->assertSee('My Profile')
+            ->assertSee('Login History')
+            ->assertSee('Audit Logs')
+            ->assertDontSee('id="notificationButton"', false)
+            ->assertSee('id="accountButton"', false)
+            ->assertDontSee('Activity Logs')
+            ->assertDontSee('Recent Login Activity');
 
-            $this->get('/users')->assertOk();
-            $this->get('/user-types')->assertOk();
+        $this->get('/users')->assertOk();
+        $this->get('/user-types')->assertNotFound();
 
-            $this->postJson('/gsm-gateways', [
-                'site_name' => 'Alcar',
-                'site_code' => 'ALC-'.$type->id,
-                'ip_address' => '10.9.9.'.$type->id,
-                'username' => 'root',
-                'database' => 'asteriskcdrdb',
-            ])->assertCreated();
-        }
+        $this->postJson('/gsm-gateways', [
+            'site_name' => 'Alcar',
+            'site_code' => 'ALC-'.$this->adminType->id,
+            'ip_address' => '10.9.9.'.$this->adminType->id,
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+        ])->assertCreated();
     }
 
     public function test_standard_user_cannot_see_or_access_admin_or_mutate_gsm(): void
@@ -241,13 +253,53 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         $this->get('/gsm-gateways/'.$gateway->id.'/edit')->assertNotFound();
         $this->get('/users')->assertForbidden();
         $this->get('/users/1/edit')->assertForbidden();
-        $this->get('/user-types')->assertForbidden();
-        $this->get('/user-types/1/edit')->assertForbidden();
+        $this->get('/user-types')->assertNotFound();
+        $this->get('/user-types/1/edit')->assertNotFound();
 
         $this->assertDatabaseHas('media_gateways', [
             'id' => $gateway->id,
             'site_name' => 'Estancia',
         ]);
+    }
+
+    public function test_standard_users_cannot_reveal_gsm_gateway_passwords(): void
+    {
+        $secret = 'GsmSecret#Reveal99!';
+        MediaGateway::create([
+            'site_name' => 'Estancia',
+            'site_code' => 'STD-PW',
+            'ip_address' => '10.8.8.88',
+            'username' => 'root',
+            'password' => $secret,
+            'database' => 'asteriskcdrdb',
+        ]);
+
+        $this->actingAs($this->user($this->adminType));
+        $adminHtml = $this->get('/gsm-gateways')->assertOk()->getContent();
+        $this->assertStringContainsString('pdc-secret-toggle', $adminHtml);
+        $this->assertStringContainsString($secret, $adminHtml);
+        $this->assertStringContainsString('data-can-reveal-secrets="1"', $adminHtml);
+        $this->getJson('/gsm-gateways')->assertOk()->assertJsonFragment(['password' => $secret]);
+
+        $this->actingAs($this->user($this->standardType));
+        $html = $this->get('/gsm-gateways')->assertOk()->getContent();
+        $this->assertStringContainsString('••••••', $html);
+        $this->assertStringContainsString('data-can-reveal-secrets="0"', $html);
+        $this->assertStringNotContainsString($secret, $html);
+        $this->assertStringNotContainsString('pdc-secret-toggle', $html);
+        $this->assertStringNotContainsString('pdc-secret-value', $html);
+        $this->assertStringNotContainsString('data-edit-password', $html);
+
+        $json = $this->getJson('/gsm-gateways')->assertOk();
+        $this->assertSame('', $json->json('records.0.password'));
+        $this->assertStringNotContainsString($secret, $json->getContent());
+
+        $export = $this->get('/gsm-gateways/export')->assertOk();
+        [$headers, $rows] = app(XlsxService::class)->read($export->getFile()->getPathname());
+        $this->assertFalse(array_search('Password', $headers, true));
+        foreach ($rows as $row) {
+            $this->assertNotContains($secret, $row);
+        }
     }
 
     public function test_sim_inventory_card_opens_a_selection_modal_for_globe_and_smart(): void
@@ -267,8 +319,10 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
 
         $page = $this->actingAs($this->user($this->adminType))->get('/dashboard')->assertOk();
 
-        $page->assertSee('SIM Inventory')
-            ->assertSee('1 Globe / 1 Smart')
+        $page->assertSee('Total SIMs')
+            ->assertSee('>Globe</span>', false)
+            ->assertSee('>Smart</span>', false)
+            ->assertSee('SIM Inventory')
             ->assertDontSee('data-open="simInventoryModal"', false)
             ->assertSee('id="simInventoryModal"', false)
             ->assertSee('Select which SIM inventory you want to view.')
@@ -283,11 +337,20 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         $this->actingAs($this->user($this->adminType))->get('/globe-sim')
             ->assertOk()
             ->assertSee('Globe SIM')
-            ->assertSee('class="page-head"', false);
+            ->assertSee('class="page-head"', false)
+            ->assertSee('class="nav-group open" id="networkGroup"', false)
+            ->assertSee('id="networkToggle"', false)
+            ->assertSee('href="'.url('/globe-sim').'"', false)
+            ->assertSee('href="'.url('/smart-sim').'"', false)
+            ->assertDontSee('href="'.url('/network').'"', false);
 
         $this->actingAs($this->user($this->adminType))->get('/smart-sim')
             ->assertOk()
             ->assertSee('Smart SIM')
-            ->assertSee('class="page-head"', false);
+            ->assertSee('class="page-head"', false)
+            ->assertSee('class="nav-group open" id="networkGroup"', false)
+            ->assertSee('href="'.url('/globe-sim').'"', false)
+            ->assertSee('href="'.url('/smart-sim').'"', false)
+            ->assertDontSee('href="'.url('/network').'"', false);
     }
 }

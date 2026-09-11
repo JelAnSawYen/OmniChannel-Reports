@@ -12,9 +12,8 @@ class DatabaseSeeder extends Seeder
             return;
         }
         $accounts = [
-            ['email' => 'test@example.com', 'name' => 'System Administrator', 'type' => 'System Administrator'],
-            ['email' => 'admin@example.com', 'name' => 'Administrator', 'type' => 'Administrator'],
-            ['email' => 'user@example.com', 'name' => 'Standard User', 'type' => 'Standard User'],
+            ['email' => 'admin@example.com', 'name' => 'Administrator', 'type' => UserType::ADMINISTRATOR],
+            ['email' => 'user@example.com', 'name' => 'Standard User', 'type' => UserType::STANDARD_USER],
         ];
         foreach ($accounts as $account) {
             $type = UserType::where('name', $account['type'])->first();

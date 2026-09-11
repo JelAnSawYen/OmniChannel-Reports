@@ -12,7 +12,6 @@ class RoleAccessAndWorkflowTest extends TestCase
 {
     use RefreshDatabase;
 
-    private UserType $systemType;
     private UserType $adminType;
     private UserType $standardType;
 
@@ -21,7 +20,6 @@ class RoleAccessAndWorkflowTest extends TestCase
         parent::setUp();
 
         $this->artisan('db:seed', ['--class' => 'Database\\Seeders\\UserTypeSeeder']);
-        $this->systemType = UserType::where('name', 'System Administrator')->firstOrFail();
         $this->adminType = UserType::where('name', 'Administrator')->firstOrFail();
         $this->standardType = UserType::where('name', 'Standard User')->firstOrFail();
     }
@@ -36,7 +34,7 @@ class RoleAccessAndWorkflowTest extends TestCase
 
     public function test_media_gateway_page_sets_page_key_for_javascript(): void
     {
-        $this->actingAs($this->user($this->systemType));
+        $this->actingAs($this->user($this->adminType));
 
         $this->get('/media-gateways')
             ->assertOk()
@@ -46,7 +44,7 @@ class RoleAccessAndWorkflowTest extends TestCase
 
     public function test_displayed_sequence_is_continuous_after_delete(): void
     {
-        $this->actingAs($this->user($this->systemType));
+        $this->actingAs($this->user($this->adminType));
 
         $first = MediaGateway::create([
             'site_name' => 'A', 'site_code' => 'A1', 'ip_address' => '10.0.0.1',
@@ -72,9 +70,9 @@ class RoleAccessAndWorkflowTest extends TestCase
         $this->assertNotEmpty($json['records'][0]['id']);
     }
 
-    public function test_system_admin_can_manage_users_roles_and_maintenance(): void
+    public function test_administrator_can_manage_users_and_operational_modules(): void
     {
-        $admin = $this->user($this->systemType);
+        $admin = $this->user($this->adminType);
         $this->actingAs($admin);
 
         $this->get('/users')->assertOk();
@@ -98,9 +96,9 @@ class RoleAccessAndWorkflowTest extends TestCase
         ])->assertRedirect(route('users.index'));
         $this->delete('/users/'.$created->id)->assertRedirect(route('users.index'));
 
-        $this->get('/user-types')->assertOk();
-        $this->get('/maintenance')->assertOk();
-        $this->get('/dashboard')->assertOk()->assertSee('System Health');
+        $this->get('/user-types')->assertNotFound();
+        $this->get('/maintenance')->assertForbidden();
+        $this->get('/dashboard')->assertOk()->assertSee('Total Campaigns');
         $this->get('/reports')->assertOk();
         $this->post('/channel-prefix', [
             'prefix' => '63',
@@ -116,12 +114,10 @@ class RoleAccessAndWorkflowTest extends TestCase
 
     public function test_administrator_can_manage_administrators_and_standard_users(): void
     {
-        $system = $this->user($this->systemType, ['name' => 'Hidden Sysadmin', 'email' => 'hidden.sysadmin@example.com']);
         $this->actingAs($this->user($this->adminType));
 
         $this->get('/media-gateways')->assertOk();
         $this->get('/telco-cost')->assertOk();
-        $this->get('/users')->assertOk()->assertDontSee('hidden.sysadmin@example.com');
         $this->get('/users/create')->assertOk()->assertSee('Standard User')->assertSee('Administrator')->assertDontSee('System Administrator');
         $this->post('/users', [
             'name' => 'Ops Standard',
@@ -152,30 +148,19 @@ class RoleAccessAndWorkflowTest extends TestCase
         ])->assertRedirect(route('users.index'));
         $this->assertDatabaseHas('users', ['email' => 'peer.admin@example.com']);
 
-        $this->post('/users', [
-            'name' => 'Nope System',
-            'email' => 'nope.system@example.com',
-            'password' => 'Password123!Aa',
-            'password_confirmation' => 'Password123!Aa',
-            'user_type_id' => $this->systemType->id,
-            'status' => 'Active',
-        ])->assertRedirect();
-        $this->assertDatabaseMissing('users', ['email' => 'nope.system@example.com']);
-        $this->assertTrue($system->fresh()->isSystemAdministrator());
-
-        $this->get('/user-types/create')->assertForbidden();
+        $this->get('/user-types/create')->assertNotFound();
         $this->post('/user-types', [
             'name' => 'Hacker',
             'permissions' => ['users.manage'],
-        ])->assertForbidden();
+        ])->assertNotFound();
         $this->get('/maintenance')->assertForbidden();
         $this->post('/maintenance/backup')->assertForbidden();
         $this->get('/media-gateways/export')->assertOk();
         $this->get('/reports')->assertOk();
-        $this->get('/reports/export/telco')->assertOk();
+        $this->get('/reports/export/xlsx')->assertOk();
     }
 
-    public function test_standard_user_is_view_and_export_only(): void
+    public function test_standard_user_is_view_and_export_only_on_allowed_modules(): void
     {
         $this->actingAs($this->user($this->standardType));
 
@@ -184,12 +169,14 @@ class RoleAccessAndWorkflowTest extends TestCase
             'username' => 'root', 'database' => 'asteriskcdrdb',
         ]);
 
-        $this->get('/dashboard')->assertOk()->assertSee('System Health');
-        $this->get('/reports')->assertOk();
-        $this->get('/reports/export/inventory')->assertOk();
+        $this->get('/dashboard')->assertOk()->assertSee('Total Campaigns');
+        $this->get('/campaigns')->assertOk();
+        $this->get('/gsm-gateways')->assertOk();
+        $this->get('/channel-allocation')->assertOk();
         $this->get('/media-gateways/export')->assertOk();
-        $this->get('/telco-cost')->assertOk();
-        $this->get('/channel-prefix/export')->assertOk();
+        $this->get('/reports')->assertForbidden();
+        $this->get('/telco-cost')->assertForbidden();
+        $this->get('/channel-prefix/export')->assertForbidden();
         $this->post('/channel-prefix', [
             'prefix' => '63',
             'channel' => 'SIP',
@@ -227,7 +214,7 @@ class RoleAccessAndWorkflowTest extends TestCase
             'user_type_id' => $this->standardType->id,
             'status' => 'Active',
         ])->assertForbidden();
-        $this->get('/user-types')->assertForbidden();
+        $this->get('/user-types')->assertNotFound();
         $this->get('/maintenance')->assertForbidden();
         $this->get('/activity-logs')->assertForbidden();
     }
@@ -242,12 +229,12 @@ class RoleAccessAndWorkflowTest extends TestCase
 
         $this->get('/media-gateways/export')->assertForbidden();
         $this->get('/reports')->assertOk();
-        $this->get('/reports/export/inventory')->assertForbidden();
+        $this->get('/reports/export/xlsx')->assertForbidden();
     }
 
     public function test_activity_logs_render_complete_descriptions(): void
     {
-        $this->actingAs($this->user($this->systemType));
+        $this->actingAs($this->user($this->adminType));
 
         \App\Models\AuditLog::create([
             'action' => 'Added',
@@ -261,20 +248,5 @@ class RoleAccessAndWorkflowTest extends TestCase
             ->assertSee('class="activity-description"', false)
             ->assertSee('Added gateway LONGCODE-WITH-EXTRA-DETAIL-THAT-MUST-NOT-BE-CUT')
             ->assertSee('activity-log-table', false);
-    }
-
-    public function test_last_system_administrator_role_cannot_be_removed(): void
-    {
-        $admin = $this->user($this->systemType);
-        $this->actingAs($admin);
-
-        $this->put('/users/'.$admin->id, [
-            'name' => $admin->name,
-            'email' => $admin->email,
-            'user_type_id' => $this->standardType->id,
-            'status' => 'Active',
-        ])->assertRedirect();
-
-        $this->assertTrue($admin->fresh()->isSystemAdministrator());
     }
 }

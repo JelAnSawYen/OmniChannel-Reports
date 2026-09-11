@@ -11,16 +11,9 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
             </span>
             <input id="sipSearchInput" name="search" value="{{ $search }}" placeholder="Search SIP Channels" aria-label="Search SIP Channels" autocomplete="off">
-            <button type="button" class="search-clear" data-clear-search aria-label="Clear search" title="Clear search">×</button>
             @if(request('per_page'))<input type="hidden" name="per_page" value="{{ request('per_page') }}">@endif
         </form>
         <button class="btn primary" type="submit" form="sipSearchForm">Search</button>
-        @if($search !== '')
-            <a class="btn secondary" href="{{ route('sip-channels') }}" id="sipReset">
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path></svg>
-                Reset
-            </a>
-        @endif
         @if(auth()->user()->hasPermission('media.export'))
         @include('partials.data-transfer', [
             'canExport' => true,
@@ -444,22 +437,22 @@ document.addEventListener('DOMContentLoaded', () => {
         modal?.classList.add('visible');
     });
 
-    document.querySelectorAll('[data-sip-edit]').forEach((button) => {
-        button.addEventListener('click', () => {
-            const recordId = Number(button.dataset.id);
-            if (!Number.isInteger(recordId) || recordId < 1) return;
-            const values = JSON.parse(button.dataset.values || '{}');
-            document.getElementById('sipModalTitle').textContent = 'Edit SIP Channels';
-            document.getElementById('sipSubmit').textContent = 'Save';
-            method.value = 'PUT';
-            form.action = baseUrl + '/' + recordId;
-            ['campaign_id', 'etpi_sip_name', 'pilot_number', 'channel_count', 'channel_range', 'network', 'date_activation'].forEach((key) => {
-                const field = document.getElementById('sip_' + key);
-                if (field) field.value = values[key] ?? '';
-            });
-            if (datePicker) datePicker.value = toIso(values.date_activation || '');
-            modal?.classList.add('visible');
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-sip-edit]');
+        if (!button) return;
+        const recordId = Number(button.dataset.id);
+        if (!Number.isInteger(recordId) || recordId < 1) return;
+        const values = JSON.parse(button.dataset.values || '{}');
+        document.getElementById('sipModalTitle').textContent = 'Edit SIP Channels';
+        document.getElementById('sipSubmit').textContent = 'Save';
+        method.value = 'PUT';
+        form.action = baseUrl + '/' + recordId;
+        ['campaign_id', 'etpi_sip_name', 'pilot_number', 'channel_count', 'channel_range', 'network', 'date_activation'].forEach((key) => {
+            const field = document.getElementById('sip_' + key);
+            if (field) field.value = values[key] ?? '';
         });
+        if (datePicker) datePicker.value = toIso(values.date_activation || '');
+        modal?.classList.add('visible');
     });
 
     form?.addEventListener('submit', (event) => {

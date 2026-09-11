@@ -8,7 +8,6 @@ use App\Models\MediaGateway;
 use App\Models\SipChannel;
 use App\Services\ChannelAllocationImportService;
 use App\Services\AuditLogger;
-use App\Services\NotificationService;
 use App\Services\XlsxService;
 use App\Support\PublicError;
 use Illuminate\Http\RedirectResponse;
@@ -229,7 +228,6 @@ class ChannelAllocationController extends Controller
         try {
             $path = $xlsx->export($headers, $rows, 'channel-allocation.xlsx');
         } catch (\Throwable $exception) {
-            NotificationService::exportFailed('Channel Allocation', 'Export failed.', 'channel-allocation');
             return back()->with('error', PublicError::failed('Export', $exception));
         }
 

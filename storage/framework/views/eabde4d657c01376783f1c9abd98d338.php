@@ -1,5 +1,5 @@
 <?php $__env->startSection('content'); ?>
-        <p class="hint">System Administrators must enable an authenticator app. Add this account using the key below, then enter the 6-digit code.</p>
+        <p class="hint">Add this account using the key below, then enter the 6-digit code.</p>
         <div class="secret-box"><?php echo e($secret); ?></div>
         <p class="hint">Authenticator URI:</p>
         <div class="secret-box"><?php echo e($otpauth); ?></div>

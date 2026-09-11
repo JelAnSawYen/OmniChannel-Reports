@@ -34,6 +34,19 @@ class ProgramLocationAndDataTransferTest extends TestCase
         ]);
     }
 
+    private function mapSitesFromHtml(string $html): array
+    {
+        $this->assertTrue(
+            (bool) preg_match('/id="programLocationSites">(?P<json>.*?)<\/script>/s', $html, $match),
+            'Program Location map payload is missing.'
+        );
+
+        $sites = json_decode(html_entity_decode($match['json'], ENT_QUOTES), true);
+        $this->assertIsArray($sites, json_last_error_msg().' '.substr($match['json'], 0, 300));
+
+        return $sites;
+    }
+
     private function gateway(string $siteName = 'Alcar', string $code = 'ALC-001', string $ip = '10.20.30.40'): MediaGateway
     {
         return MediaGateway::create([
@@ -81,103 +94,99 @@ class ProgramLocationAndDataTransferTest extends TestCase
             ->assertSee('data-location-edit', false)
             ->assertSee('Site Code');
 
-        $this->get('/program-location')
-            ->assertOk()
+        $index = $this->get('/program-location')->assertOk();
+        $index
             ->assertSee('Program Location')
-            ->assertSee('class="table-card table-wrap"', false)
-            ->assertSee('class="search-clear"', false)
-            ->assertSee('data-clear-search', false)
-            ->assertSee('Manage')
+            ->assertSee('placeholder="Search Sites"', false)
+            ->assertSee('id="programLocationMap"', false)
+            ->assertSee('id="programLocationSearch"', false)
+            ->assertSee('id="programLocationSites"', false)
+            ->assertDontSee('class="search-clear"', false)
+            ->assertDontSee('data-clear-search', false)
+            ->assertSee('vendor/leaflet/leaflet.js', false)
+            ->assertSee('Gateway Assigned')
+            ->assertSee('No Gateway Assigned')
             ->assertSee('PDC')
-            ->assertSee('Skyrise')
+            ->assertSee('SKYRISE')
+            ->assertSee('CG3')
+            ->assertDontSee('With GSM Gateway')
+            ->assertDontSee('Without GSM Gateway')
+            ->assertDontSee('unpkg.com')
+            ->assertDontSee('initLocalMap')
+            ->assertDontSee('fitBounds')
             ->assertDontSee('Add Program Location')
-            ->assertDontSee('id="programLocationAddButton"', false);
+            ->assertDontSee('id="programLocationAddButton"', false)
+            ->assertDontSee('All Gateway Status')
+            ->assertDontSee('class="table-card table-wrap"', false)
+            ->assertDontSee('title="Manage Alcar"', false);
 
-        $indexHtml = $this->get('/program-location')->assertOk()->getContent();
-        $alcar = strpos($indexHtml, 'title="Manage Alcar"');
-        $ctn = strpos($indexHtml, 'title="Manage CTN"');
-        $estancia = strpos($indexHtml, 'title="Manage Estancia"');
-        $pdc = strpos($indexHtml, 'title="Manage PDC"');
-        $scs = strpos($indexHtml, 'title="Manage SCS"');
-        $skyrise = strpos($indexHtml, 'title="Manage Skyrise"');
-        $this->assertNotFalse($alcar);
-        $this->assertGreaterThan($alcar, $ctn);
-        $this->assertGreaterThan($ctn, $estancia);
-        $this->assertGreaterThan($estancia, $pdc);
-        $this->assertGreaterThan($pdc, $scs);
-        $this->assertGreaterThan($scs, $skyrise);
+        $sites = $this->mapSitesFromHtml($index->getContent());
+        $this->assertSame(
+            ['ALCAR', 'CG3', 'CTN', 'ESTANCIA', 'SCS', 'SKYRISE', 'PDC'],
+            array_column($sites, 'name')
+        );
+        $byName = collect($sites)->keyBy('name');
+        $this->assertTrue($byName['ALCAR']['available']);
+        $this->assertTrue($byName['CG3']['available']);
+        $this->assertTrue($byName['CTN']['available']);
+        $this->assertTrue($byName['ESTANCIA']['available']);
+        $this->assertTrue($byName['SCS']['available']);
+        $this->assertTrue($byName['SKYRISE']['available']);
+        $this->assertFalse($byName['PDC']['available']);
+        $this->assertStringContainsString('Ayala Triangle Gardens Tower 2', $byName['PDC']['address']);
+        $this->assertEqualsWithDelta(14.5576051, $byName['PDC']['lat'], 0.001);
+        $this->assertEqualsWithDelta(10.3177541, $byName['SKYRISE']['lat'], 0.001);
+        foreach ($sites as $site) {
+            $this->assertNotEmpty($site['lat']);
+            $this->assertNotEmpty($site['lng']);
+            $this->assertArrayNotHasKey('gateways', $site);
+        }
 
-        $sidebar = $this->get('/dashboard')->assertOk()->getContent();
-        $subAlcar = strpos($sidebar, route('program-location.show', 'alcar'));
-        $subCtn = strpos($sidebar, route('program-location.show', 'ctn'));
-        $subEstancia = strpos($sidebar, route('program-location.show', 'estancia'));
-        $subPdc = strpos($sidebar, route('program-location.show', 'pdc'));
-        $subScs = strpos($sidebar, route('program-location.show', 'scs'));
-        $subSkyrise = strpos($sidebar, route('program-location.show', 'skyrise'));
-        $this->assertNotFalse($subAlcar);
-        $this->assertGreaterThan($subAlcar, $subCtn);
-        $this->assertGreaterThan($subCtn, $subEstancia);
-        $this->assertGreaterThan($subEstancia, $subPdc);
-        $this->assertGreaterThan($subPdc, $subScs);
-        $this->assertGreaterThan($subScs, $subSkyrise);
+        $sidebar = \Illuminate\Support\Str::between(
+            $this->get('/dashboard')->assertOk()->getContent(),
+            '<aside',
+            '</aside>'
+        );
+        $this->assertStringContainsString('Program Location', $sidebar);
+        $this->assertStringNotContainsString('id="programLocationGroup"', $sidebar);
+        $this->assertStringNotContainsString('id="programLocationSub"', $sidebar);
+        foreach (['alcar', 'ctn', 'estancia', 'pdc', 'scs', 'skyrise'] as $slug) {
+            $this->assertStringNotContainsString(route('program-location.show', $slug), $sidebar);
+        }
     }
 
-    public function test_program_location_index_supports_search_status_and_location_filters(): void
+    public function test_program_location_index_is_a_map_of_existing_sites(): void
     {
         $this->actingAs($this->admin);
         $this->gateway('Alcar', 'ALC-IDX', '10.31.31.1');
+        $this->gateway('Estancia', 'EST-IDX', '10.31.31.2');
 
-        $this->get('/program-location')
-            ->assertOk()
-            ->assertDontSee('Add Program Location')
-            ->assertDontSee('id="programLocationAddButton"', false)
-            ->assertDontSee('loc-manage active', false)
-            ->assertSee('All Gateway Status')
-            ->assertSee('All Locations')
-            ->assertSee('1 Active')
-            ->assertSee('0 None')
-            ->assertSee(route('program-location.show', 'skyrise'), false)
-            ->assertSee('Showing 1 to 6 of 6 entries');
+        $html = $this->get('/program-location')->assertOk()->getContent();
+        $this->assertStringContainsString('id="programLocationMap"', $html);
+        $this->assertStringContainsString('placeholder="Search Sites"', $html);
+        $this->assertStringContainsString('applySearch', $html);
+        $this->assertStringNotContainsString('All Gateway Status', $html);
+        $this->assertStringNotContainsString('class="table-card table-wrap"', $html);
+
+        $sites = collect($this->mapSitesFromHtml($html));
+        $this->assertTrue($sites->firstWhere('name', 'ALCAR')['available']);
+        $this->assertTrue($sites->firstWhere('name', 'ESTANCIA')['available']);
+        $this->assertTrue($sites->firstWhere('name', 'CG3')['available']);
+        $this->assertFalse($sites->firstWhere('name', 'PDC')['available']);
 
         $this->get('/program-location?search=sky')
             ->assertOk()
-            ->assertSee('title="Manage Skyrise"', false)
-            ->assertDontSee('title="Manage Alcar"', false)
-            ->assertSee('Showing 1 to 1 of 1 entries');
-
-        $this->get('/program-location?status=active')
-            ->assertOk()
-            ->assertSee('title="Manage Alcar"', false)
-            ->assertDontSee('title="Manage CTN"', false);
-
-        $this->get('/program-location?status=none')
-            ->assertOk()
-            ->assertSee('title="Manage CTN"', false)
-            ->assertSee('title="Manage SCS"', false)
-            ->assertDontSee('title="Manage Alcar"', false);
-
-        $this->get('/program-location?location=alcar')
-            ->assertOk()
-            ->assertSee('title="Manage Alcar"', false)
-            ->assertSee('loc-manage active', false)
-            ->assertDontSee('title="Manage Skyrise"', false)
-            ->assertSee('Showing 1 to 1 of 1 entries');
-
-        $this->get('/program-location?search=no-such-location')
-            ->assertOk()
-            ->assertSee('No program locations found.')
-            ->assertSee('Showing 0 to 0 of 0 entries');
+            ->assertSee('id="programLocationMap"', false)
+            ->assertSee('value="sky"', false)
+            ->assertSee('id="programLocationSites"', false);
     }
 
-    public function test_standard_user_cannot_see_the_add_program_location_action(): void
+    public function test_standard_user_cannot_access_program_location(): void
     {
         $this->actingAs($this->standard);
 
-        $this->get('/program-location')
-            ->assertOk()
-            ->assertSee('Manage')
-            ->assertDontSee('Add Program Location')
-            ->assertDontSee('id="programLocationModal"', false);
+        $this->get('/program-location')->assertForbidden();
+        $this->get('/program-location/estancia')->assertForbidden();
     }
 
     public function test_admin_can_add_edit_and_delete_program_location_records(): void
@@ -247,14 +256,7 @@ class ProgramLocationAndDataTransferTest extends TestCase
         $this->actingAs($this->standard);
         $gateway = $this->gateway('Estancia', 'EST-900', '10.66.66.6');
 
-        $this->get('/program-location/estancia')
-            ->assertOk()
-            ->assertDontSee('class="plus-btn"', false)
-            ->assertDontSee('action-btn edit', false)
-            ->assertDontSee('action-btn delete', false)
-            ->assertDontSee('Import Data')
-            ->assertSee('Export Data')
-            ->assertSee('Data Transfer');
+        $this->get('/program-location/estancia')->assertForbidden();
 
         $this->post('/program-location/estancia', [
             'site_code' => 'EST-901',
@@ -275,7 +277,7 @@ class ProgramLocationAndDataTransferTest extends TestCase
         $this->postJson('/program-location/estancia/import/preview', [])->assertForbidden();
         $this->get('/program-location/estancia/import/template')->assertForbidden();
 
-        $this->get('/program-location/estancia/export')->assertOk();
+        $this->get('/program-location/estancia/export')->assertForbidden();
         $this->assertDatabaseHas('media_gateways', ['id' => $gateway->id, 'site_code' => 'EST-900']);
         $this->assertSame(1, MediaGateway::count());
     }
@@ -316,17 +318,12 @@ class ProgramLocationAndDataTransferTest extends TestCase
         }
     }
 
-    public function test_standard_user_can_export_but_cannot_import(): void
+    public function test_standard_user_cannot_export_or_import_restricted_modules(): void
     {
-        $this->actingAs($this->standard)->get('/sip-channels/export')->assertOk();
+        $this->actingAs($this->standard)->get('/sip-channels/export')->assertForbidden();
         $this->actingAs($this->standard)->postJson('/sip-channels/import/preview', [])->assertForbidden();
         $this->actingAs($this->standard)->get('/sip-channels/import/template')->assertForbidden();
-        $this->actingAs($this->standard)
-            ->get('/sip-channels')
-            ->assertOk()
-            ->assertDontSee('Import Data')
-            ->assertSee('Export Data')
-            ->assertSee('Data Transfer');
+        $this->actingAs($this->standard)->get('/sip-channels')->assertForbidden();
     }
 
     public function test_program_location_cannot_mutate_a_gateway_from_another_location(): void
@@ -350,28 +347,11 @@ class ProgramLocationAndDataTransferTest extends TestCase
         ]);
     }
 
-    public function test_standard_user_export_omits_gateway_credentials(): void
+    public function test_standard_user_cannot_export_program_location(): void
     {
         $this->actingAs($this->standard);
         $this->gateway('Estancia', 'EST-SEC', '10.92.92.2');
 
-        MediaGateway::query()->where('site_code', 'EST-SEC')->update([
-            'username' => 'secret-user-xyz',
-            'database' => 'secret-db-xyz',
-        ]);
-
-        $response = $this->get('/program-location/estancia/export')->assertOk();
-        $path = $response->headers->get('X-Accel-Redirect')
-            ?: (method_exists($response->baseResponse, 'getFile') ? $response->baseResponse->getFile()->getPathname() : null);
-
-        $this->assertNotEmpty($path);
-        $zip = new \ZipArchive();
-        $this->assertTrue($zip->open($path) === true);
-        $sheet = $zip->getFromName('xl/worksheets/sheet1.xml') ?: '';
-        $zip->close();
-
-        $this->assertStringNotContainsString('secret-user-xyz', $sheet);
-        $this->assertStringNotContainsString('secret-db-xyz', $sheet);
-        $this->assertStringContainsString('EST-SEC', $sheet);
+        $this->get('/program-location/estancia/export')->assertForbidden();
     }
 }

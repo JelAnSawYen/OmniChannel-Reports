@@ -1,865 +1,486 @@
 <?php $__env->startSection('content'); ?>
 <?php
-    $selectedCampaignId = $selectedCampaign?->id;
-    $recordingTotal = $records?->total() ?? 0;
+    $canCreate = auth()->user()->hasPermission('media.create');
     $canDelete = auth()->user()->hasPermission('media.delete');
-    $hasFilters = $search !== '' || $from !== '' || $to !== '' || $caller !== '' || $agent !== '';
-    $pagerPages = [];
-    if ($records) {
-        $current = $records->currentPage();
-        $last = $records->lastPage();
-        if ($last <= 7) {
-            $pagerPages = range(1, max(1, $last));
-        } else {
-            $window = $current <= 3 ? range(1, 5) : ($current >= $last - 2 ? range($last - 4, $last) : range($current - 2, $current + 2));
-            if ($window[0] > 1) {
-                $pagerPages[] = 1;
-                if ($window[0] > 2) {
-                    $pagerPages[] = null;
-                }
-            }
-            foreach ($window as $page) {
-                $pagerPages[] = $page;
-            }
-            $windowLast = $window[count($window) - 1];
-            if ($windowLast < $last) {
-                if ($windowLast < $last - 1) {
-                    $pagerPages[] = null;
-                }
-                $pagerPages[] = $last;
-            }
-        }
-    }
+    $chevronIcon = '<svg class="ar-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
 ?>
 <div class="page-head">
     <div>
-        <h1 class="page-title">Archived Recordings</h1>
-        <p class="page-subtitle">Search, view, and manage historical call recordings.</p>
+        <h1 class="page-title">Archive Recordings</h1>
+        <p class="page-subtitle">View, manage, and track archived call recordings.</p>
     </div>
-    <?php if(auth()->user()->hasPermission('media.create')): ?>
-        <button class="btn ar-import-btn" type="button" id="arImportAudioBtn" data-open="arImportModal">
-            <svg class="btn-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 16V7"/><path d="m8 11 4-4 4 4"/><path d="M5 19h14"/></svg>
-            Import Audio Logs
-        </button>
-    <?php endif; ?>
+    <div class="toolbar">
+        <div class="search-box">
+            <span class="search-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+            </span>
+            <input id="arSearchInput" type="text" placeholder="Search recordings..." aria-label="Search recordings" autocomplete="off">
+        </div>
+        <?php if($canCreate): ?>
+            <button class="plus-btn" type="button" id="arAddButton" data-open="arAddModal" aria-label="Add Archive Records" title="Add Archive Records">+</button>
+        <?php endif; ?>
+    </div>
 </div>
 
-<form class="ar-filter-card" id="archiveSearchForm" method="GET" action="<?php echo e(route('archive-recordings')); ?>" aria-label="Recording filters">
-    <?php if($perPage !== 10): ?><input type="hidden" name="per_page" value="<?php echo e($perPage); ?>"><?php endif; ?>
-    <?php if(($sort ?? 'oldest') !== 'oldest'): ?><input type="hidden" name="sort" value="<?php echo e($sort); ?>"><?php endif; ?>
-    <div class="ar-filter-row ar-filter-row-primary">
-        <label class="ar-field">
-            <span>Campaign</span>
-            <div class="ar-dd" data-ar-dd>
-                <input type="hidden" name="campaign" value="<?php echo e($selectedCampaignId ?: ''); ?>">
-                <button class="ar-filter-control ar-dd-toggle <?php echo e($selectedCampaignId ? 'has-value' : ''); ?>" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Campaign">
-                    <span><?php echo e($selectedCampaign?->name ?: 'Select campaign'); ?></span>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-                </button>
-                <div class="ar-dd-menu" role="listbox" hidden>
-                    <?php $__currentLoopData = $campaigns; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $campaign): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                        <button class="ar-dd-option <?php echo e((int) $selectedCampaignId === (int) $campaign->id ? 'is-selected' : ''); ?>" type="button" role="option" data-value="<?php echo e($campaign->id); ?>"><?php echo e($campaign->name); ?></button>
-                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                </div>
-            </div>
-        </label>
-        <label class="ar-field">
-            <span>Year</span>
-            <div class="ar-dd" data-ar-dd>
-                <input type="hidden" name="year" value="<?php echo e($selectedYear ?: ''); ?>">
-                <button class="ar-filter-control ar-dd-toggle <?php echo e($selectedYear ? 'has-value' : ''); ?>" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Year">
-                    <span><?php echo e($selectedYear ?: 'Year'); ?></span>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-                </button>
-                <div class="ar-dd-menu" role="listbox" hidden>
-                    <?php $__currentLoopData = $yearOptions; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $yearValue): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                        <button class="ar-dd-option <?php echo e((int) $selectedYear === (int) $yearValue ? 'is-selected' : ''); ?>" type="button" role="option" data-value="<?php echo e($yearValue); ?>"><?php echo e($yearValue); ?></button>
-                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                </div>
-            </div>
-        </label>
-        <label class="ar-field">
-            <span>Month</span>
-            <div class="ar-dd" data-ar-dd>
-                <input type="hidden" name="month" value="<?php echo e($selectedMonth ?: ''); ?>">
-                <button class="ar-filter-control ar-dd-toggle <?php echo e($selectedMonth ? 'has-value' : ''); ?>" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Month">
-                    <span><?php echo e($selectedMonth ? ($monthNames[$selectedMonth] ?? 'Month') : 'Month'); ?></span>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-                </button>
-                <div class="ar-dd-menu" role="listbox" hidden>
-                    <?php $__currentLoopData = $monthNames; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $monthNumber => $monthLabel): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                        <button class="ar-dd-option <?php echo e((int) $selectedMonth === (int) $monthNumber ? 'is-selected' : ''); ?>" type="button" role="option" data-value="<?php echo e($monthNumber); ?>"><?php echo e($monthLabel); ?></button>
-                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                </div>
-            </div>
-        </label>
-        <label class="ar-field">
-            <span>Date From</span>
-            <span class="ar-date-field">
-                <input class="select ar-filter-control" type="date" name="from" value="<?php echo e($from); ?>" aria-label="Date From">
-                <span class="ar-date-icon" aria-hidden="true">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>
-                </span>
-            </span>
-        </label>
-        <label class="ar-field">
-            <span>Date To</span>
-            <span class="ar-date-field">
-                <input class="select ar-filter-control" type="date" name="to" value="<?php echo e($to); ?>" aria-label="Date To">
-                <span class="ar-date-icon" aria-hidden="true">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>
-                </span>
-            </span>
-        </label>
-    </div>
-    <div class="ar-filter-row ar-filter-row-secondary">
-        <label class="ar-field">
-            <span>Caller Number</span>
-            <input class="select ar-filter-control" type="text" name="caller" value="<?php echo e($caller); ?>" placeholder="Enter caller number" aria-label="Caller Number" autocomplete="off">
-        </label>
-        <label class="ar-field">
-            <span>Agent Number</span>
-            <input class="select ar-filter-control" type="text" name="agent" value="<?php echo e($agent); ?>" placeholder="Enter agent number" aria-label="Agent Number" autocomplete="off">
-        </label>
-        <label class="ar-field ar-field-search">
-            <span class="sr-only">Search</span>
-            <div class="search-box media-search-form">
-                <span class="search-icon" aria-hidden="true">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
-                </span>
-                <input id="archiveSearchInput" name="search" value="<?php echo e($search); ?>" placeholder="Search recordings (file name, caller, agent, etc...)" aria-label="Search recordings" autocomplete="off">
-                <button type="button" class="search-clear" data-clear-search aria-label="Clear search" title="Clear search">×</button>
-            </div>
-        </label>
-        <div class="ar-filter-actions">
-            <button class="btn primary ar-search-btn" type="submit">Search</button>
-            <a class="btn secondary ar-clear-btn" href="<?php echo e(route('archive-recordings')); ?>" id="archiveReset">
-                <svg class="btn-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path></svg>
-                Clear Filters
-            </a>
-        </div>
-    </div>
-</form>
+<div class="table-card table-wrap ar-tree-card">
+    <?php $__empty_1 = true; $__currentLoopData = $tree; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $campaignNode): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
+        <?php
+            $campaign = $campaignNode['campaign'];
+            $campaignOpen = (int) $selectedCampaignId === (int) $campaign->id;
+        ?>
+        <details class="ar-node ar-node-campaign" data-ar-text="<?php echo e($campaign->name); ?>" <?php if($campaignOpen): ?> open <?php endif; ?>>
+            <summary class="ar-folder">
+                <?php echo $chevronIcon; ?>
 
-<div class="ar-workspace">
-    <section class="ar-panel ar-recordings" aria-label="Call Recordings">
-        <div class="ar-table-toolbar">
-            <div class="ar-table-toolbar-left">
-                <label class="ar-select-all">
-                    <input type="checkbox" id="arSelectAll" <?php echo e(($records && $records->count()) ? '' : 'disabled'); ?>>
-                    Select All
-                </label>
-                <span class="ar-selected-count" id="arSelectedCount">0 selected</span>
-                <?php if($canDelete): ?>
-                    <button class="btn ar-bulk-delete" type="submit" form="arBulkForm" id="arBulkDelete" disabled>
-                        <svg class="btn-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="m6 7 1 14h10l1-14"/><path d="M9 7V4h6v3"/></svg>
-                        Delete Selected
-                    </button>
-                <?php endif; ?>
-            </div>
-            <div class="ar-table-toolbar-right">
-                <span class="ar-total"><?php echo e(number_format($recordingTotal)); ?> <?php echo e($recordingTotal === 1 ? 'recording' : 'recordings'); ?></span>
-                <label class="ar-toolbar-field">
-                    <span>Sort by</span>
-                    <select class="select ar-toolbar-select" aria-label="Sort by" onchange="location.href=this.value">
-                        <option value="<?php echo e(request()->fullUrlWithQuery(['sort'=>'newest','page'=>1])); ?>" <?php echo e(($sort ?? 'oldest') === 'newest' ? 'selected' : ''); ?>>Date (Newest)</option>
-                        <option value="<?php echo e(request()->fullUrlWithQuery(['sort'=>'oldest','page'=>1])); ?>" <?php echo e(($sort ?? 'oldest') === 'oldest' ? 'selected' : ''); ?>>Date (Oldest)</option>
-                    </select>
-                </label>
-                <label class="ar-toolbar-field">
-                    <span>Show</span>
-                    <select class="select ar-toolbar-select" aria-label="Records per page" onchange="location.href=this.value">
-                        <?php $__currentLoopData = [5,10,25,50]; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $size): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                            <option value="<?php echo e(request()->fullUrlWithQuery(['per_page'=>$size,'page'=>1])); ?>" <?php echo e($perPage===$size?'selected':''); ?>><?php echo e($size); ?></option>
-                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                    </select>
-                    <span>per page</span>
-                </label>
-            </div>
-        </div>
-        <?php if($canDelete): ?>
-            <form id="arBulkForm" method="POST" action="<?php echo e(route('archive-recordings.bulk-destroy')); ?>" data-confirm="Delete the selected recordings?" data-confirm-title="Delete Selected" data-confirm-ok="Delete">
-                <?php echo csrf_field(); ?>
-                <?php echo method_field('DELETE'); ?>
-            </form>
-        <?php endif; ?>
-        <div class="table-card table-wrap">
-            <table class="ar-table" aria-label="Call Recordings">
-                <thead>
-                    <tr>
-                        <th class="ar-check-col"><span class="sr-only">Select</span></th>
-                        <th class="ar-index-col">#</th>
-                        <th>File Name</th>
-                        <th>
-                            <span class="ar-sort-head">Call Date &amp; Time
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m7 10 5-5 5 5"/><path d="m7 14 5 5 5-5"/></svg>
-                            </span>
-                        </th>
-                        <th>Caller Number</th>
-                        <th>Agent Number</th>
-                        <th>Duration</th>
-                        <th class="actions-column">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php if(! $records): ?>
-                    <tr><td colspan="8"><div class="empty-state">Select a campaign, year, and month to view call recordings.</div></td></tr>
-                <?php else: ?>
-                    <?php $__empty_1 = true; $__currentLoopData = $records; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $record): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
-                        <tr data-recording-id="<?php echo e($record->id); ?>">
-                            <td class="ar-check-col">
-                                <input class="ar-row-check" type="checkbox" name="ids[]" value="<?php echo e($record->id); ?>" form="arBulkForm" <?php echo e($canDelete ? '' : 'disabled'); ?> aria-label="Select <?php echo e($record->file_name); ?>">
-                            </td>
-                            <td class="ar-index-col"><?php echo e(($records->firstItem() ?? 1) + $loop->index); ?></td>
-                            <td>
-                                <button class="ar-file-link" type="button" data-ar-play="<?php echo e(route('archive-recordings.play', $record)); ?>" data-ar-name="<?php echo e($record->file_name); ?>" data-ar-download="<?php echo e(route('archive-recordings.download', $record)); ?>" <?php if($canDelete): ?> data-ar-delete="<?php echo e(route('archive-recordings.destroy', $record)); ?>" <?php endif; ?>><?php echo e($record->file_name ?: '—'); ?></button>
-                            </td>
-                            <td>
-                                <?php if($record->called_at): ?>
-                                    <span class="ar-date-stack">
-                                        <strong><?php echo e($record->called_at->format('M j, Y')); ?></strong>
-                                        <small><?php echo e($record->called_at->format('g:i A')); ?></small>
-                                    </span>
-                                <?php else: ?>
-                                    —
-                                <?php endif; ?>
-                            </td>
-                            <td><?php echo e($record->caller_number ?: '—'); ?></td>
-                            <td><?php echo e($record->agent_number ?: '—'); ?></td>
-                            <td class="ar-duration-cell"><?php echo e($record->durationDisplay()); ?></td>
-                            <td class="actions-column">
-                                <button class="ar-play-circle" type="button" data-ar-play="<?php echo e(route('archive-recordings.play', $record)); ?>" data-ar-name="<?php echo e($record->file_name); ?>" data-ar-download="<?php echo e(route('archive-recordings.download', $record)); ?>" <?php if($canDelete): ?> data-ar-delete="<?php echo e(route('archive-recordings.destroy', $record)); ?>" <?php endif; ?> title="Play" aria-label="Play <?php echo e($record->file_name); ?>">
-                                    <svg class="ar-icon-play ar-play-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="9,6 9,18 19,12"/></svg>
-                                    <svg class="ar-icon-pause" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
-                                </button>
-                            </td>
-                        </tr>
-                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
-                        <tr><td colspan="8"><div class="empty-state"><?php echo e($hasFilters ? 'No recordings match the current search or filters.' : 'No call recordings found for this campaign, year, and month.'); ?></div></td></tr>
-                    <?php endif; ?>
-                <?php endif; ?>
-                </tbody>
-            </table>
-            <div class="table-footer">
-                <span>
-                    <?php if($records): ?>
-                        Showing <?php echo e($records->firstItem() ?? 0); ?> to <?php echo e($records->lastItem() ?? 0); ?> of <?php echo e(number_format($records->total())); ?> recordings
-                    <?php else: ?>
-                        Showing 0 to 0 of 0 recordings
-                    <?php endif; ?>
-                </span>
-                <div class="pager">
-                    <?php if($records && $records->lastPage() > 1): ?>
-                        <?php if($records->onFirstPage()): ?>
-                            <span class="page-number" aria-disabled="true">‹</span>
-                        <?php else: ?>
-                            <a class="page-number" href="<?php echo e($records->previousPageUrl()); ?>" aria-label="Previous">‹</a>
-                        <?php endif; ?>
-                        <?php $__currentLoopData = $pagerPages; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $page): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                            <?php if($page === null): ?>
-                                <span class="page-number ar-page-ellipsis">…</span>
-                            <?php elseif($page === $records->currentPage()): ?>
-                                <span class="page-number active"><?php echo e($page); ?></span>
+                <span><?php echo e($campaign->name); ?></span>
+            </summary>
+            <div class="ar-children">
+                <?php $__empty_2 = true; $__currentLoopData = $campaignNode['years']; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $yearNode): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_2 = false; ?>
+                    <?php $yearOpen = $campaignOpen && (int) $selectedYear === (int) $yearNode['year']; ?>
+                    <details class="ar-node ar-node-year" data-ar-text="<?php echo e($yearNode['year']); ?>" <?php if($yearOpen): ?> open <?php endif; ?>>
+                        <summary class="ar-folder">
+                            <?php echo $chevronIcon; ?>
+
+                            <span><?php echo e($yearNode['year']); ?></span>
+                        </summary>
+                        <div class="ar-children">
+                            <?php if($yearNode['months']->isEmpty()): ?>
+                                <div class="ar-empty-branch">No months available for this year.</div>
                             <?php else: ?>
-                                <a class="page-number" href="<?php echo e($records->url($page)); ?>"><?php echo e($page); ?></a>
+                                <div class="ar-month-body">
+                                    <table class="ar-files" aria-label="<?php echo e($campaign->name); ?> <?php echo e($yearNode['year']); ?> months">
+                                        <colgroup>
+                                            <col class="ar-col-name">
+                                            <col class="ar-col-status">
+                                            <col class="ar-col-actions">
+                                        </colgroup>
+                                        <thead>
+                                            <tr>
+                                                <th>Month</th>
+                                                <th>Status</th>
+                                                <th class="actions-column">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php $__currentLoopData = $yearNode['months']; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $monthNode): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                                <?php
+                                                    $monthSelected = $yearOpen && (int) $selectedMonth === (int) $monthNode['month'];
+                                                    $availableRecord = $monthNode['recordings']->first(fn ($recording) => $recording->isAvailable());
+                                                    $deletedRecord = $monthNode['recordings']->first(fn ($recording) => $recording->isDeleted());
+                                                    $monthAvailable = $availableRecord !== null;
+                                                    $monthSearchText = trim($monthNode['label'].' '.$monthNode['month'].' '.$monthNode['recordings']->pluck('file_name')->filter()->implode(' '));
+                                                ?>
+                                                <tr class="ar-month-row<?php echo e($monthSelected ? ' ar-month-selected' : ''); ?>" data-ar-text="<?php echo e($monthSearchText); ?>">
+                                                    <td><?php echo e($monthNode['label']); ?></td>
+                                                    <td>
+                                                        <span class="status-pill <?php echo e($monthAvailable ? 'active' : 'inactive'); ?>"><?php echo e($monthAvailable ? 'Available' : 'Deleted'); ?></span>
+                                                    </td>
+                                                    <td class="actions-column">
+                                                        <div class="row-actions">
+                                                            <?php if($monthAvailable && $canDelete && $availableRecord): ?>
+                                                                <button class="action-btn delete" type="button" data-ar-delete data-id="<?php echo e($availableRecord->id); ?>" data-name="<?php echo e($availableRecord->file_name); ?>" data-action="<?php echo e(route('archive-recordings.destroy', $availableRecord)); ?>" title="Delete Recording" aria-label="Delete <?php echo e($monthNode['label']); ?> recordings">
+                                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="m6 7 1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>
+                                                                </button>
+                                                            <?php elseif(! $monthAvailable && $deletedRecord): ?>
+                                                                <a class="action-btn edit" href="<?php echo e(route('archive-recordings.certificate', $deletedRecord)); ?>" title="View Certificate of Deletion" aria-label="View Certificate of Deletion for <?php echo e($monthNode['label']); ?>">
+                                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h5"/></svg>
+                                                                </a>
+                                                            <?php else: ?>
+                                                                <span class="muted">—</span>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                                        </tbody>
+                                    </table>
+                                </div>
                             <?php endif; ?>
-                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                        <?php if($records->hasMorePages()): ?>
-                            <a class="page-number" href="<?php echo e($records->nextPageUrl()); ?>" aria-label="Next">›</a>
-                        <?php else: ?>
-                            <span class="page-number" aria-disabled="true">›</span>
-                        <?php endif; ?>
-                    <?php endif; ?>
-                </div>
+                        </div>
+                    </details>
+                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_2): ?>
+                    <div class="ar-empty-branch">No archived recordings yet.</div>
+                <?php endif; ?>
             </div>
-        </div>
-    </section>
-
-    <aside class="ar-panel ar-player" id="arPlayer" aria-label="Now Playing">
-        <div class="ar-player-head">
-            <h2>
-                <span class="ar-player-icon" aria-hidden="true">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12c1.6-4 3.4-6 5.4-6s3.8 2 5.4 6-3.4 6-5.4 6-3.8-2-5.4-6z"/><path d="M14 12c1.2-3 2.5-4.5 4-4.5S20.8 9 22 12s-2.5 4.5-4 4.5S15.2 15 14 12z"/></svg>
-                </span>
-                Now Playing
-            </h2>
-            <button class="ar-player-close" type="button" id="arPlayerClose" aria-label="Close player">×</button>
-        </div>
-        <div class="ar-player-empty" id="arPlayerEmpty">Select a recording to play.</div>
-        <div class="ar-player-active" id="arPlayerActive" hidden>
-            <div class="ar-player-track">
-                <span class="ar-player-art" aria-hidden="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18V6l10-2v12"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="16" r="2"/></svg>
-                </span>
-                <div class="ar-player-copy">
-                    <strong id="arPlayerName">Recording</strong>
-                </div>
-            </div>
-            <div class="ar-waveform" id="arWaveform" role="slider" aria-label="Seek recording" tabindex="0">
-                <canvas id="arWaveformCanvas" width="280" height="56"></canvas>
-            </div>
-            <div class="ar-player-times">
-                <span id="arPlayerCurrent">00:00:00</span>
-                <span id="arPlayerDuration">00:00:00</span>
-            </div>
-            <div class="ar-player-controls">
-                <button class="ar-skip" type="button" id="arSkipBack" aria-label="Skip back 10 seconds">−10</button>
-                <button class="ar-play-toggle" type="button" id="arPlayPause" aria-label="Play">
-                    <svg class="ar-icon-play" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="9,6 9,18 19,12"/></svg>
-                    <svg class="ar-icon-pause" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
-                </button>
-                <button class="ar-skip" type="button" id="arSkipForward" aria-label="Skip forward 10 seconds">+10</button>
-            </div>
-            <div class="ar-player-volume">
-                <span class="ar-volume-icon" aria-hidden="true">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 10v4h3l4 3V7L7 10H4z"/><path d="M16 9.5a4 4 0 0 1 0 5"/><path d="M18.2 7.5a7 7 0 0 1 0 9"/></svg>
-                </span>
-                <input id="arVolume" type="range" min="0" max="100" value="80" aria-label="Volume">
-                <span id="arVolumePct">80%</span>
-            </div>
-            <a class="btn ar-player-download" id="arPlayerDownload" href="#">
-                <svg class="btn-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 4v11"/><path d="m7.5 11 4.5 4.5 4.5-4.5"/><path d="M5 19h14"/></svg>
-                Download Recording
-            </a>
-            <?php if($canDelete): ?>
-                <form id="arPlayerDeleteForm" method="POST" action="#" data-confirm="Delete this recording?" data-confirm-title="Delete Recording" data-confirm-ok="Delete">
-                    <?php echo csrf_field(); ?>
-                    <?php echo method_field('DELETE'); ?>
-                    <button class="btn ar-player-delete" type="submit">
-                        <svg class="btn-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="m6 7 1 14h10l1-14"/><path d="M9 7V4h6v3"/></svg>
-                        Delete Recording
-                    </button>
-                </form>
-            <?php endif; ?>
-            <audio id="arPlayAudio" preload="metadata"></audio>
-        </div>
-    </aside>
+        </details>
+    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
+        <div class="empty-state">No campaigns found.</div>
+    <?php endif; ?>
 </div>
 <?php $__env->stopSection(); ?>
 
 <?php $__env->startPush('modals'); ?>
-<?php if(auth()->user()->hasPermission('media.create')): ?>
-<div class="modal-backdrop" id="arImportModal">
-    <div class="modal ar-import-modal" role="dialog" aria-labelledby="arImportTitle" aria-modal="true">
-        <div class="modal-header ar-import-header">
-            <h3 id="arImportTitle">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20V8"/><path d="m7 13 5-5 5 5"/><path d="M5 4h14"/></svg>
-                Import Audio Logs
-            </h3>
-            <button type="button" class="close-btn" data-close="arImportModal" aria-label="Close">×</button>
+<?php if($canCreate): ?>
+<div class="modal-backdrop" id="arAddModal">
+    <div class="modal" role="dialog" aria-labelledby="arAddTitle" aria-modal="true">
+        <div class="modal-header">
+            <h3 id="arAddTitle">Add Archive Records</h3>
+            <button type="button" class="close-btn" data-close="arAddModal" aria-label="Close">×</button>
         </div>
-        <div class="modal-body ar-import-body">
-            <p class="ar-import-lead">Bulk upload call recordings and assign them to a campaign, year, and month.</p>
-            <div class="ar-import-selects">
-                <label class="ar-import-field">
-                    <span>Campaign <em>*</em></span>
-                    <select class="form-control" id="arImportCampaign" required>
-                        <option value="">Select campaign</option>
+        <div class="modal-body">
+            <div class="form-grid">
+                <div class="form-group full">
+                    <label for="arAddCampaign">Campaign</label>
+                    <select class="form-control" id="arAddCampaign" required>
+                        <option value="" selected disabled hidden>Select Campaign</option>
                         <?php $__currentLoopData = $campaigns; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $campaign): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                            <option value="<?php echo e($campaign->id); ?>" <?php echo e((int) $selectedCampaignId === (int) $campaign->id ? 'selected' : ''); ?>><?php echo e($campaign->name); ?></option>
+                            <option value="<?php echo e($campaign->id); ?>"><?php echo e($campaign->name); ?></option>
                         <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                     </select>
-                </label>
-                <label class="ar-import-field">
-                    <span>Year <em>*</em></span>
-                    <select class="form-control" id="arImportYear" required>
-                        <option value="">Select year</option>
-                        <?php $__currentLoopData = $yearOptions; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $yearValue): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                            <option value="<?php echo e($yearValue); ?>" <?php echo e((int) $selectedYear === (int) $yearValue ? 'selected' : ''); ?>><?php echo e($yearValue); ?></option>
-                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                    </select>
-                </label>
-                <label class="ar-import-field">
-                    <span>Month <em>*</em></span>
-                    <select class="form-control" id="arImportMonth" required>
-                        <option value="">Select month</option>
-                        <?php $__currentLoopData = $monthNames; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $monthNumber => $monthLabel): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                            <option value="<?php echo e($monthNumber); ?>" <?php echo e((int) $selectedMonth === (int) $monthNumber ? 'selected' : ''); ?>><?php echo e($monthLabel); ?></option>
-                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                    </select>
-                </label>
-            </div>
-            <div class="ar-import-drop" id="arImportDrop" tabindex="0">
-                <input type="file" id="arImportFileInput" accept=".wav,.mp3,.ogg,.oga,.webm,.m4a,.aac,.flac,.wma,audio/*" multiple hidden>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 16V7"/><path d="m8 11 4-4 4 4"/><path d="M4 16.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1.5"/></svg>
-                <p>Drag &amp; Drop Audio Files Here or <button type="button" class="ar-import-browse" id="arImportBrowse">Browse Files</button></p>
-                <small>You can select multiple audio files for bulk upload. Supported formats: WAV, MP3 (and other allowed formats).</small>
-            </div>
-            <div class="ar-import-files" id="arImportFiles" hidden>
-                <div class="ar-import-files-head">
-                    <strong>Selected Audio Logs</strong>
-                    <span id="arImportFilesMeta"></span>
                 </div>
-                <ul id="arImportFileList"></ul>
+                <div class="form-group">
+                    <label for="arAddYear">Year</label>
+                    <select class="form-control" id="arAddYear" required>
+                        <option value="" selected disabled hidden>Select Year</option>
+                        <?php $__currentLoopData = $yearOptions; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $yearValue): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                            <option value="<?php echo e($yearValue); ?>"><?php echo e($yearValue); ?></option>
+                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                    </select>
+                </div>
+                <div class="form-group ar-add-month-group">
+                    <label for="arAddMonthToggle">Month</label>
+                    <div class="ar-add-dd" id="arAddMonthWrap">
+                        <button class="form-control ar-add-dd-toggle" type="button" id="arAddMonthToggle" aria-haspopup="listbox" aria-expanded="false" aria-controls="arAddMonthMenu">
+                            <span id="arAddMonthLabel">Select Month</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                        <div class="ar-add-dd-menu" id="arAddMonthMenu" hidden role="listbox" aria-labelledby="arAddMonthToggle">
+                            <?php $__currentLoopData = $monthNames; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $monthNumber => $monthLabel): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                <button class="ar-add-dd-option" type="button" role="option" data-value="<?php echo e($monthNumber); ?>"><?php echo e($monthLabel); ?></button>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                        </div>
+                        <select class="ar-add-dd-native" id="arAddMonth" required tabindex="-1" aria-hidden="true">
+                            <option value="" selected disabled hidden>Select Month</option>
+                            <?php $__currentLoopData = $monthNames; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $monthNumber => $monthLabel): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                <option value="<?php echo e($monthNumber); ?>"><?php echo e($monthLabel); ?></option>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group full">
+                    <label for="arAddFiles">Recording Files</label>
+                    <input class="form-control" id="arAddFiles" type="file" accept=".wav,.mp3,.mpeg,.mpga,.ogg,.oga,.webm,.m4a,.aac,.flac,.wma,audio/*" multiple>
+                    <div class="ar-selected-files" id="arAddFileList" hidden></div>
+                </div>
             </div>
-            <p class="ar-import-error" id="arImportError" hidden></p>
-            <div class="ar-import-destination" id="arImportDestination">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7.5A1.5 1.5 0 0 1 5.5 6H10l2 2h6.5A1.5 1.5 0 0 1 20 9.5v8A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-10z"/></svg>
-                <span><strong>Import destination:</strong> <span id="arImportDestinationText">Select a campaign, year, and month.</span></span>
-            </div>
+            <p class="ar-import-error" id="arAddError" hidden></p>
         </div>
         <div class="modal-footer">
-            <button type="button" class="btn secondary" data-close="arImportModal">Cancel</button>
-            <button type="button" class="btn primary" id="arImportSubmit" disabled>
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20V8"/><path d="m7 13 5-5 5 5"/><path d="M5 4h14"/></svg>
-                <span id="arImportSubmitLabel">Import Audio Logs</span>
-            </button>
+            <button type="button" class="btn secondary" data-close="arAddModal">Cancel</button>
+            <button type="button" class="btn primary" id="arAddSubmit">Add Records</button>
         </div>
     </div>
 </div>
 <?php endif; ?>
+
+<?php if($canDelete): ?>
+<div class="modal-backdrop" id="arDeleteModal">
+    <div class="modal ar-delete-modal" role="dialog" aria-labelledby="arDeleteTitle" aria-modal="true">
+        <div class="modal-header ar-delete-header">
+            <h3 id="arDeleteTitle">
+                <span class="ar-delete-header-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="m6 7 1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>
+                </span>
+                Delete Recording
+            </h3>
+            <button type="button" class="close-btn" data-close="arDeleteModal" aria-label="Close">×</button>
+        </div>
+        <form id="arDeleteForm" method="POST" action="#" enctype="multipart/form-data">
+            <?php echo csrf_field(); ?>
+            <?php echo method_field('DELETE'); ?>
+            <div class="modal-body">
+                <p class="ar-delete-lead">A Certificate of Deletion (PDF) is required before this recording can be marked as deleted.</p>
+                <div class="ar-delete-fields">
+                    <div class="form-group">
+                        <label for="arDeleteFileName">File Name</label>
+                        <input class="form-control ar-delete-filename" id="arDeleteFileName" type="text" readonly>
+                    </div>
+                    <div class="form-group">
+                        <span class="ar-delete-label">Certificate of Deletion (PDF)</span>
+                        <label class="ar-delete-picker" for="arDeleteCertificate">
+                            <input class="ar-delete-picker-input" id="arDeleteCertificate" name="certificate" type="file" accept="application/pdf,.pdf">
+                            <svg class="ar-delete-picker-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h5"/></svg>
+                            <span class="ar-delete-picker-name" id="arDeletePickerName">Choose a PDF file</span>
+                            <span class="ar-delete-picker-browse">Browse</span>
+                        </label>
+                        <p class="ar-delete-hint">Only PDF files are allowed.</p>
+                    </div>
+                </div>
+                <p class="ar-import-error" id="arDeleteError" hidden></p>
+                <div class="ar-delete-info">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M11 12h1v4h1"/></svg>
+                    <span>This certificate will be permanently stored with the record for audit purposes.</span>
+                </div>
+            </div>
+            <div class="modal-footer ar-delete-footer">
+                <button type="button" class="btn secondary" data-close="arDeleteModal">Cancel</button>
+                <button type="submit" class="btn danger" id="arDeleteSubmit" disabled>Confirm Deletion</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    const closeDropdowns = (except) => {
-        document.querySelectorAll('[data-ar-dd].is-open').forEach((dropdown) => {
-            if (dropdown === except) return;
-            dropdown.classList.remove('is-open');
-            const toggle = dropdown.querySelector('.ar-dd-toggle');
-            const menu = dropdown.querySelector('.ar-dd-menu');
-            if (toggle) toggle.setAttribute('aria-expanded', 'false');
-            if (menu) menu.hidden = true;
-        });
-    };
-    document.querySelectorAll('[data-ar-dd]').forEach((dropdown) => {
-        const toggle = dropdown.querySelector('.ar-dd-toggle');
-        const menu = dropdown.querySelector('.ar-dd-menu');
-        const input = dropdown.querySelector('input[type="hidden"]');
-        const label = toggle?.querySelector('span');
-        toggle?.addEventListener('click', (event) => {
-            event.preventDefault();
-            const willOpen = !dropdown.classList.contains('is-open');
-            closeDropdowns();
-            if (!willOpen) return;
-            dropdown.classList.add('is-open');
-            toggle.setAttribute('aria-expanded', 'true');
-            if (menu) menu.hidden = false;
-        });
-        menu?.querySelectorAll('.ar-dd-option').forEach((option) => {
-            option.addEventListener('click', () => {
-                const value = option.getAttribute('data-value') || '';
-                if (input) input.value = value;
-                if (label) label.textContent = option.textContent.trim();
-                toggle?.classList.toggle('has-value', value !== '');
-                menu.querySelectorAll('.ar-dd-option').forEach((item) => item.classList.remove('is-selected'));
-                option.classList.add('is-selected');
-                closeDropdowns();
-            });
-        });
-    });
-    document.addEventListener('click', (event) => {
-        if (!event.target.closest('[data-ar-dd]')) closeDropdowns();
-    });
-    document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') closeDropdowns();
-    });
-
-    const audio = document.getElementById('arPlayAudio');
-    const playerEmpty = document.getElementById('arPlayerEmpty');
-    const playerActive = document.getElementById('arPlayerActive');
-    const playerName = document.getElementById('arPlayerName');
-    const playerCurrent = document.getElementById('arPlayerCurrent');
-    const playerDuration = document.getElementById('arPlayerDuration');
-    const playPause = document.getElementById('arPlayPause');
-    const skipBack = document.getElementById('arSkipBack');
-    const skipForward = document.getElementById('arSkipForward');
-    const volume = document.getElementById('arVolume');
-    const volumePct = document.getElementById('arVolumePct');
-    const downloadLink = document.getElementById('arPlayerDownload');
-    const deleteForm = document.getElementById('arPlayerDeleteForm');
-    const waveform = document.getElementById('arWaveform');
-    const canvas = document.getElementById('arWaveformCanvas');
-    const closePlayer = document.getElementById('arPlayerClose');
-    let peaks = [];
-
-    const formatTime = (seconds) => {
-        if (!Number.isFinite(seconds) || seconds < 0) return '00:00:00';
-        const total = Math.floor(seconds);
-        const h = String(Math.floor(total / 3600)).padStart(2, '0');
-        const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
-        const s = String(total % 60).padStart(2, '0');
-        return h + ':' + m + ':' + s;
-    };
-    const setPlayingUi = (playing) => {
-        playPause?.classList.toggle('is-playing', playing);
-        playPause?.setAttribute('aria-label', playing ? 'Pause' : 'Play');
-        document.querySelectorAll('.ar-play-circle').forEach((button) => {
-            const active = playing && button.closest('tr')?.classList.contains('is-playing');
-            button.classList.toggle('is-playing', active);
-            const name = button.getAttribute('data-ar-name') || 'recording';
-            button.setAttribute('aria-label', (active ? 'Pause ' : 'Play ') + name);
-            button.setAttribute('title', active ? 'Pause' : 'Play');
-        });
-    };
-    const drawWaveform = () => {
-        if (!canvas || !waveform) return;
-        const ctx = canvas.getContext('2d');
-        const rect = waveform.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
-        const cssW = Math.max(1, Math.floor(rect.width || 280));
-        const cssH = 56;
-        if (canvas.width !== Math.floor(cssW * dpr) || canvas.height !== Math.floor(cssH * dpr)) {
-            canvas.style.width = cssW + 'px';
-            canvas.style.height = cssH + 'px';
-            canvas.width = Math.floor(cssW * dpr);
-            canvas.height = Math.floor(cssH * dpr);
-        }
-        const width = canvas.width;
-        const height = canvas.height;
-        ctx.clearRect(0, 0, width, height);
-        const duration = audio?.duration || 0;
-        const progress = duration > 0 ? (audio.currentTime || 0) / duration : 0;
-        const barCount = peaks.length || 64;
-        const gap = Math.max(1, Math.round(dpr));
-        const barWidth = Math.max(dpr, (width - gap * (barCount - 1)) / barCount);
-        for (let i = 0; i < barCount; i++) {
-            const amplitude = peaks[i] ?? 0.14;
-            const barHeight = Math.max(4 * dpr, amplitude * (height - 8 * dpr));
-            const x = i * (barWidth + gap);
-            const y = (height - barHeight) / 2;
-            ctx.fillStyle = (i / barCount) <= progress ? '#0b70f7' : '#bfdbfe';
-            ctx.fillRect(x, y, barWidth, barHeight);
-        }
-        const playheadX = Math.min(width - dpr, Math.max(0, progress * width));
-        ctx.fillStyle = '#1d4ed8';
-        ctx.fillRect(playheadX, 0, Math.max(2, dpr), height);
-    };
-    const loadPeaksFromAudio = async (url) => {
-        peaks = [];
-        drawWaveform();
-        try {
-            const response = await fetch(url, { credentials: 'same-origin' });
-            const buffer = await response.arrayBuffer();
-            const context = new (window.AudioContext || window.webkitAudioContext)();
-            const decoded = await context.decodeAudioData(buffer.slice(0));
-            const channel = decoded.getChannelData(0);
-            const count = 72;
-            const block = Math.max(1, Math.floor(channel.length / count));
-            const values = [];
-            for (let i = 0; i < count; i++) {
-                let peak = 0;
-                const start = i * block;
-                for (let j = 0; j < block; j += 4) {
-                    const sample = Math.abs(channel[start + j] || 0);
-                    if (sample > peak) peak = sample;
-                }
-                values.push(peak);
+    const searchInput = document.getElementById('arSearchInput');
+    const treeCard = document.querySelector('.ar-tree-card');
+    const matches = (el, query) => String(el?.dataset.arText || '').toLowerCase().includes(query);
+    const snapshotOpen = () => {
+        treeCard?.querySelectorAll('details.ar-node').forEach((node) => {
+            if (node.dataset.arWasOpen === undefined) {
+                node.dataset.arWasOpen = node.open ? '1' : '0';
             }
-            const max = Math.max(...values, 0.0001);
-            peaks = values.map((value) => 0.12 + 0.88 * Math.pow(value / max, 0.62));
-            if (context.state !== 'closed') context.close();
-        } catch (error) {
-            peaks = [];
+        });
+    };
+    const restoreTree = () => {
+        treeCard?.querySelectorAll('details.ar-node').forEach((node) => {
+            if (node.dataset.arWasOpen !== undefined) {
+                node.open = node.dataset.arWasOpen === '1';
+                delete node.dataset.arWasOpen;
+            }
+            node.classList.remove('ar-search-hidden');
+        });
+        treeCard?.querySelectorAll('.ar-files tbody tr').forEach((row) => {
+            row.hidden = false;
+        });
+    };
+    const filterTree = () => {
+        if (!treeCard) return;
+        const query = String(searchInput?.value || '').trim().toLowerCase();
+        if (!query) {
+            restoreTree();
+            return;
         }
-        drawWaveform();
-    };
-    const seekFromClientX = (clientX) => {
-        if (!audio || !waveform || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
-        const rect = waveform.getBoundingClientRect();
-        const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-        audio.currentTime = ratio * audio.duration;
-        drawWaveform();
-    };
-    const openRecording = (button) => {
-        const url = button.getAttribute('data-ar-play');
-        const name = button.getAttribute('data-ar-name') || 'Recording';
-        if (!url || !audio) return;
-        if (playerName) playerName.textContent = name;
-        if (downloadLink) downloadLink.href = button.getAttribute('data-ar-download') || '#';
-        if (deleteForm) {
-            const action = button.getAttribute('data-ar-delete') || '';
-            deleteForm.setAttribute('action', action || '#');
-            deleteForm.hidden = !action;
-        }
-        playerEmpty.hidden = true;
-        playerActive.hidden = false;
-        document.querySelectorAll('.ar-table tbody tr').forEach((row) => row.classList.remove('is-playing'));
-        button.closest('tr')?.classList.add('is-playing');
-        audio.src = url;
-        audio.volume = (Number(volume?.value) || 80) / 100;
-        audio.play().catch(() => {});
-        setPlayingUi(true);
-        loadPeaksFromAudio(url);
-    };
-    const stopPlayer = () => {
-        if (!audio) return;
-        audio.pause();
-        audio.removeAttribute('src');
-        audio.load();
-        peaks = [];
-        if (playerEmpty) playerEmpty.hidden = false;
-        if (playerActive) playerActive.hidden = true;
-        document.querySelectorAll('.ar-table tbody tr').forEach((row) => row.classList.remove('is-playing'));
-        setPlayingUi(false);
-        drawWaveform();
-    };
-
-    document.querySelectorAll('[data-ar-play]').forEach((button) => {
-        button.addEventListener('click', () => {
-            if (button.classList.contains('ar-play-circle')) {
-                const row = button.closest('tr');
-                const isCurrent = Boolean(row?.classList.contains('is-playing') && audio?.src);
-                if (isCurrent) {
-                    if (audio.paused) {
-                        audio.play().catch(() => {});
-                        setPlayingUi(true);
-                    } else {
-                        audio.pause();
-                        setPlayingUi(false);
+        snapshotOpen();
+        treeCard.querySelectorAll('.ar-node-campaign').forEach((campaign) => {
+            const campaignMatch = matches(campaign, query);
+            let campaignVisible = campaignMatch;
+            campaign.querySelectorAll(':scope > .ar-children > .ar-node-year').forEach((year) => {
+                const yearTextMatch = matches(year, query);
+                let yearVisible = campaignMatch || yearTextMatch;
+                year.querySelectorAll('.ar-files tbody tr').forEach((row) => {
+                    const thisRow = matches(row, query);
+                    row.hidden = !(campaignMatch || yearTextMatch || thisRow);
+                    if (thisRow) yearVisible = true;
+                    if (!campaignMatch && thisRow) {
+                        year.open = true;
+                        campaign.open = true;
                     }
-                    return;
+                });
+                year.classList.toggle('ar-search-hidden', !yearVisible);
+                if (yearVisible) campaignVisible = true;
+                if (!campaignMatch && yearTextMatch) {
+                    campaign.open = true;
+                    year.open = true;
                 }
-            }
-            openRecording(button);
+            });
+            campaign.classList.toggle('ar-search-hidden', !campaignVisible);
         });
-    });
-    playPause?.addEventListener('click', () => {
-        if (!audio?.src) return;
-        if (audio.paused) {
-            audio.play().catch(() => {});
-            setPlayingUi(true);
-        } else {
-            audio.pause();
-            setPlayingUi(false);
-        }
-    });
-    skipBack?.addEventListener('click', () => {
-        if (!audio) return;
-        audio.currentTime = Math.max(0, (audio.currentTime || 0) - 10);
-        drawWaveform();
-    });
-    skipForward?.addEventListener('click', () => {
-        if (!audio) return;
-        audio.currentTime = Math.min(audio.duration || 0, (audio.currentTime || 0) + 10);
-        drawWaveform();
-    });
-    volume?.addEventListener('input', () => {
-        const value = Number(volume.value) || 0;
-        if (audio) audio.volume = value / 100;
-        if (volumePct) volumePct.textContent = value + '%';
-    });
-    audio?.addEventListener('timeupdate', () => {
-        if (playerCurrent) playerCurrent.textContent = formatTime(audio.currentTime);
-        drawWaveform();
-    });
-    audio?.addEventListener('loadedmetadata', () => {
-        if (playerDuration) playerDuration.textContent = formatTime(audio.duration);
-        const durationCell = document.querySelector('tr.is-playing .ar-duration-cell');
-        if (durationCell && Number.isFinite(audio.duration) && audio.duration > 0) {
-            durationCell.textContent = formatTime(audio.duration);
-        }
-        drawWaveform();
-    });
-    audio?.addEventListener('play', () => setPlayingUi(true));
-    audio?.addEventListener('pause', () => setPlayingUi(false));
-    audio?.addEventListener('ended', () => setPlayingUi(false));
-    waveform?.addEventListener('click', (event) => seekFromClientX(event.clientX));
-    closePlayer?.addEventListener('click', stopPlayer);
-    waveform?.addEventListener('keydown', (event) => {
-        if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
-        if (event.key === 'ArrowLeft') {
-            audio.currentTime = Math.max(0, (audio.currentTime || 0) - 5);
-            drawWaveform();
-        } else if (event.key === 'ArrowRight') {
-            audio.currentTime = Math.min(audio.duration, (audio.currentTime || 0) + 5);
-            drawWaveform();
-        }
-    });
-    window.addEventListener('resize', drawWaveform);
-    if (audio) audio.volume = 0.8;
-    drawWaveform();
-
-    const selectAll = document.getElementById('arSelectAll');
-    const selectedCount = document.getElementById('arSelectedCount');
-    const bulkDelete = document.getElementById('arBulkDelete');
-    const rowChecks = () => Array.from(document.querySelectorAll('.ar-row-check:not(:disabled)'));
-    const syncSelection = () => {
-        const boxes = rowChecks();
-        const checked = boxes.filter((box) => box.checked);
-        boxes.forEach((box) => box.closest('tr')?.classList.toggle('is-checked', box.checked));
-        if (selectedCount) selectedCount.textContent = checked.length + ' selected';
-        if (bulkDelete) bulkDelete.disabled = checked.length === 0;
-        if (selectAll && boxes.length) {
-            selectAll.checked = checked.length === boxes.length;
-            selectAll.indeterminate = checked.length > 0 && checked.length < boxes.length;
-        }
     };
-    selectAll?.addEventListener('change', () => {
-        rowChecks().forEach((box) => { box.checked = selectAll.checked; });
-        syncSelection();
-    });
-    document.querySelectorAll('.ar-row-check').forEach((box) => box.addEventListener('change', syncSelection));
-    syncSelection();
+    searchInput?.addEventListener('input', filterTree);
 
-    const importModal = document.getElementById('arImportModal');
-    const importCampaign = document.getElementById('arImportCampaign');
-    const importYear = document.getElementById('arImportYear');
-    const importMonth = document.getElementById('arImportMonth');
-    const importDrop = document.getElementById('arImportDrop');
-    const importInput = document.getElementById('arImportFileInput');
-    const importBrowse = document.getElementById('arImportBrowse');
-    const importFilesWrap = document.getElementById('arImportFiles');
-    const importFileList = document.getElementById('arImportFileList');
-    const importFilesMeta = document.getElementById('arImportFilesMeta');
-    const importError = document.getElementById('arImportError');
-    const importDestinationText = document.getElementById('arImportDestinationText');
-    const importSubmit = document.getElementById('arImportSubmit');
-    const importSubmitLabel = document.getElementById('arImportSubmitLabel');
     const maxAudioBytes = 100 * 1024 * 1024;
     const allowedAudio = ['wav', 'mp3', 'mpeg', 'mpga', 'ogg', 'oga', 'webm', 'm4a', 'aac', 'flac', 'wma'];
+    const addCampaign = document.getElementById('arAddCampaign');
+    const addYear = document.getElementById('arAddYear');
+    const addMonth = document.getElementById('arAddMonth');
+    const addFiles = document.getElementById('arAddFiles');
+    const addFileList = document.getElementById('arAddFileList');
+    const addError = document.getElementById('arAddError');
+    const addSubmit = document.getElementById('arAddSubmit');
     let selectedAudio = [];
 
     const audioExtension = (name) => {
         const parts = String(name || '').toLowerCase().split('.');
         return parts.length > 1 ? parts.pop() : '';
     };
-    const formatSize = (bytes) => {
-        if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-        if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
-        return bytes + ' B';
-    };
-    const showImportError = (message) => {
-        if (!importError) return;
+    const showError = (el, message) => {
+        if (!el) return;
         if (!message) {
-            importError.hidden = true;
-            importError.textContent = '';
+            el.hidden = true;
+            el.textContent = '';
             return;
         }
-        importError.hidden = false;
-        importError.textContent = message;
-    };
-    const updateDestination = () => {
-        if (!importDestinationText) return;
-        const campaign = importCampaign?.selectedOptions[0]?.textContent?.trim() || '';
-        const year = importYear?.value || '';
-        const month = importMonth?.selectedOptions[0]?.textContent?.trim() || '';
-        if (importCampaign?.value && year && importMonth?.value) {
-            importDestinationText.textContent = campaign + ' → ' + year + ' → ' + month;
-            return;
-        }
-        importDestinationText.textContent = 'Select a campaign, year, and month.';
+        el.hidden = false;
+        el.textContent = message;
     };
     const renderSelectedAudio = () => {
-        if (!importFileList || !importFilesWrap || !importFilesMeta || !importSubmit || !importSubmitLabel) return;
-        importFileList.innerHTML = '';
-        const total = selectedAudio.reduce((sum, file) => sum + file.size, 0);
+        if (!addFileList) return;
+        addFileList.innerHTML = '';
         if (selectedAudio.length === 0) {
-            importFilesWrap.hidden = true;
-            importSubmit.disabled = true;
-            importSubmitLabel.textContent = 'Import Audio Logs';
+            addFileList.hidden = true;
             return;
         }
-        importFilesWrap.hidden = false;
-        importFilesMeta.textContent = selectedAudio.length + (selectedAudio.length === 1 ? ' file' : ' files') + ' (' + formatSize(total) + ')';
-        importSubmit.disabled = false;
-        importSubmitLabel.textContent = 'Import ' + selectedAudio.length + ' Audio Log' + (selectedAudio.length === 1 ? '' : 's');
-        selectedAudio.forEach((file, index) => {
-            const item = document.createElement('li');
-            item.innerHTML = '<span class="ar-import-file-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M14 3v5h5"/></svg></span><span class="ar-import-file-copy"><strong></strong><small></small></span><button type="button" class="ar-import-file-remove" aria-label="Remove file">×</button>';
-            item.querySelector('strong').textContent = file.name;
-            item.querySelector('small').textContent = formatSize(file.size);
-            item.querySelector('button').addEventListener('click', () => {
-                selectedAudio.splice(index, 1);
-                renderSelectedAudio();
-            });
-            importFileList.appendChild(item);
+        addFileList.hidden = false;
+        selectedAudio.forEach((file) => {
+            const item = document.createElement('div');
+            item.textContent = file.name;
+            addFileList.appendChild(item);
         });
     };
-    const addAudioFiles = (fileList) => {
-        const incoming = Array.from(fileList || []);
+
+    const monthWrap = document.getElementById('arAddMonthWrap');
+    const monthToggle = document.getElementById('arAddMonthToggle');
+    const monthMenu = document.getElementById('arAddMonthMenu');
+    const monthLabel = document.getElementById('arAddMonthLabel');
+    const closeMonthMenu = () => {
+        monthWrap?.classList.remove('is-open');
+        if (monthMenu) monthMenu.hidden = true;
+        monthToggle?.setAttribute('aria-expanded', 'false');
+    };
+    const openMonthMenu = () => {
+        monthWrap?.classList.add('is-open');
+        if (monthMenu) monthMenu.hidden = false;
+        monthToggle?.setAttribute('aria-expanded', 'true');
+    };
+    monthToggle?.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (monthWrap?.classList.contains('is-open')) closeMonthMenu();
+        else openMonthMenu();
+    });
+    monthMenu?.querySelectorAll('.ar-add-dd-option').forEach((option) => {
+        option.addEventListener('click', () => {
+            const value = option.getAttribute('data-value') || '';
+            if (addMonth) addMonth.value = value;
+            if (monthLabel) monthLabel.textContent = option.textContent.trim();
+            monthMenu.querySelectorAll('.ar-add-dd-option').forEach((item) => item.classList.toggle('is-selected', item === option));
+            closeMonthMenu();
+        });
+    });
+    document.addEventListener('click', (event) => {
+        if (monthWrap && !monthWrap.contains(event.target)) closeMonthMenu();
+    });
+    document.getElementById('arAddModal')?.addEventListener('click', (event) => {
+        if (event.target.closest('[data-close="arAddModal"]')) closeMonthMenu();
+    });
+
+    addFiles?.addEventListener('change', () => {
+        selectedAudio = [];
         const messages = [];
-        incoming.forEach((file) => {
+        Array.from(addFiles.files || []).forEach((file) => {
             if (file.size > maxAudioBytes) {
                 messages.push(file.name + ' exceeds the 100 MB limit.');
                 return;
             }
             if (!allowedAudio.includes(audioExtension(file.name))) {
-                messages.push(file.name + ' is not a supported audio format. Use WAV, MP3, or another allowed audio format.');
+                messages.push(file.name + ' is not a supported audio format.');
                 return;
             }
             selectedAudio.push(file);
         });
-        showImportError(messages[0] || '');
+        showError(addError, messages[0] || '');
         renderSelectedAudio();
-    };
+    });
 
-    if (importModal && importInput) {
-        ['change', 'input'].forEach((eventName) => {
-            importCampaign?.addEventListener(eventName, updateDestination);
-            importYear?.addEventListener(eventName, updateDestination);
-            importMonth?.addEventListener(eventName, updateDestination);
+    addSubmit?.addEventListener('click', async () => {
+        showError(addError, '');
+        if (!addCampaign?.value || !addYear?.value || !addMonth?.value) {
+            showError(addError, 'Please select a campaign, year, and month.');
+            return;
+        }
+        if (selectedAudio.length === 0) {
+            showError(addError, 'Select at least one recording file.');
+            return;
+        }
+        const formData = new FormData();
+        formData.append('campaign_id', addCampaign.value);
+        formData.append('year', addYear.value);
+        formData.append('month', addMonth.value);
+        selectedAudio.forEach((file) => formData.append('files[]', file));
+        addSubmit.disabled = true;
+        try {
+            const response = await fetch(<?php echo json_encode(route('archive-recordings.import.audio'), 15, 512) ?>, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: formData,
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.ok) {
+                showError(addError, data.message || 'Unable to add records.');
+                addSubmit.disabled = false;
+                return;
+            }
+            window.location.href = data.redirect || window.location.href;
+        } catch (error) {
+            showError(addError, 'Unable to add records.');
+            addSubmit.disabled = false;
+        }
+    });
+
+    const deleteModal = document.getElementById('arDeleteModal');
+    const deleteForm = document.getElementById('arDeleteForm');
+    const deleteFileName = document.getElementById('arDeleteFileName');
+    const deleteCertificate = document.getElementById('arDeleteCertificate');
+    const deleteSubmit = document.getElementById('arDeleteSubmit');
+    const deleteError = document.getElementById('arDeleteError');
+    const deletePickerName = document.getElementById('arDeletePickerName');
+    const deletePicker = deleteModal?.querySelector('.ar-delete-picker');
+    let deleteBusy = false;
+    const isPdf = (file) => {
+        if (!file) return false;
+        const name = String(file.name || '').toLowerCase();
+        const type = String(file.type || '').toLowerCase();
+        return name.endsWith('.pdf') || type === 'application/pdf';
+    };
+    const resetDeletePicker = () => {
+        if (deleteCertificate) deleteCertificate.value = '';
+        if (deletePickerName) deletePickerName.textContent = 'Choose a PDF file';
+        deletePicker?.classList.remove('has-file');
+        if (deleteSubmit) deleteSubmit.disabled = true;
+        deleteBusy = false;
+        showError(deleteError, '');
+    };
+    const syncDeleteSubmit = () => {
+        if (deleteBusy) return;
+        const file = deleteCertificate?.files?.[0];
+        if (!file) {
+            if (deletePickerName) deletePickerName.textContent = 'Choose a PDF file';
+            deletePicker?.classList.remove('has-file');
+            if (deleteSubmit) deleteSubmit.disabled = true;
+            return;
+        }
+        if (!isPdf(file)) {
+            if (deleteCertificate) deleteCertificate.value = '';
+            if (deletePickerName) deletePickerName.textContent = 'Choose a PDF file';
+            deletePicker?.classList.remove('has-file');
+            if (deleteSubmit) deleteSubmit.disabled = true;
+            showError(deleteError, 'Only PDF files are allowed.');
+            return;
+        }
+        if (deletePickerName) deletePickerName.textContent = file.name;
+        deletePicker?.classList.add('has-file');
+        if (deleteSubmit) deleteSubmit.disabled = false;
+        showError(deleteError, '');
+    };
+    document.querySelectorAll('[data-ar-delete]').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (!deleteForm || !deleteModal) return;
+            deleteForm.action = button.getAttribute('data-action') || '#';
+            if (deleteFileName) deleteFileName.value = button.getAttribute('data-name') || '';
+            resetDeletePicker();
+            deleteModal.classList.add('visible');
         });
-        updateDestination();
-        importBrowse?.addEventListener('click', (event) => {
+    });
+    deleteCertificate?.addEventListener('change', syncDeleteSubmit);
+    deleteForm?.addEventListener('submit', (event) => {
+        const file = deleteCertificate?.files?.[0];
+        if (deleteBusy || !isPdf(file)) {
             event.preventDefault();
-            event.stopPropagation();
-            importInput.click();
-        });
-        importDrop?.addEventListener('click', (event) => {
-            if (event.target.closest('.ar-import-browse')) return;
-            importInput.click();
-        });
-        importInput.addEventListener('change', () => {
-            addAudioFiles(importInput.files);
-            importInput.value = '';
-        });
-        ['dragenter', 'dragover'].forEach((eventName) => {
-            importDrop?.addEventListener(eventName, (event) => {
-                event.preventDefault();
-                importDrop.classList.add('is-dragover');
-            });
-        });
-        ['dragleave', 'drop'].forEach((eventName) => {
-            importDrop?.addEventListener(eventName, (event) => {
-                event.preventDefault();
-                if (eventName === 'drop') {
-                    importDrop.classList.remove('is-dragover');
-                    addAudioFiles(event.dataTransfer?.files);
-                    return;
-                }
-                if (!importDrop.contains(event.relatedTarget)) {
-                    importDrop.classList.remove('is-dragover');
-                }
-            });
-        });
-        importSubmit?.addEventListener('click', async () => {
-            showImportError('');
-            if (!importCampaign?.value || !importYear?.value || !importMonth?.value) {
-                showImportError('Please select a campaign, year, and month.');
-                return;
+            if (!isPdf(file)) {
+                if (deleteSubmit) deleteSubmit.disabled = true;
+                showError(deleteError, 'Only PDF files are allowed.');
             }
-            if (selectedAudio.length === 0) {
-                showImportError('Select at least one audio file to import.');
-                return;
-            }
-            const formData = new FormData();
-            formData.append('campaign_id', importCampaign.value);
-            formData.append('year', importYear.value);
-            formData.append('month', importMonth.value);
-            selectedAudio.forEach((file) => formData.append('files[]', file));
-            importSubmit.disabled = true;
-            try {
-                const response = await fetch(<?php echo json_encode(route('archive-recordings.import.audio'), 15, 512) ?>, {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                    body: formData,
-                });
-                const data = await response.json().catch(() => ({}));
-                if (!response.ok || !data.ok) {
-                    showImportError(data.message || 'Import failed. Please try again.');
-                    importSubmit.disabled = selectedAudio.length === 0;
-                    return;
-                }
-                window.location.href = data.redirect || window.location.href;
-            } catch (error) {
-                showImportError('Import failed. Please try again.');
-                importSubmit.disabled = selectedAudio.length === 0;
-            }
-        });
-    }
+            return;
+        }
+        deleteBusy = true;
+        if (deleteSubmit) deleteSubmit.disabled = true;
+    });
 });
 </script>
 <?php $__env->stopPush(); ?>

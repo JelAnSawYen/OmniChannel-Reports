@@ -19,7 +19,6 @@ class SecurityHardeningTest extends TestCase
 {
     use RefreshDatabase;
 
-    private UserType $systemType;
     private UserType $adminType;
     private UserType $standardType;
 
@@ -27,7 +26,6 @@ class SecurityHardeningTest extends TestCase
     {
         parent::setUp();
         $this->artisan('db:seed', ['--class' => 'Database\\Seeders\\UserTypeSeeder']);
-        $this->systemType = UserType::where('name', 'System Administrator')->firstOrFail();
         $this->adminType = UserType::where('name', 'Administrator')->firstOrFail();
         $this->standardType = UserType::where('name', 'Standard User')->firstOrFail();
     }
@@ -50,7 +48,7 @@ class SecurityHardeningTest extends TestCase
 
     public function test_weak_password_is_rejected_when_creating_a_user(): void
     {
-        $this->actingAs($this->user($this->systemType));
+        $this->actingAs($this->user($this->adminType));
 
         $this->post('/users', [
             'name' => 'Weak',
@@ -79,34 +77,30 @@ class SecurityHardeningTest extends TestCase
         $this->post('/login', ['email' => 'brute@example.com', 'password' => 'wrong'])->assertStatus(429);
     }
 
-    public function test_administrator_cannot_modify_a_system_administrator(): void
+    public function test_standard_user_cannot_manage_users(): void
     {
-        $system = $this->user($this->systemType);
-        $peopleType = UserType::create([
-            'name' => 'People Admin',
-            'permissions' => ['dashboard.view', 'users.view', 'users.manage'],
-        ]);
-        $peopleAdmin = $this->user($peopleType);
+        $admin = $this->user($this->adminType, ['name' => 'Keep Admin', 'email' => 'keep.admin@example.com']);
+        $standard = $this->user($this->standardType);
 
-        $this->actingAs($peopleAdmin)->put('/users/'.$system->id, [
+        $this->actingAs($standard)->put('/users/'.$admin->id, [
             'name' => 'Hacked',
-            'email' => $system->email,
+            'email' => $admin->email,
             'user_type_id' => $this->standardType->id,
             'status' => 'Inactive',
-        ])->assertRedirect(route('users.index'));
+        ])->assertForbidden();
 
-        $this->assertSame($this->systemType->id, $system->fresh()->user_type_id);
-        $this->assertSame('Active', $system->fresh()->status);
+        $this->assertSame($this->adminType->id, $admin->fresh()->user_type_id);
+        $this->assertSame('Active', $admin->fresh()->status);
     }
 
-    public function test_system_administrator_logs_in_without_mfa_after_email_verification(): void
+    public function test_administrator_logs_in_without_mfa_from_legacy_system_admin_flag(): void
     {
         Config::set('security.mfa_for_system_admin', true);
-        $system = $this->user($this->systemType);
+        $admin = $this->user($this->adminType);
 
-        $this->assertFalse($system->requiresMfa());
-        $this->actingAs($system)->get('/dashboard')->assertOk();
-        $this->actingAs($system)->get('/mfa/setup')->assertRedirect(route('dashboard'));
+        $this->assertFalse($admin->requiresMfa());
+        $this->actingAs($admin)->get('/dashboard')->assertOk();
+        $this->actingAs($admin)->get('/mfa/setup')->assertRedirect(route('dashboard'));
     }
 
     public function test_standard_user_is_not_forced_through_mfa(): void
@@ -119,11 +113,14 @@ class SecurityHardeningTest extends TestCase
 
     public function test_restore_rejects_non_sqlite_uploads(): void
     {
-        $system = $this->user($this->systemType);
+        $this->adminType->update([
+            'permissions' => array_values(array_unique(array_merge($this->adminType->permissions ?? [], ['maintenance.manage']))),
+        ]);
+        $admin = $this->user($this->adminType);
         $path = sys_get_temp_dir().'/not-a-db.txt';
         file_put_contents($path, 'hello');
 
-        $this->actingAs($system)->post('/maintenance/restore', [
+        $this->actingAs($admin)->post('/maintenance/restore', [
             'backup_file' => new \Illuminate\Http\UploadedFile($path, 'backup.sqlite', 'application/octet-stream', null, true),
         ])->assertRedirect()->assertSessionHas('error');
 
@@ -132,11 +129,14 @@ class SecurityHardeningTest extends TestCase
 
     public function test_clear_logs_keeps_security_records(): void
     {
-        $system = $this->user($this->systemType);
+        $this->adminType->update([
+            'permissions' => array_values(array_unique(array_merge($this->adminType->permissions ?? [], ['maintenance.manage']))),
+        ]);
+        $admin = $this->user($this->adminType);
         AuditLog::create(['action' => 'Login', 'module' => 'Authentication', 'description' => 'Keep me', 'ip_address' => '127.0.0.1']);
         AuditLog::create(['action' => 'Added', 'module' => 'Media Gateways', 'description' => 'Clear me', 'ip_address' => '127.0.0.1']);
 
-        $this->actingAs($system)->delete('/maintenance/logs')->assertRedirect();
+        $this->actingAs($admin)->delete('/maintenance/logs')->assertRedirect();
 
         $this->assertDatabaseHas('audit_logs', ['description' => 'Keep me']);
         $this->assertDatabaseMissing('audit_logs', ['description' => 'Clear me']);
@@ -167,10 +167,9 @@ class SecurityHardeningTest extends TestCase
     public function test_creating_users_sends_verification_to_the_entered_email(): void
     {
         Notification::fake();
-        $this->actingAs($this->user($this->systemType));
+        $this->actingAs($this->user($this->adminType));
 
         foreach ([
-            [$this->systemType, 'sysadmin.inbox@example.com'],
             [$this->adminType, 'admin.inbox@example.com'],
             [$this->standardType, 'standard.inbox@example.com'],
         ] as [$type, $email]) {
@@ -206,7 +205,7 @@ class SecurityHardeningTest extends TestCase
 
     public function test_verification_link_works_without_being_logged_in(): void
     {
-        foreach ([$this->systemType, $this->adminType, $this->standardType] as $type) {
+        foreach ([$this->adminType, $this->standardType] as $type) {
             $user = $this->user($type, [
                 'email' => strtolower(str_replace(' ', '.', $type->name)).'.verify.me@example.com',
                 'email_verified_at' => null,
@@ -261,17 +260,17 @@ class SecurityHardeningTest extends TestCase
         $this->actingAs($peopleAdmin)->get('/dashboard')->assertOk();
     }
 
-    public function test_unverified_system_administrator_cannot_log_in_until_verified(): void
+    public function test_unverified_administrator_cannot_log_in_until_verified(): void
     {
         Config::set('security.mfa_for_system_admin', true);
-        $system = $this->user($this->systemType, [
-            'email' => 'sysadmin.unverified@example.com',
+        $admin = $this->user($this->adminType, [
+            'email' => 'admin.unverified@example.com',
             'email_verified_at' => null,
             'password' => 'Password123!Aa',
         ]);
 
         $this->post('/login', [
-            'email' => $system->email,
+            'email' => $admin->email,
             'password' => 'Password123!Aa',
         ])->assertSessionHasErrors('email');
         $this->assertGuest();
@@ -295,21 +294,11 @@ class SecurityHardeningTest extends TestCase
         }
     }
 
-    public function test_administrator_cannot_edit_or_delete_protected_roles(): void
+    public function test_administrator_can_edit_peer_administrators_and_standard_users(): void
     {
         $admin = $this->user($this->adminType);
         $otherAdmin = $this->user($this->adminType);
-        $system = $this->user($this->systemType);
         $standard = $this->user($this->standardType);
-
-        $this->actingAs($admin)->get('/users/'.$system->id.'/edit')->assertRedirect(route('users.index'));
-        $this->actingAs($admin)->put('/users/'.$system->id, [
-            'name' => 'Hacked',
-            'email' => $system->email,
-            'user_type_id' => $this->standardType->id,
-            'status' => 'Inactive',
-        ])->assertRedirect(route('users.index'));
-        $this->assertTrue($system->fresh()->isSystemAdministrator());
 
         $this->actingAs($admin)->get('/users/'.$otherAdmin->id.'/edit')->assertOk();
         $this->actingAs($admin)->put('/users/'.$otherAdmin->id, [
@@ -321,62 +310,17 @@ class SecurityHardeningTest extends TestCase
         $this->assertSame('Peer Admin', $otherAdmin->fresh()->name);
 
         $this->actingAs($admin)->get('/users/'.$standard->id.'/edit')->assertOk();
-        $this->actingAs($admin)->get('/user-types/'.$this->adminType->id.'/edit')->assertOk();
-        $this->actingAs($admin)->get('/user-types/'.$this->systemType->id.'/edit')->assertRedirect(route('user-types.index'));
-        $this->actingAs($admin)->put('/user-types/'.$this->systemType->id, [
-            'user_id' => $system->id,
-            'permissions' => ['media.create'],
-        ])->assertRedirect(route('user-types.index'));
-        $this->assertNull($system->fresh()->permissions);
-
-        $typeBefore = $this->adminType->fresh()->permissions;
-        $this->actingAs($admin)->put('/user-types/'.$this->adminType->id, [
-            'name' => 'Hacked',
-            'description' => 'Hacked',
-            'user_id' => $otherAdmin->id,
-            'permissions' => ['media.create', 'maintenance.manage'],
-        ])->assertRedirect();
-        $this->assertSame($typeBefore, $this->adminType->fresh()->permissions);
-        $this->assertNotContains('maintenance.manage', $this->adminType->fresh()->permissions ?? []);
-        $this->assertContains('media.create', $otherAdmin->fresh()->permissions);
-        $this->assertNotContains('maintenance.manage', $otherAdmin->fresh()->permissions ?? []);
+        $this->actingAs($admin)->get('/user-types')->assertNotFound();
     }
 
-    public function test_administrator_can_toggle_standard_user_data_permissions(): void
+    public function test_standard_user_cannot_reach_user_management_even_with_override(): void
     {
-        $admin = $this->user($this->adminType);
         $standard = $this->user($this->standardType);
-        $typeBefore = $this->standardType->fresh()->permissions;
+        $standard->update(['permissions' => ['users.manage', 'roles.manage', 'media.create']]);
 
-        $this->actingAs($admin)->get('/user-types/'.$this->standardType->id.'/edit')
-            ->assertOk()
-            ->assertSee('Add / Create Records')
-            ->assertDontSee('Manage Maintenance');
-
-        $this->actingAs($admin)->put('/user-types/'.$this->standardType->id, [
-            'name' => 'Hacked Name',
-            'description' => 'Should stay',
-            'user_id' => $standard->id,
-            'permissions' => ['media.create', 'media.edit', 'media.delete', 'maintenance.manage', 'users.manage'],
-        ])->assertRedirect();
-
-        $freshType = $this->standardType->fresh();
-        $this->assertSame('Standard User', $freshType->name);
-        $this->assertSame($typeBefore, $freshType->permissions);
-        $this->assertNotContains('maintenance.manage', $freshType->permissions);
-        $this->assertNotContains('users.manage', $freshType->permissions);
-
-        $freshUser = $standard->fresh();
-        $this->assertSame($this->standardType->id, $freshUser->user_type_id);
-        $this->assertContains('media.create', $freshUser->permissions);
-        $this->assertContains('media.edit', $freshUser->permissions);
-        $this->assertContains('media.delete', $freshUser->permissions);
-        $this->assertNotContains('users.manage', $freshUser->permissions);
-        $this->assertFalse($freshUser->hasPermission('users.manage'));
-        $this->assertFalse($freshUser->hasPermission('roles.manage'));
-        $this->assertFalse($freshUser->hasPermission('maintenance.manage'));
-        $this->actingAs($freshUser)->get('/users')->assertForbidden();
-        $this->actingAs($freshUser)->get('/user-types')->assertForbidden();
+        $this->assertFalse($standard->fresh()->hasPermission('users.manage'));
+        $this->actingAs($standard)->get('/users')->assertForbidden();
+        $this->actingAs($standard)->get('/user-types')->assertNotFound();
     }
 
     public function test_authenticated_pages_are_not_stored_in_the_browser_cache(): void
@@ -395,7 +339,7 @@ class SecurityHardeningTest extends TestCase
     public function test_activity_log_timestamps_use_asia_manila(): void
     {
         $this->assertSame('Asia/Manila', config('app.timezone'));
-        $this->actingAs($this->user($this->systemType));
+        $this->actingAs($this->user($this->adminType));
 
         $log = AuditLog::create([
             'action' => 'Added',
@@ -468,7 +412,7 @@ class SecurityHardeningTest extends TestCase
     {
         Notification::fake();
 
-        foreach ([$this->systemType, $this->adminType, $this->standardType] as $type) {
+        foreach ([$this->adminType, $this->standardType] as $type) {
             $user = $this->user($type);
             $this->post('/forgot-password', ['email' => $user->email])->assertRedirect();
             Notification::assertSentTo($user, ResetUserPassword::class);

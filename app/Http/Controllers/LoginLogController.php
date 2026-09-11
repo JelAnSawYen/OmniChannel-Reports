@@ -22,7 +22,7 @@ class LoginLogController extends Controller
     public function clearOlder(Request $request)
     {
         $user = $this->manager($request);
-        $deleted = LogRetentionService::pruneLoginHistory($user);
+        $deleted = LogRetentionService::pruneLoginHistory();
 
         if ($deleted > 0) {
             AuditLogger::log(

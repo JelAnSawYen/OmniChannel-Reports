@@ -6,7 +6,6 @@ use App\Models\ChannelAllocationCampaign;
 use App\Models\PdcGroup;
 use App\Models\PdcServer;
 use App\Services\AuditLogger;
-use App\Services\NotificationService;
 use App\Services\PdcServerImportService;
 use App\Services\XlsxService;
 use App\Support\OperationCatalog;
@@ -172,8 +171,6 @@ class PdcServerController extends Controller
         try {
             $path = $xlsx->export($headers, $rows, 'pdc-servers.xlsx');
         } catch (\Throwable $exception) {
-            NotificationService::exportFailed('PDC Servers', 'Export failed.', 'pdc-servers');
-
             return back()->with('error', PublicError::failed('Export', $exception));
         }
 

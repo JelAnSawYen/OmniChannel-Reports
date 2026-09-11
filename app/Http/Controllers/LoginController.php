@@ -18,7 +18,7 @@ class LoginController extends Controller
             $user=Auth::user();
             if (($user->status ?? 'Active') !== 'Active') {
                 Auth::logout();
-                LoginLog::create(['user_id'=>$user->id,'email'=>$user->email,'status'=>'Blocked','ip_address'=>$request->ip(),'user_agent'=>$request->userAgent()]);
+                $this->recordLoginAttempt($request, 'Blocked', $user->id, $user->email);
                 return back()->withErrors(['email'=>'The email or password is incorrect.'])->withInput();
             }
             if (! $user->hasVerifiedEmail()) {
@@ -27,19 +27,30 @@ class LoginController extends Controller
             }
             $request->session()->regenerate();
             $user->update(['last_login_at'=>now(),'last_login_ip'=>$request->ip()]);
-            LoginLog::create(['user_id'=>$user->id,'email'=>$user->email,'status'=>'Success','ip_address'=>$request->ip(),'user_agent'=>$request->userAgent()]);
+            $this->recordLoginAttempt($request, 'Success', $user->id, $user->email);
             AuditLogger::log('Login','Authentication',$user->name.' logged in', $user->id,$request);
             if ($user->requiresMfa()) {
                 return redirect()->intended(route($user->mfa_confirmed_at ? 'mfa.challenge' : 'mfa.setup'));
             }
             return redirect()->intended(route('dashboard'));
         }
-        try {
-            LoginLog::create(['email'=>$request->input('email'),'status'=>'Failed','ip_address'=>$request->ip(),'user_agent'=>$request->userAgent()]);
-        } catch (\Throwable) {
-            // Login failure recording must not hide the authentication error.
-        }
+        $this->recordLoginAttempt($request, 'Failed', null, $request->input('email'));
         return back()->withErrors(['email'=>'The email or password is incorrect.'])->withInput();
+    }
+
+    private function recordLoginAttempt(Request $request, string $status, ?int $userId, ?string $email): void
+    {
+        try {
+            LoginLog::create([
+                'user_id' => $userId,
+                'email' => $email,
+                'status' => $status,
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 
     public function logout(Request $request)

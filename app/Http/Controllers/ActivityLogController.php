@@ -25,7 +25,7 @@ class ActivityLogController extends Controller
     public function clearOlder(Request $request)
     {
         $user = $this->manager($request);
-        $deleted = LogRetentionService::pruneActivityLogs($user);
+        $deleted = LogRetentionService::pruneActivityLogs();
 
         if ($deleted > 0) {
             AuditLogger::log(

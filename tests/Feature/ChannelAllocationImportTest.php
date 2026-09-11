@@ -113,7 +113,8 @@ class ChannelAllocationImportTest extends TestCase
         $this->get('/channel-allocation')
             ->assertOk()
             ->assertSee('Alpha Import')
-            ->assertSee('2 allocations')
+            ->assertSee('data-label="Allocations">2', false)
+            ->assertDontSee('2 allocations')
             ->assertSee('Beta Import');
 
         $this->get('/channel-allocation/export')->assertOk()->assertDownload('channel-allocation.xlsx');

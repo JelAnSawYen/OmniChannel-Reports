@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Notifications\ResetUserPassword;
 use App\Notifications\VerifyUserEmail;
+use App\Support\RolePermissions;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -46,9 +47,9 @@ class User extends Authenticatable implements MustVerifyEmail
     public function effectivePermissions(): array
     {
         $typePermissions = $this->userType?->permissions ?? [];
-        $editable = array_keys(\App\Http\Controllers\UserTypeController::EDIT_PERMISSIONS);
+        $editable = array_keys(RolePermissions::EDIT_PERMISSIONS);
         $locked = $this->isStandardUser()
-            ? \App\Http\Controllers\UserTypeController::STANDARD_LOCKED_PERMISSIONS
+            ? RolePermissions::STANDARD_LOCKED_PERMISSIONS
             : [];
 
         if (! is_array($this->permissions)) {
@@ -73,18 +74,13 @@ class User extends Authenticatable implements MustVerifyEmail
         return $letters !== '' ? $letters : '?';
     }
 
-    public function isSystemAdministrator(): bool
-    {
-        return $this->userType?->name === 'System Administrator';
-    }
-
     public function requiresMfa(): bool
     {
         if (! config('security.mfa_for_system_admin')) {
             return false;
         }
 
-        if ($this->isSystemAdministrator() || $this->isAdministrator()) {
+        if ($this->isAdministrator()) {
             return false;
         }
 
@@ -110,11 +106,16 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function canAccessAdministration(): bool
     {
-        if ($this->isStandardUser()) {
-            return false;
+        return $this->isAdministrator();
+    }
+
+    public function canAccessModule(string $module): bool
+    {
+        if (! $this->isStandardUser()) {
+            return true;
         }
 
-        return $this->isSystemAdministrator() || $this->isAdministrator();
+        return in_array($module, RolePermissions::STANDARD_ALLOWED_MODULES, true);
     }
 
     public function canManageOwnActivityLogs(): bool
@@ -134,23 +135,8 @@ class User extends Authenticatable implements MustVerifyEmail
         if ($this->isStandardUser() || ! $this->hasPermission('users.manage')) {
             return false;
         }
-        if ($this->isSystemAdministrator()) {
-            return true;
-        }
 
-        return ! $target->isSystemAdministrator();
-    }
-
-    public function canManageUserType(?UserType $type): bool
-    {
-        if (! $type || $this->isStandardUser() || ! $this->hasPermission('roles.manage')) {
-            return false;
-        }
-        if ($this->isSystemAdministrator()) {
-            return true;
-        }
-
-        return $this->isAdministrator() && ! $type->isSystemAdministrator();
+        return true;
     }
 
     public function routeNotificationForMail($notification = null): string

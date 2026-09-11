@@ -277,20 +277,13 @@ class SipChannelsPageTest extends TestCase
         $this->assertNotContains('Id', $exportHeaders);
     }
 
-    public function test_standard_user_can_export_but_cannot_mutate(): void
+    public function test_standard_user_cannot_access_sip_channels(): void
     {
-        $this->actingAs($this->standard)->get('/sip-channels')->assertOk();
+        $this->actingAs($this->standard)->get('/sip-channels')->assertForbidden();
         $this->actingAs($this->standard)->post('/sip-channels', [])->assertForbidden();
-        $this->actingAs($this->standard)->get('/sip-channels/export')->assertOk();
+        $this->actingAs($this->standard)->get('/sip-channels/export')->assertForbidden();
         $this->actingAs($this->standard)->postJson('/sip-channels/import/preview', [])->assertForbidden();
         $this->actingAs($this->standard)->get('/sip-channels/import/template')->assertForbidden();
-        $this->actingAs($this->standard)
-            ->get('/sip-channels')
-            ->assertOk()
-            ->assertDontSee('Import Data')
-            ->assertSee('Export Data')
-            ->assertSee('Data Transfer')
-            ->assertDontSee('id="sipAddButton"', false);
     }
 
     /**

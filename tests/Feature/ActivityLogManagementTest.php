@@ -26,7 +26,7 @@ class ActivityLogManagementTest extends TestCase
         parent::setUp();
         $this->artisan('db:seed', ['--class' => 'Database\\Seeders\\UserTypeSeeder']);
         $this->system = User::factory()->create([
-            'user_type_id' => UserType::where('name', 'System Administrator')->value('id'),
+            'user_type_id' => UserType::where('name', 'Administrator')->value('id'),
             'status' => 'Active',
         ]);
         $this->admin = User::factory()->create([
@@ -167,7 +167,7 @@ class ActivityLogManagementTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['id' => $otherOld->id]);
     }
 
-    public function test_manual_clear_removes_only_the_current_users_old_activity_logs(): void
+    public function test_manual_clear_deletes_all_activity_logs_older_than_3_days(): void
     {
         $ownOld = $this->log($this->admin, ['description' => 'own old log']);
         $this->age($ownOld, 4);
@@ -178,17 +178,17 @@ class ActivityLogManagementTest extends TestCase
         $this->actingAs($this->admin)->from('/activity-logs')->delete('/activity-logs/older')->assertRedirect('/activity-logs');
 
         $this->assertDatabaseMissing('audit_logs', ['id' => $ownOld->id]);
-        $this->assertDatabaseHas('audit_logs', ['id' => $otherOld->id]);
+        $this->assertDatabaseMissing('audit_logs', ['id' => $otherOld->id]);
         $this->assertDatabaseHas('audit_logs', ['id' => $recent->id]);
 
         $this->actingAs($this->admin)->get('/activity-logs')
             ->assertOk()
             ->assertDontSee('own old log')
-            ->assertSee('other old log')
+            ->assertDontSee('other old log')
             ->assertSee('own recent log');
     }
 
-    public function test_manual_clear_removes_only_the_current_users_old_login_history(): void
+    public function test_manual_clear_deletes_all_login_history_older_than_3_days(): void
     {
         $ownOld = $this->loginRow($this->admin);
         $this->age($ownOld, 4);
@@ -199,11 +199,6 @@ class ActivityLogManagementTest extends TestCase
         $this->actingAs($this->admin)->from('/login-history')->delete('/login-history/older')->assertRedirect('/login-history');
 
         $this->assertDatabaseMissing('login_logs', ['id' => $ownOld->id]);
-        $this->assertDatabaseHas('login_logs', ['id' => $otherOld->id]);
-        $this->assertDatabaseHas('login_logs', ['id' => $recent->id]);
-
-        $this->actingAs($this->system)->from('/login-history')->delete('/login-history/older')->assertRedirect('/login-history');
-
         $this->assertDatabaseMissing('login_logs', ['id' => $otherOld->id]);
         $this->assertDatabaseHas('login_logs', ['id' => $recent->id]);
     }
@@ -273,9 +268,7 @@ class ActivityLogManagementTest extends TestCase
 
         $this->actingAs($this->admin)->get('/dashboard')
             ->assertOk()
-            ->assertDontSee('admin stale dashboard activity')
-            ->assertSee('system stale dashboard activity')
-            ->assertSee('fresh dashboard activity');
+            ->assertDontSee('Recent System Activity');
 
         $this->assertDatabaseMissing('audit_logs', ['id' => $ownOld->id]);
         $this->assertDatabaseHas('audit_logs', ['id' => $otherOld->id]);

@@ -15,28 +15,24 @@ class UserController extends Controller
     public function index(Request $request)
     {
         $this->denyStandardUser();
-        $actor=Auth::user();
         $query=User::with('userType')->orderBy('name');
-        if ($actor && ! $actor->isSystemAdministrator()) {
-            $query->whereHas('userType', fn ($q) => $q->where('name', '!=', 'System Administrator'));
-        }
         if($search=trim((string)$request->query('search'))) $query->where(fn($q)=>$q->where('name','like',"%$search%")->orWhere('email','like',"%$search%"));
         if($type=$request->query('user_type_id')) $query->where('user_type_id',$type);
         if($status=$request->query('status')) $query->where('status',$status);
         $users=$query->paginate(10)->withQueryString();
-        $userTypes=$this->visibleTypes($actor);
+        $userTypes=$this->assignableTypes();
         return view('users.index',compact('users','userTypes'));
     }
     public function create()
     {
         $this->denyStandardUser();
-        return view('users.create',['userTypes'=>$this->assignableTypes(Auth::user())]);
+        return view('users.create',['userTypes'=>$this->assignableTypes()]);
     }
     public function store(Request $request)
     {
         $this->denyStandardUser();
         $v=$request->validate(['name'=>'required|string|max:255','email'=>'required|email|max:255|unique:users,email','password'=>PasswordRules::required(),'user_type_id'=>'required|exists:user_types,id','status'=>'required|in:Active,Inactive']);
-        if ($error=$this->assignmentError($request->user(), (int)$v['user_type_id'])) {
+        if ($error=$this->assignmentError((int)$v['user_type_id'])) {
             return back()->with('error',$error)->withInput();
         }
         $user=User::create($v);
@@ -49,7 +45,7 @@ class UserController extends Controller
         if ($error=$this->protectManagedUser(Auth::user(), $user)) {
             return redirect()->route('users.index')->with('error',$error);
         }
-        return view('users.edit',['user'=>$user,'userTypes'=>$this->assignableTypes(Auth::user())]);
+        return view('users.edit',['user'=>$user,'userTypes'=>$this->assignableTypes()]);
     }
     public function update(Request $request, User $user)
     {
@@ -58,10 +54,7 @@ class UserController extends Controller
             return redirect()->route('users.index')->with('error',$error);
         }
         $v=$request->validate(['name'=>'required|string|max:255','email'=>'required|email|max:255|unique:users,email,'.$user->id,'user_type_id'=>'required|exists:user_types,id','status'=>'required|in:Active,Inactive','password'=>PasswordRules::optional()]);
-        if ($error=$this->assignmentError($request->user(), (int)$v['user_type_id'], $user)) {
-            return back()->with('error',$error)->withInput();
-        }
-        if ($error=$this->statusError($user, $v['status'])) {
+        if ($error=$this->assignmentError((int)$v['user_type_id'])) {
             return back()->with('error',$error)->withInput();
         }
         $emailChanged = $user->email !== $v['email'];
@@ -89,9 +82,6 @@ class UserController extends Controller
             return redirect()->route('users.index')->with('error',$error);
         }
         if(Auth::id()===$user->id) return redirect()->route('users.index')->with('error','You cannot delete your own account.');
-        if ($user->isSystemAdministrator() && User::whereHas('userType', fn ($q) => $q->where('name', 'System Administrator'))->count() <= 1) {
-            return redirect()->route('users.index')->with('error','You cannot delete the last System Administrator.');
-        }
         $name=$user->name;$id=$user->id;$user->delete();AuditLogger::log('Deleted','Users','Deleted user '.$name,$id,$request);return redirect()->route('users.index')->with('success','User deleted successfully.');
     }
 
@@ -115,68 +105,31 @@ class UserController extends Controller
         }
     }
 
-    private function visibleTypes(?User $actor)
+    private function assignableTypes()
     {
-        $types = UserType::orderBy('name')->get();
-        if (! $actor || $actor->isSystemAdministrator()) {
-            return $types;
-        }
-
-        return $types->reject(fn (UserType $type) => $type->isSystemAdministrator())->values();
-    }
-
-    private function assignableTypes(User $actor)
-    {
-        $types = UserType::orderBy('name')->get();
-        if ($actor->isSystemAdministrator()) {
-            return $types;
-        }
-
-        return $types->filter(fn (UserType $type) => $type->isAdministrator() || $type->isStandardUser())->values();
+        return UserType::assignable();
     }
 
     private function protectManagedUser(User $actor, User $target): ?string
     {
         if (! $actor->canManageUser($target)) {
-            return $target->isSystemAdministrator()
-                ? 'You cannot modify a System Administrator account.'
-                : 'You do not have permission to manage this user.';
+            return 'You do not have permission to manage this user.';
         }
 
         return null;
     }
 
-    private function assignmentError(User $actor, int $userTypeId, ?User $target = null): ?string
+    private function assignmentError(int $userTypeId): ?string
     {
         $type = UserType::find($userTypeId);
         if (! $type) {
             return 'The selected user type is invalid.';
         }
-        if ($type->isSystemAdministrator() && ! $actor->isSystemAdministrator()) {
-            return 'Only a System Administrator can assign the System Administrator role.';
-        }
-        if (! $actor->isSystemAdministrator() && ! ($type->isAdministrator() || $type->isStandardUser())) {
+        if (! $type->isAssignable()) {
             return 'You can only assign Administrator or Standard User roles.';
         }
-        if ($target && $target->isSystemAdministrator() && ! $type->isSystemAdministrator() && $this->systemAdministratorCount() <= 1) {
-            return 'You cannot remove the last System Administrator role.';
-        }
 
         return null;
-    }
-
-    private function statusError(User $target, string $status): ?string
-    {
-        if ($status === 'Inactive' && $target->isSystemAdministrator() && $this->systemAdministratorCount() <= 1) {
-            return 'You cannot deactivate the last System Administrator.';
-        }
-
-        return null;
-    }
-
-    private function systemAdministratorCount(): int
-    {
-        return User::whereHas('userType', fn ($q) => $q->where('name', 'System Administrator'))->count();
     }
 
     /**

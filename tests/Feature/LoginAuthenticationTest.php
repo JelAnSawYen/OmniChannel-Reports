@@ -5,13 +5,13 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Models\UserType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class LoginAuthenticationTest extends TestCase
 {
     use RefreshDatabase;
 
-    private UserType $systemType;
     private UserType $adminType;
     private UserType $standardType;
 
@@ -19,7 +19,6 @@ class LoginAuthenticationTest extends TestCase
     {
         parent::setUp();
         $this->artisan('db:seed', ['--class' => 'Database\\Seeders\\UserTypeSeeder']);
-        $this->systemType = UserType::where('name', 'System Administrator')->firstOrFail();
         $this->adminType = UserType::where('name', 'Administrator')->firstOrFail();
         $this->standardType = UserType::where('name', 'Standard User')->firstOrFail();
     }
@@ -86,7 +85,7 @@ class LoginAuthenticationTest extends TestCase
 
     public function test_each_role_can_log_in_and_reach_dashboard_then_log_out(): void
     {
-        foreach ([$this->systemType, $this->adminType, $this->standardType] as $type) {
+        foreach ([$this->adminType, $this->standardType] as $type) {
             $user = $this->makeUser($type);
 
             $this->post('/login', [
@@ -101,5 +100,19 @@ class LoginAuthenticationTest extends TestCase
             $this->assertGuest();
             $this->get('/dashboard')->assertRedirect(route('login'));
         }
+    }
+
+    public function test_successful_login_still_reaches_the_dashboard_if_login_history_cannot_be_written(): void
+    {
+        $user = $this->makeUser($this->adminType);
+        Schema::drop('login_logs');
+
+        $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'Password123!Aa',
+        ])->assertRedirect(route('dashboard'));
+
+        $this->assertAuthenticatedAs($user);
+        $this->get('/dashboard')->assertOk();
     }
 }

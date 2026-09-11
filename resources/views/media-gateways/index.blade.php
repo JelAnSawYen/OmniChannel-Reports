@@ -1,6 +1,7 @@
 @extends('layouts.app')
 @section('content')
 @php
+    $canRevealSecrets = auth()->user()->canExportGatewaySecrets();
     $gatewayColumns = [
         'ip_address' => 'Hostname IP',
         'site_code' => 'Serial Number',
@@ -25,10 +26,8 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
             </span>
             <input id="mediaSearchInput" name="search" value="{{ $search }}" placeholder="{{ $resource['search'] }}" aria-label="{{ $resource['search'] }}" autocomplete="off">
-            <button type="button" class="search-clear" id="mediaSearchClear" aria-label="Clear search" title="Clear search">×</button>
         </form>
         <button class="btn primary" type="submit" form="mediaSearchForm">Search</button>
-        @if($search !== '')<a class="btn secondary" href="{{ route($resource['index']) }}" id="mediaSearchReset">Reset</a>@endif
         @if(auth()->user()->hasPermission('media.export'))
         @include('partials.data-transfer', [
             'canExport' => true,
@@ -72,16 +71,18 @@
     <td>
         <span class="pdc-secret">
             <span class="pdc-secret-mask">••••••</span>
-            <span class="pdc-secret-value" hidden>{{ $gateway->password }}</span>
-            <button type="button" class="pdc-secret-toggle" title="Show password" aria-label="Show password">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
+            @if($canRevealSecrets && $gateway->password)
+                <span class="pdc-secret-value" hidden>{{ $gateway->password }}</span>
+                <button type="button" class="pdc-secret-toggle" title="Show password" aria-label="Show password">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+            @endif
         </span>
     </td>
     <td class="actions-column">
         <div class="row-actions">
             @if(auth()->user()->hasPermission('media.edit') && auth()->user()->canMutateGateways())
-                <button type="button" class="action-btn edit" data-edit-id="{{ $gateway->id }}" data-edit-site_name="{{ $gateway->site_name }}" data-edit-site_code="{{ $gateway->site_code }}" data-edit-ip_address="{{ $gateway->ip_address }}" data-edit-plan="{{ $gateway->plan }}" data-edit-port="{{ $gateway->port }}" data-edit-network="{{ $gateway->network }}" data-edit-device_function="{{ $gateway->device_function }}" data-edit-username="{{ $gateway->username }}" data-edit-password="{{ $gateway->password }}" title="Edit {{ $resource['entity'] }}" aria-label="Edit {{ $resource['entity'] }}">
+                <button type="button" class="action-btn edit" data-edit-id="{{ $gateway->id }}" data-edit-site_name="{{ $gateway->site_name }}" data-edit-site_code="{{ $gateway->site_code }}" data-edit-ip_address="{{ $gateway->ip_address }}" data-edit-plan="{{ $gateway->plan }}" data-edit-port="{{ $gateway->port }}" data-edit-network="{{ $gateway->network }}" data-edit-device_function="{{ $gateway->device_function }}" data-edit-username="{{ $gateway->username }}" @if($canRevealSecrets) data-edit-password="{{ $gateway->password }}" @endif title="Edit {{ $resource['entity'] }}" aria-label="Edit {{ $resource['entity'] }}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
                 </button>
             @endif
@@ -161,9 +162,11 @@
                         <label for="password">Password</label>
                         <div class="pdc-password-field">
                             <input class="form-control" type="password" id="password" name="password" autocomplete="new-password">
-                            <button type="button" class="pdc-secret-toggle" data-toggle-input="password" title="Show password" aria-label="Show password">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-                            </button>
+                            @if(auth()->user()->canExportGatewaySecrets())
+                                <button type="button" class="pdc-secret-toggle" data-toggle-input="password" title="Show password" aria-label="Show password">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                                </button>
+                            @endif
                         </div>
                     </div>
                 </div>

@@ -6,7 +6,6 @@ use App\Models\ArchiveRecording;
 use App\Models\ChannelAllocationCampaign;
 use App\Services\ArchiveRecordingImportService;
 use App\Services\AuditLogger;
-use App\Services\NotificationService;
 use App\Services\XlsxService;
 use App\Support\AudioDuration;
 use App\Support\PublicError;
@@ -49,93 +48,68 @@ class ArchiveRecordingController extends Controller
     public function index(Request $request): View
     {
         $campaigns = ChannelAllocationCampaign::optionsForDropdown();
-
-        $campaignId = (int) $request->query('campaign', 0);
-        $selectedCampaign = $campaigns->firstWhere('id', $campaignId);
-
-        $year = (int) $request->query('year', 0);
-        $month = (int) $request->query('month', 0);
-        $search = trim((string) $request->query('search'));
-        $from = trim((string) $request->query('from'));
-        $to = trim((string) $request->query('to'));
-        $caller = trim((string) $request->query('caller'));
-        $agent = trim((string) $request->query('agent'));
-        $sort = strtolower(trim((string) $request->query('sort', 'oldest')));
-        if (! in_array($sort, ['oldest', 'newest'], true)) {
-            $sort = 'oldest';
+        $selectedCampaignId = (int) $request->query('campaign', 0);
+        $selectedYear = (int) $request->query('year', 0);
+        $selectedMonth = (int) $request->query('month', 0);
+        if ($selectedCampaignId > 0 && ! $campaigns->contains('id', $selectedCampaignId)) {
+            $selectedCampaignId = 0;
         }
-        $perPage = (int) $request->query('per_page', 10);
-        if (! in_array($perPage, [5, 10, 25, 50], true)) {
-            $perPage = 10;
+        if ($selectedYear > 0 && ! in_array($selectedYear, self::ARCHIVE_YEARS, true)) {
+            $selectedYear = 0;
+            $selectedMonth = 0;
+        }
+        if ($selectedMonth < 1 || $selectedMonth > 12) {
+            $selectedMonth = 0;
         }
 
-        $years = [];
-        $months = [];
-        $callerOptions = [];
-        $agentOptions = [];
-        $records = null;
+        $recordingsByCampaign = ArchiveRecording::query()
+            ->orderBy('file_name')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('campaign_id');
 
-        if ($selectedCampaign) {
-            $years = self::ARCHIVE_YEARS;
-            if ($year > 0 && ! in_array($year, $years, true)) {
-                $year = 0;
-                $month = 0;
-            }
-            if ($year > 0) {
-                $months = $this->availableMonths((int) $selectedCampaign->id, $year);
-                if ($month < 1 || $month > 12) {
-                    $month = 0;
-                }
-            } else {
-                $month = 0;
-            }
-        } else {
-            $year = 0;
-            $month = 0;
-        }
+        $tree = $campaigns->map(function (ChannelAllocationCampaign $campaign) use ($recordingsByCampaign) {
+            $items = collect($recordingsByCampaign->get($campaign->id, []));
+            $years = $items
+                ->filter(fn (ArchiveRecording $recording) => $recording->called_at !== null)
+                ->groupBy(fn (ArchiveRecording $recording) => (int) $recording->called_at->year)
+                ->sortKeysDesc()
+                ->map(function ($yearItems, $year) {
+                    $months = $yearItems
+                        ->groupBy(fn (ArchiveRecording $recording) => (int) $recording->called_at->month)
+                        ->sortKeysDesc()
+                        ->map(function ($monthItems, $month) {
+                            $monthNumber = (int) $month;
 
-        if ($selectedCampaign && $year > 0 && $month > 0) {
-            $scoped = $this->scopedQuery((int) $selectedCampaign->id, $year, $month);
-            $callerOptions = (clone $scoped)
-                ->whereNotNull('caller_number')
-                ->where('caller_number', '!=', '')
-                ->orderBy('caller_number')
-                ->distinct()
-                ->pluck('caller_number')
-                ->all();
-            $agentOptions = (clone $scoped)
-                ->whereNotNull('agent_number')
-                ->where('agent_number', '!=', '')
-                ->orderBy('agent_number')
-                ->distinct()
-                ->pluck('agent_number')
-                ->all();
+                            return [
+                                'month' => $monthNumber,
+                                'label' => self::MONTH_NAMES[$monthNumber] ?? (string) $monthNumber,
+                                'recordings' => $monthItems->values(),
+                            ];
+                        })
+                        ->values();
 
-            $query = $this->applyRecordingFilters(clone $scoped, $search, $from, $to, $caller, $agent);
-            $direction = $sort === 'newest' ? 'desc' : 'asc';
-            $records = $query->orderBy('called_at', $direction)->orderBy('id', $direction)->paginate($perPage)->withQueryString();
-            $this->hydrateRecordingDurations($records);
-        }
+                    return [
+                        'year' => (int) $year,
+                        'months' => $months,
+                    ];
+                })
+                ->values();
+
+            return [
+                'campaign' => $campaign,
+                'years' => $years,
+            ];
+        });
 
         return view('archive-recordings.index', [
             'campaigns' => $campaigns,
-            'selectedCampaign' => $selectedCampaign,
-            'years' => $years,
-            'months' => $months,
-            'selectedYear' => $year > 0 ? $year : null,
-            'selectedMonth' => $month > 0 ? $month : null,
+            'tree' => $tree,
+            'selectedCampaignId' => $selectedCampaignId > 0 ? $selectedCampaignId : null,
+            'selectedYear' => $selectedYear > 0 ? $selectedYear : null,
+            'selectedMonth' => $selectedMonth > 0 ? $selectedMonth : null,
             'monthNames' => self::MONTH_NAMES,
             'yearOptions' => self::ARCHIVE_YEARS,
-            'records' => $records,
-            'search' => $search,
-            'from' => $from,
-            'to' => $to,
-            'caller' => $caller,
-            'agent' => $agent,
-            'callerOptions' => $callerOptions,
-            'agentOptions' => $agentOptions,
-            'sort' => $sort,
-            'perPage' => $perPage,
         ]);
     }
 
@@ -161,33 +135,84 @@ class ArchiveRecordingController extends Controller
         return response()->download($path, $this->downloadName($recording));
     }
 
-    public function destroy(Request $request, ArchiveRecording $recording): RedirectResponse
+    public function certificate(ArchiveRecording $recording): BinaryFileResponse|RedirectResponse
     {
-        $id = $recording->id;
-        $this->deleteStoredFile($recording);
-        $recording->delete();
-        AuditLogger::log('Deleted', 'Archive Recordings', 'Archive Recordings record deleted', $id, $request);
+        if (! $recording->isDeleted()) {
+            return back()->with('error', 'No certificate is available for this recording.');
+        }
 
-        return back()->with('success', 'Recording deleted successfully.');
+        $path = $this->resolveCertificate($recording);
+        if ($path === null) {
+            return back()->with('error', 'The certificate file is not available.');
+        }
+
+        $name = trim((string) $recording->certificate_name);
+        if ($name === '') {
+            $name = 'certificate-of-deletion.pdf';
+        }
+
+        return response()->file($path, [
+            'Content-Disposition' => 'inline; filename="'.$name.'"',
+        ]);
     }
 
-    public function bulkDestroy(Request $request): RedirectResponse
+    public function destroy(Request $request, ArchiveRecording $recording): RedirectResponse
     {
-        $data = $request->validate([
-            'ids' => ['required', 'array', 'min:1'],
-            'ids.*' => ['integer'],
-        ]);
-        $records = ArchiveRecording::query()->whereIn('id', $data['ids'])->get();
-        foreach ($records as $record) {
-            $this->deleteStoredFile($record);
-            $record->delete();
+        if ($recording->isDeleted()) {
+            return back()->with('error', 'This recording is already deleted.');
         }
-        $count = $records->count();
-        AuditLogger::log('Deleted', 'Archive Recordings', 'Deleted '.$count.' Archive Recordings record'.($count === 1 ? '' : 's'), null, $request);
 
-        $label = $count === 1 ? '1 recording' : $count.' recordings';
+        $uploaded = $request->file('certificate');
+        if ($uploaded instanceof UploadedFile && ! $uploaded->isValid()) {
+            return back()->with('error', 'The certificate failed to upload. '.$uploaded->getErrorMessage());
+        }
 
-        return back()->with('success', 'Deleted '.$label.'.');
+        $validator = Validator::make($request->all(), [
+            'certificate' => ['required', 'file', 'mimes:pdf', 'max:10240'],
+        ], [
+            'certificate.required' => 'A Certificate of Deletion PDF is required.',
+            'certificate.mimes' => 'Only PDF files are allowed.',
+            'certificate.max' => 'The certificate must be 10 MB or smaller.',
+        ]);
+        if ($validator->fails()) {
+            return back()->with('error', (string) $validator->errors()->first());
+        }
+
+        $file = $request->file('certificate');
+        if (! $file instanceof UploadedFile) {
+            return back()->with('error', 'A Certificate of Deletion PDF is required.');
+        }
+
+        try {
+            DB::transaction(function () use ($file, $recording) {
+                $original = basename(str_replace('\\', '/', (string) $file->getClientOriginalName()));
+                if ($original === '' || $original === '.' || $original === '..') {
+                    $original = 'certificate-of-deletion.pdf';
+                }
+                $storedName = $recording->id.'_cert_'.Str::uuid()->toString().'_'.$original;
+                $path = $file->storeAs('archive-recordings/certificates', $storedName);
+                if (! is_string($path) || $path === '') {
+                    throw new \RuntimeException('The certificate file could not be stored.');
+                }
+
+                $recording->forceFill([
+                    'status' => 'Deleted',
+                    'certificate_path' => $path,
+                    'certificate_name' => $original,
+                ])->save();
+            });
+        } catch (\Throwable $exception) {
+            return back()->with('error', PublicError::failed('Certificate upload', $exception));
+        }
+
+        AuditLogger::log('Deleted', 'Archive Recordings', 'Archive Recordings record marked deleted with certificate', $recording->id, $request);
+
+        return back()->with('success', 'Recording marked as deleted.');
+    }
+
+    public function bulkDestroy(): RedirectResponse
+    {
+        return back()->with('error', 'Recordings cannot be permanently deleted. Attach a Certificate of Deletion for each recording.');
     }
 
     public function export(Request $request, XlsxService $xlsx): BinaryFileResponse|RedirectResponse
@@ -210,8 +235,6 @@ class ArchiveRecordingController extends Controller
         try {
             $path = $xlsx->export($headers, $rows, 'archive-recordings.xlsx');
         } catch (\Throwable $exception) {
-            NotificationService::exportFailed('Archive Recordings', 'Export failed.', 'archive-recordings');
-
             return back()->with('error', PublicError::failed('Export', $exception));
         }
 
@@ -318,9 +341,9 @@ class ArchiveRecordingController extends Controller
             'year.in' => 'Please select a year from 2026 to 2018.',
             'month.required' => 'Please select a month.',
             'month.between' => 'Please select a valid month.',
-            'files.required' => 'Select at least one audio file to import.',
-            'files.min' => 'Select at least one audio file to import.',
-            'files.*.max' => 'Each audio file must be 100 MB or smaller.',
+            'files.required' => 'Select at least one recording file.',
+            'files.min' => 'Select at least one recording file.',
+            'files.*.max' => 'Each recording file must be 100 MB or smaller.',
         ]);
 
         if ($validator->fails()) {
@@ -343,7 +366,7 @@ class ArchiveRecordingController extends Controller
             }
             $name = $file->getClientOriginalName() ?: 'audio file';
             if (! $file->isValid()) {
-                $rejected[] = $name.' could not be uploaded. Each audio file must be 100 MB or smaller.';
+                $rejected[] = $name.' could not be uploaded. Each recording file must be 100 MB or smaller.';
                 continue;
             }
             if ($file->getSize() > self::MAX_AUDIO_BYTES) {
@@ -368,7 +391,7 @@ class ArchiveRecordingController extends Controller
         if ($validFiles === []) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Select at least one audio file to import.',
+                'message' => 'Select at least one recording file.',
             ], 422);
         }
 
@@ -396,7 +419,7 @@ class ArchiveRecordingController extends Controller
                         'called_at' => $this->calledAtForImport($original, $year, $month),
                         'server' => '',
                         'storage_path' => $path,
-                        'status' => 'Active',
+                        'status' => 'Available',
                     ]);
                     $duration = AudioDuration::formatFromRecording($recording);
                     if ($duration !== null) {
@@ -412,14 +435,14 @@ class ArchiveRecordingController extends Controller
             ], 422);
         }
 
-        AuditLogger::log('Imported', 'Archive Recordings', 'Imported '.$imported.' audio log'.($imported === 1 ? '' : 's'), null, $request);
+        AuditLogger::log('Created', 'Archive Recordings', 'Added '.$imported.' archive record'.($imported === 1 ? '' : 's'), null, $request);
 
-        $label = $imported === 1 ? '1 audio log' : $imported.' audio logs';
+        $label = $imported === 1 ? '1 record' : $imported.' records';
 
         return response()->json([
             'ok' => true,
             'records' => $imported,
-            'message' => 'Imported '.$label.'.',
+            'message' => 'Added '.$label.'.',
             'redirect' => route('archive-recordings', [
                 'campaign' => $campaignId,
                 'year' => $year,
@@ -594,6 +617,25 @@ class ArchiveRecordingController extends Controller
         if ($fileName !== '') {
             $candidates[] = storage_path('app/archive-recordings/'.$fileName);
             $candidates[] = storage_path('app/private/archive-recordings/'.$fileName);
+        }
+
+        foreach ($candidates as $path) {
+            if (is_file($path)) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveCertificate(ArchiveRecording $recording): ?string
+    {
+        $candidates = [];
+        $stored = trim((string) $recording->certificate_path);
+        if ($stored !== '') {
+            $candidates[] = $stored;
+            $candidates[] = storage_path('app/'.$stored);
+            $candidates[] = storage_path('app/private/'.$stored);
         }
 
         foreach ($candidates as $path) {

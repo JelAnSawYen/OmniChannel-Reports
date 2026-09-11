@@ -25,7 +25,7 @@ class PasswordResetController extends Controller
         $request->validate(['email' => ['required', 'email']]);
 
         if (! MailSetting::isConfigured()) {
-            return back()->with('error', 'Outgoing email is not configured. A System Administrator must save the sending mailbox in Maintenance → Email Delivery.')->withInput();
+            return back()->with('error', 'Outgoing email is not configured. An Administrator must save the sending mailbox in Maintenance → Email Delivery.')->withInput();
         }
 
         try {

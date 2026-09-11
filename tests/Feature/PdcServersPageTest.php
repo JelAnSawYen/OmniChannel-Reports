@@ -33,7 +33,7 @@ class PdcServersPageTest extends TestCase
             'status' => 'Active',
         ]);
         $this->system = User::factory()->create([
-            'user_type_id' => UserType::where('name', 'System Administrator')->value('id'),
+            'user_type_id' => UserType::where('name', 'Administrator')->value('id'),
             'status' => 'Active',
         ]);
         $this->standard = User::factory()->create([
@@ -394,9 +394,8 @@ class PdcServersPageTest extends TestCase
         $this->seedGroupAndServer();
 
         $css = file_get_contents(resource_path('css/app.css'));
-        $this->assertStringContainsString('.pdc-table > thead > tr > th', $css);
-        $this->assertStringContainsString('.pdc-servers-nested thead th', $css);
-        $this->assertStringContainsString('.pdc-servers-nested tbody td', $css);
+        $this->assertStringContainsString('.pdc-table .ca-nested .pdc-servers-nested', $css);
+        $this->assertStringContainsString('table-layout: fixed', $css);
         $this->assertStringContainsString('.pdc-cell-group', $css);
         $this->assertStringContainsString('text-align: center', $css);
         $this->assertMatchesRegularExpression('/\.pdc-cal-year\s*\{[^}]*color:\s*#000/', $css);
@@ -438,19 +437,8 @@ class PdcServersPageTest extends TestCase
         $this->assertStringContainsString('P@ss word!#$', $systemHtml);
 
         $this->actingAs($this->standard);
-        $standardHtml = $this->get('/pdc-servers')->assertOk()->getContent();
-        $this->assertStringContainsString('••••••••', $standardHtml);
-        $this->assertStringNotContainsString('P@ss word!#$', $standardHtml);
-        $this->assertStringNotContainsString('Sql#DB$%^', $standardHtml);
-        $this->assertStringNotContainsString('class="pdc-secret-value"', $standardHtml);
-
-        $export = $this->get('/pdc-servers/export')->assertOk();
-        [$headers, $rows] = app(XlsxService::class)->read($export->getFile()->getPathname());
-        $passwordIndex = array_search('Password', $headers, true);
-        $this->assertNotFalse($passwordIndex);
-        foreach ($rows as $row) {
-            $this->assertSame('', (string) ($row[$passwordIndex] ?? ''));
-        }
+        $this->get('/pdc-servers')->assertForbidden();
+        $this->get('/pdc-servers/export')->assertForbidden();
     }
 
     public function test_excel_import_resolves_sources_dash_rules_and_validation(): void
@@ -549,7 +537,7 @@ class PdcServersPageTest extends TestCase
         $this->get('/pdc-servers?search=BPI')
             ->assertOk()
             ->assertSee('BPI Collection');
-        $this->get('/pdc-servers')->assertOk()->assertSee('id="pdcReset"', false);
+        $this->get('/pdc-servers')->assertOk()->assertDontSee('id="pdcReset"', false);
         $this->get('/channel-allocation')->assertOk()->assertSee('Channel Allocation');
         $this->get('/program-location')->assertOk()->assertSee('Program Location');
         $this->get('/sip-channels')->assertOk()->assertSee('SIP Channels');

@@ -58,6 +58,75 @@ class XlsxService
     }
 
     /**
+     * @param  list<string>  $preamble
+     * @param  list<string>  $headers
+     * @param  iterable<int, list<mixed>>  $rows
+     * @param  list<mixed>|null  $totals
+     */
+    public function exportReport(array $preamble, array $headers, iterable $rows, string $filename, ?array $totals = null): string
+    {
+        if (! class_exists(\ZipArchive::class)) {
+            throw new RuntimeException('Excel export requires the PHP Zip extension.');
+        }
+
+        $base = storage_path('app/temp-xlsx');
+        if (! is_dir($base)) {
+            mkdir($base, 0775, true);
+        }
+
+        $columnCount = max(1, count($headers));
+        $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+        $xml .= '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">';
+        $xml .= '<sheetFormatPr defaultRowHeight="20" customHeight="1"/>';
+        $xml .= $this->columnsXml($headers);
+        $xml .= '<sheetData>';
+        $rowNumber = 1;
+        foreach ($preamble as $index => $line) {
+            $xml .= $this->styledRowXml($rowNumber++, [(string) $line], $index === 0 ? 3 : 0, $columnCount);
+        }
+        if ($preamble !== []) {
+            $xml .= $this->styledRowXml($rowNumber++, array_fill(0, $columnCount, ''), 0, $columnCount);
+        }
+        $xml .= $this->rowXml($rowNumber++, $headers, true, $columnCount);
+        foreach ($rows as $row) {
+            $values = is_array($row) ? array_values($row) : array_values((array) $row);
+            if (count($values) < $columnCount) {
+                $values = array_pad($values, $columnCount, '');
+            }
+            $xml .= $this->rowXml($rowNumber++, $values, false, $columnCount);
+        }
+        if (is_array($totals) && $totals !== []) {
+            $values = array_values($totals);
+            if (count($values) < $columnCount) {
+                $values = array_pad($values, $columnCount, '');
+            }
+            $xml .= $this->rowXml($rowNumber++, $values, true, $columnCount);
+        }
+        $xml .= '</sheetData></worksheet>';
+
+        $zipPath = $base.'/'.Str::uuid().'.xlsx';
+        $zip = new \ZipArchive();
+        $opened = $zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        if ($opened !== true) {
+            throw new RuntimeException('Unable to create the Excel file.');
+        }
+
+        $zip->addFromString('[Content_Types].xml', $this->contentTypesXml());
+        $zip->addFromString('_rels/.rels', $this->rootRelsXml());
+        $zip->addFromString('xl/workbook.xml', $this->workbookXml());
+        $zip->addFromString('xl/_rels/workbook.xml.rels', $this->workbookRelsXml());
+        $zip->addFromString('xl/styles.xml', $this->stylesXml());
+        $zip->addFromString('xl/worksheets/sheet1.xml', $xml);
+        $zip->close();
+
+        if (! is_file($zipPath) || filesize($zipPath) < 4) {
+            throw new RuntimeException('The Excel file could not be written.');
+        }
+
+        return $zipPath;
+    }
+
+    /**
      * @return array{0: list<string>, 1: list<list<string>>}
      */
     public function read(string $path): array
@@ -311,8 +380,28 @@ class XlsxService
         $count = $columnCount > 0 ? $columnCount : count($values);
         for ($index = 0; $index < $count; $index++) {
             $cellRef = $this->columnName($index + 1).$rowNumber;
-            $text = htmlspecialchars((string) ($values[$index] ?? ''), ENT_XML1 | ENT_QUOTES, 'UTF-8');
-            $xml .= '<c r="'.$cellRef.'" s="'.$style.'" t="inlineStr"><is><t>'.$text.'</t></is></c>';
+            $raw = (string) ($values[$index] ?? '');
+            $text = htmlspecialchars($raw, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+            $preserve = (str_contains($raw, "\n") || str_contains($raw, "\r")) ? ' xml:space="preserve"' : '';
+            $xml .= '<c r="'.$cellRef.'" s="'.$style.'" t="inlineStr"><is><t'.$preserve.'>'.$text.'</t></is></c>';
+        }
+
+        return $xml.'</row>';
+    }
+
+    /**
+     * @param  list<mixed>  $values
+     */
+    private function styledRowXml(int $rowNumber, array $values, int $style, int $columnCount = 0): string
+    {
+        $xml = '<row r="'.$rowNumber.'" ht="20" customHeight="1">';
+        $count = $columnCount > 0 ? $columnCount : count($values);
+        for ($index = 0; $index < $count; $index++) {
+            $cellRef = $this->columnName($index + 1).$rowNumber;
+            $raw = (string) ($values[$index] ?? '');
+            $text = htmlspecialchars($raw, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+            $preserve = (str_contains($raw, "\n") || str_contains($raw, "\r")) ? ' xml:space="preserve"' : '';
+            $xml .= '<c r="'.$cellRef.'" s="'.$style.'" t="inlineStr"><is><t'.$preserve.'>'.$text.'</t></is></c>';
         }
 
         return $xml.'</row>';
@@ -337,7 +426,7 @@ class XlsxService
     {
         $length = max(1, mb_strlen($header));
         $width = max(16, $length + 10);
-        if (strcasecmp($header, 'Remarks') === 0) {
+        if (strcasecmp($header, 'Remarks') === 0 || strcasecmp($header, 'Specs') === 0 || strcasecmp($header, 'Specifications') === 0 || strcasecmp($header, 'Issue') === 0) {
             $width = max(42, $width * 2);
         } elseif (preg_match('/gateway|allocation|address|username|database|storage|channel allocation|total channel/i', $header)) {
             $width = max(26, $width + 4);
@@ -371,13 +460,16 @@ class XlsxService
             .'</border>'
             .'</borders>'
             .'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-            .'<cellXfs count="3">'
+            .'<cellXfs count="4">'
             .'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
             .'<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1">'
             .'<alignment horizontal="center" vertical="center" wrapText="1"/>'
             .'</xf>'
             .'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1">'
             .'<alignment horizontal="center" vertical="center" wrapText="1"/>'
+            .'</xf>'
+            .'<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1">'
+            .'<alignment horizontal="left" vertical="center" wrapText="1"/>'
             .'</xf>'
             .'</cellXfs>'
             .'</styleSheet>';

@@ -6,6 +6,7 @@ use App\Models\ChannelAllocation;
 use App\Models\ChannelAllocationCampaign;
 use App\Models\MediaGateway;
 use App\Models\PdcServer;
+use App\Support\ProgramInboundImportMapper;
 
 class InventoryImportCatalog
 {
@@ -18,7 +19,7 @@ class InventoryImportCatalog
         abort_unless(isset($modules[$module]), 404);
         $config = $modules[$module];
         $extras = self::operationExtras($module);
-        $fields = $config['columns'];
+        $fields = $config['table_columns'] ?? $config['columns'];
         if (! empty($extras['extra_fields']) && is_array($extras['extra_fields'])) {
             $fields = array_merge($fields, $extras['extra_fields']);
             unset($extras['extra_fields']);
@@ -182,18 +183,20 @@ class InventoryImportCatalog
             'globe-sim' => self::simImportExtras(),
             'smart-sim' => self::simImportExtras(),
             'program-inbound-numbers' => [
-                'required' => ['number', 'status'],
-                'unique' => ['number'],
-                'status_options' => ['Active', 'Inactive'],
+                'required' => ['campaign'],
+                'include_id' => false,
+                'no_carry' => ['mobile', 'landline', 'gsm_gateway', 'port', 'network', 'remarks'],
+                'to_record' => [ProgramInboundImportMapper::class, 'map'],
             ],
             'signal-boosters' => [
                 'required' => ['model', 'serial_number', 'status'],
                 'unique' => ['serial_number'],
                 'status_options' => ['Active', 'Inactive'],
+                'no_carry' => ['specs'],
             ],
             'defective-gsm' => [
                 'required' => ['asset_code', 'status'],
-                'date_fields' => ['reported_on'],
+                'mdy_date_fields' => ['reported_on'],
                 'status_options' => ['Open', 'In Repair', 'Replaced', 'Closed'],
             ],
             default => [],

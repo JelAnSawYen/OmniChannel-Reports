@@ -51,6 +51,17 @@ class ChannelAllocationCampaign extends Model
             ->keyBy(fn (self $campaign) => mb_strtolower((string) $campaign->name));
     }
 
+    public static function findOrCreateByName(string $name): self
+    {
+        $name = trim($name);
+        $existing = static::keyedByName()->get(mb_strtolower($name));
+        if ($existing) {
+            return $existing;
+        }
+
+        return static::query()->create(['name' => $name]);
+    }
+
     public function allocations(): HasMany
     {
         return $this->hasMany(ChannelAllocation::class, 'campaign_id')->orderBy('sort_order')->orderBy('id');

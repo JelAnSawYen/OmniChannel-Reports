@@ -1,5 +1,6 @@
 <?php $__env->startSection('content'); ?>
 <?php
+    $canRevealSecrets = auth()->user()->canExportGatewaySecrets();
     $gatewayColumns = [
         'ip_address' => 'Hostname IP',
         'site_code' => 'Serial Number',
@@ -24,10 +25,8 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
             </span>
             <input id="mediaSearchInput" name="search" value="<?php echo e($search); ?>" placeholder="<?php echo e($resource['search']); ?>" aria-label="<?php echo e($resource['search']); ?>" autocomplete="off">
-            <button type="button" class="search-clear" id="mediaSearchClear" aria-label="Clear search" title="Clear search">×</button>
         </form>
         <button class="btn primary" type="submit" form="mediaSearchForm">Search</button>
-        <?php if($search !== ''): ?><a class="btn secondary" href="<?php echo e(route($resource['index'])); ?>" id="mediaSearchReset">Reset</a><?php endif; ?>
         <?php if(auth()->user()->hasPermission('media.export')): ?>
         <?php echo $__env->make('partials.data-transfer', [
             'canExport' => true,
@@ -71,16 +70,18 @@
     <td>
         <span class="pdc-secret">
             <span class="pdc-secret-mask">••••••</span>
-            <span class="pdc-secret-value" hidden><?php echo e($gateway->password); ?></span>
-            <button type="button" class="pdc-secret-toggle" title="Show password" aria-label="Show password">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
+            <?php if($canRevealSecrets && $gateway->password): ?>
+                <span class="pdc-secret-value" hidden><?php echo e($gateway->password); ?></span>
+                <button type="button" class="pdc-secret-toggle" title="Show password" aria-label="Show password">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+            <?php endif; ?>
         </span>
     </td>
     <td class="actions-column">
         <div class="row-actions">
             <?php if(auth()->user()->hasPermission('media.edit') && auth()->user()->canMutateGateways()): ?>
-                <button type="button" class="action-btn edit" data-edit-id="<?php echo e($gateway->id); ?>" data-edit-site_name="<?php echo e($gateway->site_name); ?>" data-edit-site_code="<?php echo e($gateway->site_code); ?>" data-edit-ip_address="<?php echo e($gateway->ip_address); ?>" data-edit-plan="<?php echo e($gateway->plan); ?>" data-edit-port="<?php echo e($gateway->port); ?>" data-edit-network="<?php echo e($gateway->network); ?>" data-edit-device_function="<?php echo e($gateway->device_function); ?>" data-edit-username="<?php echo e($gateway->username); ?>" data-edit-password="<?php echo e($gateway->password); ?>" title="Edit <?php echo e($resource['entity']); ?>" aria-label="Edit <?php echo e($resource['entity']); ?>">
+                <button type="button" class="action-btn edit" data-edit-id="<?php echo e($gateway->id); ?>" data-edit-site_name="<?php echo e($gateway->site_name); ?>" data-edit-site_code="<?php echo e($gateway->site_code); ?>" data-edit-ip_address="<?php echo e($gateway->ip_address); ?>" data-edit-plan="<?php echo e($gateway->plan); ?>" data-edit-port="<?php echo e($gateway->port); ?>" data-edit-network="<?php echo e($gateway->network); ?>" data-edit-device_function="<?php echo e($gateway->device_function); ?>" data-edit-username="<?php echo e($gateway->username); ?>" <?php if($canRevealSecrets): ?> data-edit-password="<?php echo e($gateway->password); ?>" <?php endif; ?> title="Edit <?php echo e($resource['entity']); ?>" aria-label="Edit <?php echo e($resource['entity']); ?>">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
                 </button>
             <?php endif; ?>
@@ -160,9 +161,11 @@
                         <label for="password">Password</label>
                         <div class="pdc-password-field">
                             <input class="form-control" type="password" id="password" name="password" autocomplete="new-password">
-                            <button type="button" class="pdc-secret-toggle" data-toggle-input="password" title="Show password" aria-label="Show password">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-                            </button>
+                            <?php if(auth()->user()->canExportGatewaySecrets()): ?>
+                                <button type="button" class="pdc-secret-toggle" data-toggle-input="password" title="Show password" aria-label="Show password">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                                </button>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>

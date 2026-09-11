@@ -10,14 +10,9 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
             </span>
             <input id="channelAllocationSearchInput" name="search" value="<?php echo e($search); ?>" placeholder="Search Channels" aria-label="Search Channels" autocomplete="off">
-            <button type="button" class="search-clear" data-clear-search aria-label="Clear search" title="Clear search">×</button>
             <?php if(request('per_page')): ?><input type="hidden" name="per_page" value="<?php echo e(request('per_page')); ?>"><?php endif; ?>
         </form>
         <button class="btn primary" type="submit" form="channelAllocationSearchForm">Search</button>
-        <a class="btn secondary" href="<?php echo e(route('channel-allocation')); ?>" id="channelAllocationReset">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path></svg>
-            Reset
-        </a>
         <?php if(auth()->user()->hasPermission('media.export')): ?>
         <div class="transfer">
             <button class="btn" type="button" id="transferButton" aria-haspopup="true" aria-expanded="false" aria-controls="transferMenu">
@@ -84,7 +79,6 @@
             </button>
             <span class="ca-campaign-identity">
                 <button type="button" class="ca-campaign-link" data-ca-toggle="<?php echo e($campaign->id); ?>"><?php echo e($campaign->name); ?></button>
-                <span class="ca-count"><?php echo e($allocCount); ?> <?php echo e($allocCount === 1 ? 'allocation' : 'allocations'); ?></span>
             </span>
         </span>
     </td>
@@ -449,28 +443,29 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('[data-ca-toggle]').forEach((button) => {
-        button.addEventListener('click', () => {
-            const id = button.getAttribute('data-ca-toggle');
-            const panel = document.getElementById('ca-panel-' + id);
-            const row = document.querySelector('tr.ca-campaign-row[data-campaign="' + id + '"]');
-            if (!panel) return;
-            const open = panel.hasAttribute('hidden');
-            panel.toggleAttribute('hidden', !open);
-            row?.classList.toggle('open', open);
-            document.querySelectorAll('[data-ca-toggle="' + id + '"]').forEach((el) => {
-                el.setAttribute('aria-expanded', open ? 'true' : 'false');
-            });
+    document.addEventListener('click', (event) => {
+        if (!(event.target instanceof Element)) return;
+        const button = event.target.closest('[data-ca-toggle]');
+        if (!button) return;
+        const id = button.getAttribute('data-ca-toggle');
+        const panel = document.getElementById('ca-panel-' + id);
+        const row = document.querySelector('tr.ca-campaign-row[data-campaign="' + id + '"]');
+        if (!panel) return;
+        const open = panel.hasAttribute('hidden');
+        panel.toggleAttribute('hidden', !open);
+        row?.classList.toggle('open', open);
+        document.querySelectorAll('[data-ca-toggle="' + id + '"]').forEach((el) => {
+            el.setAttribute('aria-expanded', open ? 'true' : 'false');
         });
     });
 
-    document.querySelectorAll('tr.ca-campaign-row[data-campaign]').forEach((row) => {
-        row.addEventListener('click', (event) => {
-            if (!(event.target instanceof Element)) return;
-            if (event.target.closest('.actions-column, .ca-menu, a, input, select, textarea, label, .action-btn, .plus-btn')) return;
-            if (event.target.closest('[data-ca-toggle]')) return;
-            row.querySelector('[data-ca-toggle]')?.click();
-        });
+    document.addEventListener('click', (event) => {
+        if (!(event.target instanceof Element)) return;
+        const row = event.target.closest('tr.ca-campaign-row[data-campaign]');
+        if (!row) return;
+        if (event.target.closest('.actions-column, .ca-menu, a, input, select, textarea, label, .action-btn, .plus-btn')) return;
+        if (event.target.closest('[data-ca-toggle]')) return;
+        row.querySelector('[data-ca-toggle]')?.click();
     });
 
     const closeCaMenus = (except) => {
@@ -482,24 +477,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    document.querySelectorAll('.ca-menu-btn').forEach((button) => {
-        button.addEventListener('click', (event) => {
-            event.stopPropagation();
-            const menu = button.closest('.ca-menu');
-            const dropdown = menu?.querySelector('.ca-menu-dropdown');
-            if (!menu || !dropdown) return;
-            const willOpen = !menu.classList.contains('open');
-            closeCaMenus();
-            if (!willOpen) return;
-            menu.classList.add('open');
-            dropdown.removeAttribute('hidden');
-            button.setAttribute('aria-expanded', 'true');
-            const rect = button.getBoundingClientRect();
-            dropdown.style.position = 'fixed';
-            dropdown.style.top = (rect.bottom + 4) + 'px';
-            dropdown.style.right = Math.max(8, window.innerWidth - rect.right) + 'px';
-            dropdown.style.left = 'auto';
-        });
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('.ca-menu-btn');
+        if (!button) return;
+        event.stopPropagation();
+        const menu = button.closest('.ca-menu');
+        const dropdown = menu?.querySelector('.ca-menu-dropdown');
+        if (!menu || !dropdown) return;
+        const willOpen = !menu.classList.contains('open');
+        closeCaMenus();
+        if (!willOpen) return;
+        menu.classList.add('open');
+        dropdown.removeAttribute('hidden');
+        button.setAttribute('aria-expanded', 'true');
+        const rect = button.getBoundingClientRect();
+        dropdown.style.position = 'fixed';
+        dropdown.style.top = (rect.bottom + 4) + 'px';
+        dropdown.style.right = Math.max(8, window.innerWidth - rect.right) + 'px';
+        dropdown.style.left = 'auto';
     });
 
     document.addEventListener('click', (event) => {
@@ -609,7 +604,9 @@ document.addEventListener('DOMContentLoaded', () => {
         campaignModal?.classList.add('visible');
     });
 
-    document.querySelectorAll('[data-campaign-edit]').forEach((button) => button.addEventListener('click', () => {
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-campaign-edit]');
+        if (!button) return;
         closeCaMenus();
         const recordId = Number(button.dataset.id);
         if (!Number.isInteger(recordId) || recordId < 1) return;
@@ -630,7 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (field) field.value = values[key] ?? '';
         });
         campaignModal?.classList.add('visible');
-    }));
+    });
 
     const allocationModal = document.getElementById('allocationModal');
     const allocationForm = document.getElementById('allocationForm');
@@ -681,20 +678,23 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById(id)?.addEventListener('paste', (event) => event.preventDefault());
     });
 
-    document.querySelectorAll('[data-allocation-add]').forEach((button) => button.addEventListener('click', () => {
-        const campaignId = Number(button.dataset.campaign);
-        if (!Number.isInteger(campaignId) || campaignId < 1) return;
-        allocationMethod.value = 'POST';
-        allocationForm.action = updateBase + '/' + campaignId + '/allocations';
-        document.getElementById('allocationModalTitle').textContent = 'Add Allocation';
-        allocationForm.reset();
-        ensureSelectValue(allocGatewaySelect, button.dataset.gateway || '');
-        fillAllocationFromSip();
-        setAllocRemarksVisible(false);
-        allocationModal?.classList.add('visible');
-    }));
-
-    document.querySelectorAll('[data-allocation-edit]').forEach((button) => button.addEventListener('click', () => {
+    document.addEventListener('click', (event) => {
+        const addButton = event.target.closest('[data-allocation-add]');
+        if (addButton) {
+            const campaignId = Number(addButton.dataset.campaign);
+            if (!Number.isInteger(campaignId) || campaignId < 1) return;
+            allocationMethod.value = 'POST';
+            allocationForm.action = updateBase + '/' + campaignId + '/allocations';
+            document.getElementById('allocationModalTitle').textContent = 'Add Allocation';
+            allocationForm.reset();
+            ensureSelectValue(allocGatewaySelect, addButton.dataset.gateway || '');
+            fillAllocationFromSip();
+            setAllocRemarksVisible(false);
+            allocationModal?.classList.add('visible');
+            return;
+        }
+        const button = event.target.closest('[data-allocation-edit]');
+        if (!button) return;
         const campaignId = Number(button.dataset.campaign);
         const recordId = Number(button.dataset.id);
         if (!Number.isInteger(campaignId) || !Number.isInteger(recordId) || campaignId < 1 || recordId < 1) return;
@@ -712,7 +712,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (linePriority) linePriority.value = values.line_priority ?? '';
         fillAllocationFromSip();
         allocationModal?.classList.add('visible');
-    }));
+    });
 
     const importModal = document.getElementById('importModal');
     const importPreviewModal = document.getElementById('importPreviewModal');

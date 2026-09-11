@@ -64,12 +64,22 @@ trait HandlesInventoryImport
 
         $token = $import->storePreview($config['key'], $preview);
 
+        $rows = $preview['rows'];
+        if (! ($request->user()?->canExportGatewaySecrets() ?? false)) {
+            foreach ($rows as &$row) {
+                if (array_key_exists('password', $row)) {
+                    $row['password'] = '';
+                }
+            }
+            unset($row);
+        }
+
         return response()->json([
             'ok' => true,
             'token' => $token,
             'valid' => $preview['valid'],
             'summary' => $preview['summary'],
-            'rows' => $preview['rows'],
+            'rows' => $rows,
             'headers' => $preview['headers'],
         ]);
     }

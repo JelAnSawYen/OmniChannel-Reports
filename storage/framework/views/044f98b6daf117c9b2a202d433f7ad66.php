@@ -15,13 +15,9 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
             </span>
             <input id="locationSearchInput" name="search" value="<?php echo e($search); ?>" placeholder="Search <?php echo e($locationName); ?>" aria-label="Search <?php echo e($locationName); ?>" autocomplete="off">
-            <button type="button" class="search-clear" data-clear-search aria-label="Clear search" title="Clear search">×</button>
             <?php if(request('per_page')): ?><input type="hidden" name="per_page" value="<?php echo e(request('per_page')); ?>"><?php endif; ?>
         </form>
         <button class="btn primary" type="submit" form="locationSearchForm">Search</button>
-        <?php if($search !== ''): ?>
-            <a class="btn secondary" href="<?php echo e(route('program-location.show', $locationSlug)); ?>">Reset</a>
-        <?php endif; ?>
         <a class="btn secondary" href="<?php echo e(route('program-location')); ?>">All Locations</a>
         <?php if(auth()->user()->hasPermission('media.export')): ?>
         <?php echo $__env->make('partials.data-transfer', [
@@ -169,8 +165,9 @@ document.addEventListener('DOMContentLoaded', () => {
         modal?.classList.add('visible');
     });
 
-    document.querySelectorAll('[data-location-edit]').forEach((button) => button.addEventListener('click', () => {
-        if (!form || !method) return;
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-location-edit]');
+        if (!button || !form || !method) return;
         const recordId = Number(button.dataset.id);
         if (!Number.isInteger(recordId) || recordId < 1) return;
         const values = JSON.parse(button.dataset.values || '{}');
@@ -182,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (field) field.value = values[key] ?? '';
         });
         modal?.classList.add('visible');
-    }));
+    });
 });
 </script>
 <?php echo $__env->make('partials.inventory-import-script', [

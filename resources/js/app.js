@@ -16,31 +16,35 @@ let pinnedPageScroll=null;
 function pinPageScroll(pos){
     pinnedPageScroll=pos||readPageScroll();
 }
-function restorePinnedPageScroll(){
-    if(!pinnedPageScroll)return;
-    writePageScroll(pinnedPageScroll);
-}
-function withPinnedPageScroll(fn){
-    const pos=pinnedPageScroll||readPageScroll();
-    fn();
-    writePageScroll(pos);
-    pinnedPageScroll=pos;
-    requestAnimationFrame(()=>writePageScroll(pos));
-}
-const showModal=(id)=>withPinnedPageScroll(()=>qs('#'+id)?.classList.add('visible'));
-const hideModal=(id)=>withPinnedPageScroll(()=>qs('#'+id)?.classList.remove('visible'));
+const showModal=(id)=>qs('#'+id)?.classList.add('visible');
+const hideModal=(id)=>qs('#'+id)?.classList.remove('visible');
 
 function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
 
+function isSystemFlash(el){
+    return el && el.id!=='importUploadError' && !el.classList.contains('import-upload-error');
+}
+function bindFlashClose(el){
+    el?.querySelector('.flash-close')?.addEventListener('click',()=>el.remove());
+}
 function flash(message,type='success'){
-    let el=qs('.flash');
-    if(!el){
-        el=document.createElement('div');
-        el.className='flash';
-        qs('.page-container')?.prepend(el);
-    }
+    qsa('.flash').forEach(el=>{
+        if(isSystemFlash(el))el.remove();
+    });
+    const el=document.createElement('div');
     el.className='flash '+type;
-    el.textContent=message;
+    el.setAttribute('role',type==='error'?'alert':'status');
+    const text=document.createElement('span');
+    text.className='flash-message';
+    text.textContent=message;
+    const close=document.createElement('button');
+    close.type='button';
+    close.className='flash-close';
+    close.setAttribute('aria-label','Close');
+    close.textContent='×';
+    el.append(text,close);
+    (qs('.flash-host')||document.body).appendChild(el);
+    bindFlashClose(el);
     window.setTimeout(()=>el.remove(),2000);
 }
 
@@ -50,7 +54,8 @@ function initGlobal(){
     const body=document.body;
 
     qsa('.flash').forEach(el=>{
-        if(el.id==='importUploadError'||el.classList.contains('import-upload-error'))return;
+        if(!isSystemFlash(el))return;
+        bindFlashClose(el);
         window.setTimeout(()=>el.remove(),2000);
     });
 
@@ -76,30 +81,34 @@ function initGlobal(){
     qs('#accountButton')?.addEventListener('click',e=>{
         e.stopPropagation();
         qs('#accountMenu')?.classList.toggle('open');
-        qs('#notificationMenu')?.classList.remove('open');
     });
 
-    const userManagementGroup=qs('#accountUserManagement');
-    const userManagementToggle=qs('#accountUserManagementToggle');
-    userManagementToggle?.addEventListener('click',e=>{
+    qs('#accountSettingsToggle')?.addEventListener('click',e=>{
+        e.preventDefault();
         e.stopPropagation();
-        userManagementGroup?.classList.toggle('open');
-        userManagementToggle.setAttribute('aria-expanded',userManagementGroup?.classList.contains('open')?'true':'false');
-    });
-
-    qs('#notificationButton')?.addEventListener('click',e=>{
-        e.stopPropagation();
-        qs('#notificationMenu')?.classList.toggle('open');
-        qs('#accountMenu')?.classList.remove('open');
+        const group=qs('#accountSettingsGroup');
+        const open=!group?.classList.contains('open');
+        group?.classList.toggle('open',open);
+        qs('#accountSettingsToggle')?.setAttribute('aria-expanded',open?'true':'false');
     });
 
     document.addEventListener('click',e=>{
         if(!e.target.closest('.account-wrap'))qs('#accountMenu')?.classList.remove('open');
-        if(!e.target.closest('.notification-wrap'))qs('#notificationMenu')?.classList.remove('open');
+        if(!e.target.closest('.rpt-export'))qs('#reportExportMenu')?.classList.remove('open');
     });
 
-    const locationGroup=qs('#programLocationGroup');
-    const locationToggle=qs('#programLocationToggle');
+    const reportExportButton=qs('#reportExportButton');
+    const reportExportMenu=qs('#reportExportMenu');
+    reportExportButton?.addEventListener('click',e=>{
+        e.stopPropagation();
+        const willOpen=!reportExportMenu?.classList.contains('open');
+        reportExportMenu?.classList.toggle('open',willOpen);
+        reportExportButton.setAttribute('aria-expanded',willOpen?'true':'false');
+    });
+
+    const networkGroup=qs('#networkGroup');
+    const networkToggle=qs('#networkToggle');
+    const networkCaret=qs('#networkCaret');
     const locationNav=qs('#sidebarNav');
     const locationScrollKey='omnichannel.sidebar.navScroll';
     if(locationNav){
@@ -109,13 +118,19 @@ function initGlobal(){
             sessionStorage.setItem(locationScrollKey,String(locationNav.scrollTop));
         },{passive:true});
     }
-    locationToggle?.addEventListener('click',e=>{
+    const syncNetworkOpen=()=>{
+        const open=networkGroup?.classList.contains('open');
+        networkToggle?.setAttribute('aria-expanded',open?'true':'false');
+        networkCaret?.setAttribute('aria-expanded',open?'true':'false');
+    };
+    const toggleNetwork=e=>{
         e.preventDefault();
         e.stopPropagation();
-        locationGroup?.classList.toggle('open');
-        const open=locationGroup?.classList.contains('open');
-        locationToggle.setAttribute('aria-expanded',open?'true':'false');
-    });
+        networkGroup?.classList.toggle('open');
+        syncNetworkOpen();
+    };
+    networkToggle?.addEventListener('click',toggleNetwork);
+    networkCaret?.addEventListener('click',toggleNetwork);
 
     qs('#logoutButton')?.addEventListener('click',()=>{
         qs('#accountMenu')?.classList.remove('open');
@@ -130,54 +145,146 @@ function initGlobal(){
     qsa('.modal-backdrop').forEach(m=>m.addEventListener('click',e=>{
         if(e.target===m){
             if(m.id)hideModal(m.id);
-            else withPinnedPageScroll(()=>m.classList.remove('visible'));
+            else m.classList.remove('visible');
         }
     }));
 
-    qsa('[data-clear-search]').forEach(button=>{
-        button.addEventListener('click',()=>{
-            const form=button.closest('form');
-            const input=form?.querySelector('input[name="search"]');
-            if(input){
-                input.value='';
-                form?.submit();
-            }
+    function liveSearchUrl(form, searchValue){
+        const action=form.getAttribute('action')||location.pathname;
+        const url=new URL(action,location.origin);
+        const data=new FormData(form);
+        data.delete('page');
+        if(searchValue!==undefined)data.set('search',searchValue);
+        const params=new URLSearchParams();
+        data.forEach((value,key)=>{
+            if(key==='search' && !String(value||'').trim())return;
+            if(value==='' && (key==='user_type_id'||key==='status'||key==='action'||key==='location'))return;
+            params.set(key,String(value));
         });
-    });
-    qsa('form[data-live-search]').forEach(form=>{
-        const input=form.querySelector('input[name="search"]');
-        if(!input)return;
+        url.search=params.toString();
+        return url;
+    }
+
+    function resultCards(root){
+        return [...root.querySelectorAll('.table-card, .ar-tree-card, .health-module-card')];
+    }
+
+    function swapLiveResults(fromDoc, input){
+        const current=resultCards(document);
+        const next=resultCards(fromDoc);
+        current.forEach((card,i)=>{
+            const incoming=next[i];
+            if(!incoming)return;
+            if(card.contains(input)){
+                const cur=card.querySelector('form[data-select-user], .table-wrap');
+                const nxt=incoming.querySelector('form[data-select-user], .table-wrap');
+                if(cur&&nxt)cur.replaceWith(document.importNode(nxt,true));
+                const curFoot=card.querySelector(':scope > .table-footer');
+                const nxtFoot=incoming.querySelector(':scope > .table-footer');
+                if(curFoot&&nxtFoot)curFoot.replaceWith(document.importNode(nxtFoot,true));
+                else if(!curFoot&&nxtFoot)card.appendChild(document.importNode(nxtFoot,true));
+                else if(curFoot&&!nxtFoot)curFoot.remove();
+                return;
+            }
+            card.replaceWith(document.importNode(incoming,true));
+        });
+        const exportNext=fromDoc.querySelector('#exportDataButton');
+        const exportCur=document.querySelector('#exportDataButton');
+        if(exportCur&&exportNext)exportCur.setAttribute('href',exportNext.getAttribute('href')||exportNext.href);
+    }
+
+    let liveSearchRequest=null;
+    async function fetchLiveResults(form, input, searchValue){
+        if(!form||form.id==='mediaSearchForm')return;
+        const url=liveSearchUrl(form, searchValue);
+        if(liveSearchRequest)liveSearchRequest.abort();
+        const controller=new AbortController();
+        liveSearchRequest=controller;
+        try{
+            const response=await fetch(url.toString(),{
+                headers:{Accept:'text/html','X-Requested-With':'XMLHttpRequest'},
+                signal:controller.signal,
+                credentials:'same-origin'
+            });
+            if(!response.ok)return;
+            if(input && input.value!==searchValue)return;
+            const html=await response.text();
+            if(input && input.value!==searchValue)return;
+            const doc=new DOMParser().parseFromString(html,'text/html');
+            swapLiveResults(doc, input);
+            const next=url.pathname+(url.search||'');
+            if(`${location.pathname}${location.search}`!==next)history.replaceState({},'',next);
+        }catch(error){
+            if(error?.name==='AbortError')return;
+        }finally{
+            if(liveSearchRequest===controller)liveSearchRequest=null;
+        }
+    }
+
+    qsa('form').forEach(form=>{
+        if(form.id==='mediaSearchForm')return;
+        if((form.getAttribute('method')||'get').toLowerCase()==='post')return;
+        const input=form.querySelector('input[name="search"]:not([type="hidden"])');
+        if(!input||form.dataset.liveSearchBound==='1')return;
+        form.dataset.liveSearchBound='1';
         let timer;
         input.addEventListener('input',()=>{
+            if(liveSearchRequest)liveSearchRequest.abort();
             clearTimeout(timer);
-            timer=setTimeout(()=>form.submit(),300);
+            const value=input.value;
+            timer=setTimeout(()=>fetchLiveResults(form, input, value),180);
+        });
+        form.addEventListener('submit',event=>{
+            event.preventDefault();
+            clearTimeout(timer);
+            fetchLiveResults(form, input, input.value);
         });
     });
-    qsa('form[data-select-user]').forEach(form=>{
-        form.querySelectorAll('input[type="radio"][name="user"]').forEach(radio=>{
-            radio.addEventListener('change',()=>form.submit());
-        });
-        form.querySelectorAll('tr').forEach(row=>{
-            row.addEventListener('click',event=>{
-                if(event.target.closest('input,a,button'))return;
-                const radio=row.querySelector('input[type="radio"][name="user"]');
-                if(!radio||radio.checked)return;
-                radio.checked=true;
-                form.submit();
-            });
-        });
+    document.addEventListener('change',event=>{
+        const form=event.target.closest('form[data-select-user]');
+        if(!form||!event.target.matches('input[type="radio"][name="user"]'))return;
+        form.submit();
+    });
+    document.addEventListener('click',event=>{
+        const row=event.target.closest('form[data-select-user] tr');
+        if(!row||event.target.closest('input,a,button'))return;
+        const radio=row.querySelector('input[type="radio"][name="user"]');
+        if(!radio||radio.checked)return;
+        radio.checked=true;
+        radio.closest('form')?.submit();
     });
 
     initConfirm();
-    initNotifications();
     initPreserveExpandedView();
 }
 
 function initPreserveExpandedView(){
     const here=()=>location.pathname+location.search;
+    const detailsKey=(el)=>{
+        const parts=[];
+        let node=el;
+        while(node&&node.tagName==='DETAILS'){
+            parts.unshift((node.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim());
+            node=node.parentElement?node.parentElement.closest('details'):null;
+        }
+        return parts.join('>');
+    };
     const openPanels=()=>qsa('[id^="ca-panel-"],[id^="pdc-panel-"]').filter(el=>!el.hasAttribute('hidden')).map(el=>el.id);
+    const openDetails=()=>qsa('details[open]').map(detailsKey);
+    const readAll=()=>{
+        try{
+            const raw=JSON.parse(sessionStorage.getItem(expandedViewKey)||'null');
+            if(!raw)return {};
+            if(raw.path)return{[raw.path]:raw};
+            return raw;
+        }catch(e){return {};}
+    };
     const persist=()=>{
-        sessionStorage.setItem(expandedViewKey,JSON.stringify({path:here(),scroll:readPageScroll(),panels:openPanels()}));
+        const all=readAll();
+        const state={scroll:readPageScroll(),panels:openPanels(),details:openDetails()};
+        all[here()]=state;
+        all[location.pathname]=state;
+        sessionStorage.setItem(expandedViewKey,JSON.stringify(all));
     };
     const restorePanels=(ids)=>{
         (ids||[]).forEach(id=>{
@@ -187,40 +294,29 @@ function initPreserveExpandedView(){
             qs('[data-ca-toggle="'+toggleId+'"]')?.click();
         });
     };
-    const relock=()=>restorePinnedPageScroll();
-
-    document.addEventListener('click',event=>{
-        const target=event.target instanceof Element?event.target:null;
-        if(!target)return;
-        if(!target.closest('.action-btn,.ca-menu-item,[data-allocation-edit],[data-pdc-server-edit],[data-pdc-group-edit],[data-campaign-edit],[data-sip-edit],[data-operation-edit],[data-location-edit],[data-edit-id],[data-close],#confirmModalOk,#confirmModalCancel,#confirmModalDismiss'))return;
-        pinPageScroll();
-        relock();
-        requestAnimationFrame(relock);
-        window.setTimeout(relock,0);
-    },true);
-
-    qsa('.modal-backdrop').forEach(modal=>{
-        new MutationObserver(()=>{
-            relock();
-            requestAnimationFrame(relock);
-        }).observe(modal,{attributes:true,attributeFilter:['class']});
-    });
+    const restoreDetails=(keys)=>{
+        const want=new Set(keys||[]);
+        if(!want.size)return;
+        qsa('details').forEach(el=>{
+            if(want.has(detailsKey(el)))el.open=true;
+        });
+    };
 
     document.addEventListener('submit',persist,true);
+    window.addEventListener('beforeunload',persist);
+    qsa('.per-page-select').forEach(select=>select.addEventListener('change',persist));
 
-    const raw=sessionStorage.getItem(expandedViewKey);
-    if(!raw)return;
-    sessionStorage.removeItem(expandedViewKey);
-    try{
-        const state=JSON.parse(raw);
-        const same=state.path===here()||(typeof state.path==='string'&&state.path.split('?')[0]===here().split('?')[0]);
-        if(!same)return;
-        restorePanels(state.panels);
-        pinPageScroll(state.scroll);
-        writePageScroll(state.scroll);
-        requestAnimationFrame(()=>writePageScroll(state.scroll));
-        window.setTimeout(()=>writePageScroll(state.scroll),0);
-    }catch(e){}
+    const all=readAll();
+    const key=Object.prototype.hasOwnProperty.call(all,here())?here():(Object.prototype.hasOwnProperty.call(all,location.pathname)?location.pathname:'');
+    if(!key)return;
+    const state=all[key];
+    delete all[key];
+    if(key!==location.pathname)delete all[location.pathname];
+    sessionStorage.setItem(expandedViewKey,JSON.stringify(all));
+    restorePanels(state.panels);
+    restoreDetails(state.details);
+    pinPageScroll(state.scroll);
+    writePageScroll(state.scroll);
 }
 
 function initConfirm(){
@@ -281,112 +377,6 @@ function initConfirm(){
     });
 }
 
-function initNotifications(){
-    const menu=qs('#notificationMenu');
-    if(!menu||menu.dataset.bound==='1')return;
-    menu.dataset.bound='1';
-
-    async function post(url, method){
-        const response=await fetch(url,{
-            method,
-            headers:{
-                Accept:'application/json',
-                'X-CSRF-TOKEN':csrf(),
-                'X-Requested-With':'XMLHttpRequest',
-                'X-HTTP-METHOD-OVERRIDE': method==='DELETE'?'DELETE':''
-            }
-        });
-        if(!response.ok)throw new Error('Unable to update notification');
-    }
-
-    function markRow(row){
-        if(!row)return;
-        row.classList.remove('unread');
-        const mark=qs('[data-notification-mark]',row);
-        if(mark)mark.hidden=true;
-    }
-
-    function refreshEmpty(){
-        const list=qs('#notificationList');
-        if(!list)return;
-        const items=qsa('.notification-item',list);
-        if(!items.length){
-            list.innerHTML='<div class="notification-empty">No operational alerts right now.</div>';
-            qs('.notification-footer')?.remove();
-            qs('.notification-readall-form')?.remove();
-            qs('#notificationBadge')?.remove();
-        }
-        const unread=qsa('.notification-item.unread',list).length;
-        const badge=qs('#notificationBadge');
-        if(badge){
-            if(!unread)badge.remove();
-            else badge.textContent=String(unread);
-        }
-        const pill=qs('#notificationCountPill');
-        if(pill){
-            pill.textContent=unread+' New';
-            pill.hidden=!unread;
-        }
-    }
-
-    qsa('[data-notification-read]').forEach(link=>{
-        link.addEventListener('click',()=>{
-            const id=link.dataset.notificationRead;
-            const row=link.closest('.notification-item');
-            markRow(row);
-            const pill=qs('.status-pill',row||document);
-            if(pill)pill.textContent='Read';
-            post('/notifications/'+encodeURIComponent(id)+'/read','POST').catch(()=>{});
-            refreshEmpty();
-        });
-    });
-
-    qsa('[data-notification-mark]').forEach(button=>{
-        button.addEventListener('click',async event=>{
-            event.preventDefault();
-            event.stopPropagation();
-            const id=button.dataset.notificationMark;
-            try{
-                await post('/notifications/'+encodeURIComponent(id)+'/read','POST');
-                markRow(button.closest('.notification-item'));
-                refreshEmpty();
-            }catch(error){
-                flash(error.message||'Unable to mark the notification as read.','error');
-            }
-        });
-    });
-
-    qs('#markAllNotificationsForm')?.addEventListener('submit',async event=>{
-        event.preventDefault();
-        try{
-            await post('/notifications/read-all','POST');
-            qsa('.notification-item',qs('#notificationList')).forEach(markRow);
-            refreshEmpty();
-        }catch(error){
-            flash(error.message||'Unable to mark notifications as read.','error');
-        }
-    });
-
-    qsa('[data-notification-dismiss]').forEach(button=>{
-        button.addEventListener('click',async event=>{
-            event.preventDefault();
-            event.stopPropagation();
-            const id=button.dataset.notificationDismiss;
-            try{
-                await fetch('/notifications/'+encodeURIComponent(id),{
-                    method:'DELETE',
-                    headers:{Accept:'application/json','X-CSRF-TOKEN':csrf(),'X-Requested-With':'XMLHttpRequest'}
-                });
-                button.closest('.notification-item')?.remove();
-                refreshEmpty();
-            }catch(error){
-                flash(error.message||'Unable to remove notification.','error');
-            }
-        });
-    });
-
-}
-
 async function initMedia(){
     if(!['media-gateways','gsm-gateways'].includes(document.body.dataset.page) && !qs('#mediaGatewayForm'))return;
     if(qs('#mediaGatewayForm')?.dataset.bound==='1')return;
@@ -416,8 +406,7 @@ async function initMedia(){
         gatewayId:qs('#gatewayId'),
         formMethod:qs('#formMethod'),
         deleteConfirm:qs('#confirmDeleteBtn'),
-        search:qs('#mediaSearchInput'),
-        searchClear:qs('#mediaSearchClear')
+        search:qs('#mediaSearchInput')
     };
 
     function updateUrl(){
@@ -431,11 +420,6 @@ async function initMedia(){
         if(`${location.pathname}${location.search}`!==next){
             history.replaceState({},'',next);
         }
-    }
-
-    function updateSearchClear(){
-        if(!dom.searchClear)return;
-        dom.searchClear.style.display=state.search?'inline-flex':'none';
     }
 
     function updateExportLink(){
@@ -453,6 +437,7 @@ async function initMedia(){
         const records=data.records||[];
         const canEdit=document.body.dataset.canEdit==='1';
         const canDelete=document.body.dataset.canDelete==='1';
+        const canReveal=document.body.dataset.canRevealSecrets==='1';
 
         dom.rows.innerHTML=records.length
             ? records.map(g=>`<tr>
@@ -467,14 +452,14 @@ async function initMedia(){
                 <td>
                     <span class="pdc-secret">
                         <span class="pdc-secret-mask">••••••</span>
-                        <span class="pdc-secret-value" hidden>${escapeHtml(g.password||'')}</span>
+                        ${canReveal && g.password ? `<span class="pdc-secret-value" hidden>${escapeHtml(g.password)}</span>
                         <button type="button" class="pdc-secret-toggle" title="Show password" aria-label="Show password">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-                        </button>
+                        </button>` : ''}
                     </span>
                 </td>
                 <td><div class="row-actions">
-                    ${canEdit?`<button type="button" class="action-btn edit" data-edit-id="${escapeHtml(g.id)}" data-edit-site_name="${escapeHtml(g.site_name)}" data-edit-site_code="${escapeHtml(g.site_code)}" data-edit-ip_address="${escapeHtml(g.ip_address)}" data-edit-plan="${escapeHtml(g.plan||'')}" data-edit-port="${escapeHtml(g.port||'')}" data-edit-network="${escapeHtml(g.network||'')}" data-edit-device_function="${escapeHtml(g.device_function||'')}" data-edit-username="${escapeHtml(g.username)}" data-edit-password="${escapeHtml(g.password||'')}" title="Edit ${entity}" aria-label="Edit ${entity}">
+                    ${canEdit?`<button type="button" class="action-btn edit" data-edit-id="${escapeHtml(g.id)}" data-edit-site_name="${escapeHtml(g.site_name)}" data-edit-site_code="${escapeHtml(g.site_code)}" data-edit-ip_address="${escapeHtml(g.ip_address)}" data-edit-plan="${escapeHtml(g.plan||'')}" data-edit-port="${escapeHtml(g.port||'')}" data-edit-network="${escapeHtml(g.network||'')}" data-edit-device_function="${escapeHtml(g.device_function||'')}" data-edit-username="${escapeHtml(g.username)}"${canReveal?` data-edit-password="${escapeHtml(g.password||'')}"`:''} title="Edit ${entity}" aria-label="Edit ${entity}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
                     </button>`:''}
                     ${canDelete?`<button type="button" class="action-btn delete" data-delete-id="${escapeHtml(g.id)}" title="Delete ${entity}" aria-label="Delete ${entity}">
@@ -504,7 +489,6 @@ async function initMedia(){
         });
 
         updateExportLink();
-        updateSearchClear();
         bindRowEvents();
         updateUrl();
     }
@@ -685,29 +669,160 @@ async function initMedia(){
     }));
 
     let timer=null;
+    qs('#mediaSearchForm')?.addEventListener('submit',event=>{
+        event.preventDefault();
+        clearTimeout(timer);
+        state.search=dom.search?.value.trim()||'';
+        state.page=1;
+        load(1).catch(error=>flash(error.message,'error'));
+    });
     dom.search?.addEventListener('input',()=>{
         clearTimeout(timer);
         state.search=dom.search.value.trim();
         state.page=1;
-        updateSearchClear();
-        timer=setTimeout(()=>load(1).catch(error=>flash(error.message,'error')),300);
-    });
-
-    dom.searchClear?.addEventListener('click',()=>{
-        clearTimeout(timer);
-        state.search='';
-        if(dom.search)dom.search.value='';
-        state.page=1;
-        load(1).catch(error=>flash(error.message,'error'));
+        timer=setTimeout(()=>load(1).catch(error=>flash(error.message,'error')),180);
     });
 
     bindRowEvents();
-    updateSearchClear();
     updateExportLink();
+}
+
+const DASHBOARD_POLL_MS=20000;
+function initDashboard(){
+    const root=qs('#dashboardHome');
+    if(!root)return;
+    const url=root.dataset.snapshotUrl;
+    if(!url)return;
+    let fingerprint=root.dataset.fingerprint||'';
+    let timer=null;
+    let inFlight=false;
+    let utilRows=[];
+    let utilSearch='';
+    let utilPage=1;
+    let utilPerPage=10;
+    const dataNode=qs('#dashOverviewData',root);
+    if(dataNode){
+        try{utilRows=JSON.parse(dataNode.textContent||'{}').utilization_rows||[];}catch(_error){utilRows=[];}
+    }
+    const formatNumber=(value)=>Number(value||0).toLocaleString('en-US');
+    const renderUtilTable=()=>{
+        const panel=qs('[data-dash-panel="utilization"]',root);
+        if(!panel)return;
+        const query=utilSearch.trim().toLowerCase();
+        const filtered=query?utilRows.filter(row=>String(row.name||'').toLowerCase().includes(query)):utilRows;
+        const totalCount=filtered.length;
+        if(![5,10,25,50].includes(utilPerPage))utilPerPage=10;
+        const lastPage=Math.max(1,Math.ceil((totalCount||1)/utilPerPage));
+        utilPage=Math.max(1,Math.min(utilPage,lastPage));
+        const slice=filtered.slice((utilPage-1)*utilPerPage,utilPage*utilPerPage);
+        const from=totalCount===0?0:((utilPage-1)*utilPerPage)+1;
+        const to=Math.min(utilPage*utilPerPage,totalCount);
+        const sum=(key)=>filtered.reduce((n,row)=>n+(Number(row[key])||0),0);
+        let body='';
+        if(!slice.length){
+            body='<tr><td colspan="4"><div class="empty-state">No campaigns match this search.</div></td></tr>';
+        }else{
+            body=slice.map(row=>`<tr><td>${escapeHtml(row.name)}</td><td class="num">${escapeHtml(row.total_display||formatNumber(row.total))}</td><td class="num">${escapeHtml(row.sip_display||formatNumber(row.sip))}</td><td class="num">${escapeHtml(row.gsm_display||formatNumber(row.gsm))}</td></tr>`).join('');
+            body+=`<tr class="dash-total-row"><td>Total</td><td class="num">${formatNumber(sum('total'))}</td><td class="num">${formatNumber(sum('sip'))}</td><td class="num">${formatNumber(sum('gsm'))}</td></tr>`;
+        }
+        let pages='';
+        for(let i=1;i<=lastPage;i++){
+            pages+=`<button type="button" class="page-number${i===utilPage?' active':''}" data-dash-page="${i}">${i}</button>`;
+        }
+        const options=[5,10,25,50].map(size=>`<option value="${size}"${size===utilPerPage?' selected':''}>${size}</option>`).join('');
+        panel.innerHTML=`<div class="table-card table-wrap dash-util-table"><table><thead><tr><th>Campaign</th><th class="num">Total Channels</th><th class="num">SIP</th><th class="num">GSM</th></tr></thead><tbody>${body}</tbody></table><div class="table-footer"><span>Showing ${from} to ${to} of ${totalCount} entries</span><div class="footer-right"><span>Records per page:</span><select class="per-page-select" data-dash-per-page aria-label="Records per page">${options}</select><div class="pager">${pages}</div></div></div></div>`;
+    };
+    const apply=(data)=>{
+        if(!data)return;
+        const updatedEl=qs('[data-dash-updated]',root);
+        if(updatedEl&&data.generated_at_label)updatedEl.textContent=data.generated_at_label;
+        if(data.fingerprint===fingerprint)return;
+        fingerprint=data.fingerprint||fingerprint;
+        root.dataset.fingerprint=fingerprint;
+        const kpis=data.kpis||{};
+        Object.keys(kpis).forEach(key=>{
+            qsa(`[data-dash-kpi="${key}"]`,root).forEach(el=>{
+                el.textContent=kpis[key]?.display ?? kpis[key]?.value ?? el.textContent;
+            });
+        });
+        const insight=qs('[data-dash-insight]',root);
+        if(insight&&data.campaign_insight)insight.textContent=data.campaign_insight;
+        const html=data.html||{};
+        ['bars','trend'].forEach(key=>{
+            const panel=qs(`[data-dash-panel="${key}"]`,root);
+            if(panel&&typeof html[key]==='string')panel.innerHTML=html[key];
+        });
+        if(Array.isArray(data.utilization_rows)){
+            utilRows=data.utilization_rows;
+            renderUtilTable();
+        }
+        const globeCount=qs('.sim-pick-globe .sim-pick-count');
+        const smartCount=qs('.sim-pick-smart .sim-pick-count');
+        if(globeCount&&kpis.globe)globeCount.textContent=kpis.globe.display ?? kpis.globe.value;
+        if(smartCount&&kpis.smart)smartCount.textContent=kpis.smart.display ?? kpis.smart.value;
+    };
+    const poll=async()=>{
+        if(inFlight||document.visibilityState==='hidden')return;
+        inFlight=true;
+        try{
+            const response=await fetch(url,{
+                headers:{Accept:'application/json','X-Requested-With':'XMLHttpRequest'},
+                cache:'no-store'
+            });
+            if(!response.ok)return;
+            apply(await response.json());
+        }catch(_error){
+        }finally{
+            inFlight=false;
+        }
+    };
+    const schedule=()=>{
+        window.clearTimeout(timer);
+        timer=window.setTimeout(async()=>{
+            await poll();
+            schedule();
+        },DASHBOARD_POLL_MS);
+    };
+    root.addEventListener('input',event=>{
+        const input=event.target.closest('[data-dash-util-search]');
+        if(!input)return;
+        utilSearch=input.value||'';
+        utilPage=1;
+        renderUtilTable();
+    });
+    root.addEventListener('change',event=>{
+        const select=event.target.closest('[data-dash-per-page]');
+        if(!select)return;
+        utilPerPage=Number(select.value)||10;
+        utilPage=1;
+        renderUtilTable();
+    });
+    root.addEventListener('click',event=>{
+        const pageBtn=event.target.closest('[data-dash-page]');
+        if(pageBtn){
+            event.preventDefault();
+            utilPage=Number(pageBtn.dataset.dashPage)||1;
+            renderUtilTable();
+            return;
+        }
+        if(event.target.closest('[data-dash-refresh]')){
+            event.preventDefault();
+            poll().finally(schedule);
+        }
+    });
+    document.addEventListener('visibilitychange',()=>{
+        if(document.visibilityState==='visible'){
+            poll().finally(schedule);
+        }else{
+            window.clearTimeout(timer);
+        }
+    });
+    schedule();
 }
 
 async function init(){
     initGlobal();
+    initDashboard();
     await initMedia();
 }
 
@@ -716,5 +831,4 @@ window.addEventListener('pageshow',event=>{
     if(!event.persisted)return;
     qsa('.modal-backdrop.visible').forEach(el=>el.classList.remove('visible'));
     qs('#accountMenu')?.classList.remove('open');
-    qs('#notificationMenu')?.classList.remove('open');
 });

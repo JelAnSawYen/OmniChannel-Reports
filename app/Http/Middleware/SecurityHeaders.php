@@ -18,7 +18,7 @@ class SecurityHeaders
         $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
         $response->headers->set(
             'Content-Security-Policy',
-            "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; form-action 'self'; frame-ancestors 'self'; base-uri 'self'"
+            "default-src 'self'; img-src 'self' data: https://*.tile.openstreetmap.org https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; form-action 'self'; frame-ancestors 'self'; base-uri 'self'"
         );
 
         $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');

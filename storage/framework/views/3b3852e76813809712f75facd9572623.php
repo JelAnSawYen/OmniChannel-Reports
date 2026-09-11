@@ -10,13 +10,9 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
             </span>
             <input id="campaignSearchInput" name="search" value="<?php echo e($search); ?>" placeholder="Search Campaigns" aria-label="Search Campaigns" autocomplete="off">
-            <button type="button" class="search-clear" data-clear-search aria-label="Clear search" title="Clear search">×</button>
             <?php if(request('per_page')): ?><input type="hidden" name="per_page" value="<?php echo e(request('per_page')); ?>"><?php endif; ?>
         </form>
         <button class="btn primary" type="submit" form="campaignSearchForm">Search</button>
-        <?php if($search !== ''): ?>
-            <a class="btn secondary" href="<?php echo e(route('campaigns')); ?>" id="campaignReset">Reset</a>
-        <?php endif; ?>
         <?php if(auth()->user()->hasPermission('media.export')): ?>
         <?php echo $__env->make('partials.data-transfer', [
             'canExport' => true,
@@ -166,8 +162,9 @@ document.addEventListener('DOMContentLoaded', () => {
         modal?.classList.add('visible');
     });
 
-    document.querySelectorAll('[data-campaign-edit]').forEach((button) => button.addEventListener('click', () => {
-        if (!form || !method) return;
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-campaign-edit]');
+        if (!button || !form || !method) return;
         const recordId = Number(button.dataset.id);
         if (!Number.isInteger(recordId) || recordId < 1) return;
         const values = JSON.parse(button.dataset.values || '{}');
@@ -178,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('campaign_fte').value = values.fte ?? '';
         document.getElementById('campaign_location').value = values.location ?? '';
         modal?.classList.add('visible');
-    }));
+    });
 });
 </script>
 <?php echo $__env->make('partials.inventory-import-script', [

@@ -52,10 +52,10 @@ class OperationsCrudSearchTest extends TestCase
                 'hidden' => '09280000002',
             ]],
             'program-inbound-numbers' => ['program-inbound-numbers', [
-                'create' => ['number' => '0325000001', 'program' => 'Program A', 'location' => 'Skyrise', 'assigned_channel' => 'CH-A', 'status' => 'Active'],
-                'other' => ['number' => '0325000002', 'program' => 'Program B', 'location' => 'Alcar', 'assigned_channel' => 'CH-B', 'status' => 'Active'],
-                'update' => ['number' => '0325000001', 'program' => 'Program A Updated', 'location' => 'Skyrise', 'assigned_channel' => 'CH-A', 'status' => 'Inactive'],
-                'updated' => ['program' => 'Program A Updated', 'status' => 'Inactive'],
+                'create' => ['campaign' => 'Program A', 'landline_numbers' => ['0325000001'], 'number' => '0325000001'],
+                'other' => ['campaign' => 'Program B', 'landline_numbers' => ['0325000002'], 'number' => '0325000002'],
+                'update' => ['campaign' => 'Program A Updated', 'landline_numbers' => ['0325000001']],
+                'updated' => ['program' => 'Program A Updated'],
                 'kept' => ['number' => '0325000002'],
                 'search' => 'Program A Updated',
                 'hidden' => '0325000002',
@@ -296,10 +296,6 @@ class OperationsCrudSearchTest extends TestCase
             ->assertOk()
             ->assertSee('class="action-btn edit"', false)
             ->assertSee('class="action-btn delete"', false);
-
-        $this->actingAs($this->admin)->get('/user-types')
-            ->assertOk()
-            ->assertSee('class="action-btn edit"', false);
     }
 
     public function test_sidebar_hides_vertical_scrollbar_styles(): void

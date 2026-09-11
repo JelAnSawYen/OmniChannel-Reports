@@ -5,10 +5,15 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 
 class UserType extends Model
 {
     use HasFactory;
+
+    public const ADMINISTRATOR = 'Administrator';
+    public const STANDARD_USER = 'Standard User';
+    public const ASSIGNABLE_NAMES = [self::ADMINISTRATOR, self::STANDARD_USER];
 
     protected $fillable = [
         'name',
@@ -26,19 +31,27 @@ class UserType extends Model
         return in_array($permission, $this->permissions ?? [], true);
     }
 
-    public function isSystemAdministrator(): bool
-    {
-        return $this->name === 'System Administrator';
-    }
-
     public function isAdministrator(): bool
     {
-        return $this->name === 'Administrator';
+        return $this->name === self::ADMINISTRATOR;
     }
 
     public function isStandardUser(): bool
     {
-        return $this->name === 'Standard User';
+        return $this->name === self::STANDARD_USER;
+    }
+
+    public function isAssignable(): bool
+    {
+        return in_array($this->name, self::ASSIGNABLE_NAMES, true);
+    }
+
+    public static function assignable(): Collection
+    {
+        return static::query()
+            ->whereIn('name', self::ASSIGNABLE_NAMES)
+            ->orderBy('name')
+            ->get();
     }
 
     public function users(): HasMany

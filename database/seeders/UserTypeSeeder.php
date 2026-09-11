@@ -1,16 +1,15 @@
 <?php
 namespace Database\Seeders;
-use App\Http\Controllers\UserTypeController;
 use App\Models\UserType;
+use App\Support\RolePermissions;
 use Illuminate\Database\Seeder;
 class UserTypeSeeder extends Seeder
 {
     public function run(): void
     {
         $defaults=[
-            ['name'=>'System Administrator','description'=>'Full system access','permissions'=>array_keys(UserTypeController::PERMISSIONS)],
-            ['name'=>'Administrator','description'=>'Can manage and edit operational system data','permissions'=>['dashboard.view','media.view','media.create','media.edit','media.delete','media.export','users.view','users.manage','roles.view','roles.manage','logs.view']],
-            ['name'=>'Standard User','description'=>'View-only system access','permissions'=>['dashboard.view','media.view','media.export']],
+            ['name'=>UserType::ADMINISTRATOR,'description'=>'Can manage and edit operational system data','permissions'=>RolePermissions::ADMINISTRATOR_PERMISSIONS],
+            ['name'=>UserType::STANDARD_USER,'description'=>'View-only system access','permissions'=>RolePermissions::STANDARD_USER_PERMISSIONS],
         ];
         foreach($defaults as $data)UserType::updateOrCreate(['name'=>$data['name']],$data);
     }

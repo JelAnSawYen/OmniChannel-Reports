@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsureEmailIsVerified;
 use App\Http\Middleware\EnsureMfaCompleted;
 use App\Http\Middleware\PermissionMiddleware;
 use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\ModuleAccessMiddleware;
 use App\Http\Middleware\UserTypeMiddleware;
 use Illuminate\Auth\Middleware\EnsureEmailIsVerified as LaravelEnsureEmailIsVerified;
 use Illuminate\Foundation\Application;
@@ -32,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->alias([
             'userType' => UserTypeMiddleware::class,
+            'module' => ModuleAccessMiddleware::class,
             'permission' => PermissionMiddleware::class,
             'account.active' => EnsureAccountActive::class,
             'mfa' => EnsureMfaCompleted::class,

@@ -3,13 +3,11 @@ namespace App\Http\Controllers;
 
 use App\Models\MediaGateway;
 use App\Services\AuditLogger;
-use App\Services\NotificationService;
 use App\Services\XlsxService;
 use App\Support\InventoryImportCatalog;
 use App\Support\OperationCatalog;
 use App\Support\PublicError;
 use Illuminate\Http\Request;
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -27,57 +25,20 @@ class LocationController extends Controller
     public function index(Request $request): View
     {
         $search = trim((string) $request->query('search'));
-        $status = (string) $request->query('status', '');
-        $locationFilter = (string) $request->query('location', '');
-
-        $rows = collect(OperationCatalog::locations())->map(function (string $name, string $slug) {
-            $query = MediaGateway::query()->where('site_name', $name);
-
+        $sites = collect(OperationCatalog::locationMapSites())->map(function (array $site, string $slug) {
             return [
                 'slug' => $slug,
-                'name' => $name,
-                'code' => strtoupper($slug),
-                'gateways' => (clone $query)->count(),
-                'updated_at' => (clone $query)->max('updated_at'),
+                'name' => $site['name'],
+                'address' => $site['address'],
+                'lat' => $site['lat'],
+                'lng' => $site['lng'],
+                'available' => (bool) ($site['assigned'] ?? false),
             ];
-        });
-
-        if ($search !== '') {
-            $needle = mb_strtolower($search);
-            $rows = $rows->filter(fn (array $row) => str_contains(mb_strtolower($row['name']), $needle)
-                || str_contains(mb_strtolower($row['code']), $needle));
-        }
-
-        if (isset(OperationCatalog::locations()[$locationFilter])) {
-            $rows = $rows->filter(fn (array $row) => $row['slug'] === $locationFilter);
-        }
-
-        if ($status === 'active') {
-            $rows = $rows->filter(fn (array $row) => $row['gateways'] > 0);
-        } elseif ($status === 'none') {
-            $rows = $rows->filter(fn (array $row) => $row['gateways'] === 0);
-        }
-
-        $rows = $rows
-            ->sortBy(fn (array $row) => mb_strtolower($row['name']), SORT_NATURAL)
-            ->values();
-        $perPage = 10;
-        $page = LengthAwarePaginator::resolveCurrentPage();
-
-        $locations = new LengthAwarePaginator(
-            $rows->forPage($page, $perPage)->values(),
-            $rows->count(),
-            $perPage,
-            $page,
-            ['path' => $request->url(), 'query' => $request->query()]
-        );
+        })->values();
 
         return view('locations.index', [
-            'locations' => $locations,
+            'sites' => $sites,
             'search' => $search,
-            'status' => $status,
-            'locationFilter' => $locationFilter,
-            'locationOptions' => OperationCatalog::locations(),
         ]);
     }
 
@@ -177,8 +138,6 @@ class LocationController extends Controller
                 $location.'.xlsx'
             );
         } catch (\Throwable $exception) {
-            NotificationService::exportFailed($name, 'Export failed.', 'program-location');
-
             return back()->with('error', PublicError::failed('Export', $exception));
         }
 

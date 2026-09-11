@@ -51,8 +51,6 @@ class TransferSqliteToMysql extends Command
         'channel_allocations',
         'pdc_groups',
         'pdc_servers',
-        'notifications',
-        'notification_recipients',
         'audit_logs',
         'login_logs',
         'mail_settings',

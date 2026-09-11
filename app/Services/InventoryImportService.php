@@ -79,6 +79,9 @@ class InventoryImportService
         $dateFields = $config['date_fields'] ?? [];
         $mdyDateFields = $config['mdy_date_fields'] ?? [];
         $skipSave = $config['skip_save'] ?? [];
+        $noCarry = $config['no_carry'] ?? [];
+
+        $toRecordContext = (object) ['numbers' => []];
 
         foreach ($rawRows as $offset => $raw) {
             $excelRow = $offset + 2;
@@ -96,7 +99,7 @@ class InventoryImportService
                 $value = $rawValues[$field];
                 if (isset($fixed[$field]) && $value === '') {
                     $value = (string) $fixed[$field];
-                } elseif ($value === '' && ! in_array($field, $ipFields, true)) {
+                } elseif ($value === '' && ! in_array($field, $ipFields, true) && ! in_array($field, $noCarry, true)) {
                     $value = $carry[$field] ?? '';
                 }
                 $values[$field] = $value;
@@ -272,6 +275,13 @@ class InventoryImportService
                 $errors[] = 'Contract end date must be on or after the contract start date.';
             }
 
+            $mappedRecord = null;
+            if (isset($config['to_record']) && is_callable($config['to_record'])) {
+                $mapped = ($config['to_record'])($values, $toRecordContext);
+                $errors = array_merge($errors, $mapped['errors'] ?? []);
+                $mappedRecord = $mapped['record'] ?? null;
+            }
+
             $ok = $errors === [];
             $preview = [
                 'row' => $excelRow,
@@ -285,19 +295,23 @@ class InventoryImportService
             $previewRows[] = $preview;
 
             if ($ok) {
-                $record = [];
-                foreach (array_keys($config['fields']) as $field) {
-                    if (in_array($field, $skipSave, true)) {
-                        continue;
+                if (is_array($mappedRecord)) {
+                    $payload[] = $mappedRecord;
+                } else {
+                    $record = [];
+                    foreach (array_keys($config['fields']) as $field) {
+                        if (in_array($field, $skipSave, true)) {
+                            continue;
+                        }
+                        if (array_key_exists($field, $isoDates)) {
+                            $record[$field] = $isoDates[$field];
+                            continue;
+                        }
+                        $value = $values[$field] ?? '';
+                        $record[$field] = $value === '' ? null : $value;
                     }
-                    if (array_key_exists($field, $isoDates)) {
-                        $record[$field] = $isoDates[$field];
-                        continue;
-                    }
-                    $value = $values[$field] ?? '';
-                    $record[$field] = $value === '' ? null : $value;
+                    $payload[] = $record;
                 }
-                $payload[] = $record;
             }
 
             foreach (array_keys($config['fields']) as $field) {

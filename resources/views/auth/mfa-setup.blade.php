@@ -1,6 +1,6 @@
 @extends('layouts.guest', ['heading' => 'Set up two-factor authentication'])
 @section('content')
-        <p class="hint">System Administrators must enable an authenticator app. Add this account using the key below, then enter the 6-digit code.</p>
+        <p class="hint">Add this account using the key below, then enter the 6-digit code.</p>
         <div class="secret-box">{{ $secret }}</div>
         <p class="hint">Authenticator URI:</p>
         <div class="secret-box">{{ $otpauth }}</div>

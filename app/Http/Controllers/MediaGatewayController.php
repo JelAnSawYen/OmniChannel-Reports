@@ -6,7 +6,6 @@ use App\Http\Requests\StoreMediaGatewayRequest;
 use App\Http\Requests\UpdateMediaGatewayRequest;
 use App\Models\MediaGateway;
 use App\Services\AuditLogger;
-use App\Services\NotificationService;
 use App\Services\XlsxService;
 use App\Support\InventoryImportCatalog;
 use App\Support\PublicError;
@@ -63,6 +62,8 @@ class MediaGatewayController extends Controller
 
     private function jsonRecord(MediaGateway $gateway): array
     {
+        $canReveal = (bool) auth()->user()?->canExportGatewaySecrets();
+
         return [
             'id' => $gateway->id,
             'ip_address' => $gateway->ip_address,
@@ -73,7 +74,7 @@ class MediaGatewayController extends Controller
             'device_function' => $gateway->device_function,
             'site_name' => $gateway->site_name,
             'username' => $gateway->username,
-            'password' => $gateway->password,
+            'password' => $canReveal ? (string) ($gateway->password ?? '') : '',
             'database' => $gateway->database,
         ];
     }
@@ -113,7 +114,7 @@ class MediaGatewayController extends Controller
         if ($request->expectsJson()) {
             return response()->json([
                 'message' => 'Media Gateway added successfully.',
-                'record' => $gateway,
+                'record' => $this->jsonRecord($gateway),
             ], 201);
         }
 
@@ -152,7 +153,7 @@ class MediaGatewayController extends Controller
         if ($request->expectsJson()) {
             return response()->json([
                 'message' => 'Media Gateway updated successfully.',
-                'record' => $mediaGateway->fresh(),
+                'record' => $this->jsonRecord($mediaGateway->fresh()),
             ]);
         }
 
@@ -229,7 +230,6 @@ class MediaGatewayController extends Controller
                 $this->isGsm() ? 'gsm-gateways.xlsx' : 'media-gateways.xlsx'
             );
         } catch (\Throwable $exception) {
-            NotificationService::exportFailed($this->resource()['plural'], 'Export failed.', $this->indexRoute());
             return back()->with('error', PublicError::failed('Export', $exception));
         }
 

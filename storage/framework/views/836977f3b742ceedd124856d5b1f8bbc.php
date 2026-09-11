@@ -1,8 +1,17 @@
 <?php
     $isSim = \App\Support\OperationCatalog::isSim($module);
-    $transferColumns = $isSim ? \App\Support\OperationCatalog::simTransferColumns() : $config['columns'];
-    $numericColumns = $isSim ? [] : ['monthly_cost', 'retention_days', 'port_number', 'number', 'asset_code'];
-    $emptyColspan = count($config['columns']) + ($isSim ? 1 : 3);
+    $isInbound = \App\Support\OperationCatalog::isInbound($module);
+    $isBooster = \App\Support\OperationCatalog::isBooster($module);
+    $isDefective = \App\Support\OperationCatalog::isDefective($module);
+    $useMdyDate = $isSim || $isDefective;
+    $hideMeta = $isSim || $isInbound;
+    $hideLastUpdated = $hideMeta || $isBooster;
+    $tableColumns = $isInbound ? ($config['table_columns'] ?? $config['columns']) : $config['columns'];
+    $transferColumns = $isSim
+        ? \App\Support\OperationCatalog::simTransferColumns()
+        : ($isInbound ? ($config['table_columns'] ?? $config['columns']) : $config['columns']);
+    $numericColumns = $isSim ? [] : ['monthly_cost', 'retention_days', 'port_number', 'number'];
+    $emptyColspan = count($tableColumns) + ($hideMeta ? 1 : ($hideLastUpdated ? 2 : 3));
 ?>
 <?php $__env->startSection('content'); ?>
 <div class="page-head">
@@ -15,8 +24,7 @@
             <span class="search-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
             </span>
-            <input id="operationSearchInput" name="search" value="<?php echo e($search); ?>" placeholder="Search <?php echo e($config['title']); ?>" aria-label="Search <?php echo e($config['title']); ?>" autocomplete="off">
-            <button type="button" class="search-clear" data-clear-search aria-label="Clear search" title="Clear search">×</button>
+            <input id="operationSearchInput" name="search" value="<?php echo e($search); ?>" placeholder="<?php echo e($isInbound ? 'Search Program Inbound Numbers...' : 'Search '.$config['title']); ?>" aria-label="<?php echo e($isInbound ? 'Search Program Inbound Numbers' : 'Search '.$config['title']); ?>" autocomplete="off">
             <?php if(request('status')): ?><input type="hidden" name="status" value="<?php echo e(request('status')); ?>"><?php endif; ?>
             <?php if(request('per_page')): ?><input type="hidden" name="per_page" value="<?php echo e(request('per_page')); ?>"><?php endif; ?>
         </form>
@@ -33,9 +41,6 @@
             </form>
         <?php endif; ?>
         <button class="btn primary" type="submit" form="operationSearchForm">Search</button>
-        <?php if($search !== '' || request('status')): ?>
-            <a class="btn secondary" href="<?php echo e(route($module)); ?>">Reset</a>
-        <?php endif; ?>
         <?php if(auth()->user()->hasPermission('media.export')): ?>
         <?php echo $__env->make('partials.data-transfer', [
             'canExport' => true,
@@ -50,22 +55,22 @@
         ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
         <?php endif; ?>
         <?php if(auth()->user()->hasPermission('media.create')): ?>
-            <button class="plus-btn" type="button" id="operationAddButton" aria-label="Add <?php echo e($config['title']); ?>" title="Add <?php echo e($config['title']); ?>">+</button>
+            <button class="plus-btn" type="button" id="operationAddButton" aria-label="<?php echo e($isInbound ? 'Add' : 'Add '.$config['title']); ?>" title="<?php echo e($isInbound ? 'Add' : 'Add '.$config['title']); ?>">+</button>
         <?php endif; ?>
     </div>
 </div>
 
 <div class="table-card table-wrap">
-<table class="<?php echo \Illuminate\Support\Arr::toCssClasses(['sim-table' => $isSim]); ?>" aria-label="<?php echo e($config['title']); ?>">
+<table class="<?php echo \Illuminate\Support\Arr::toCssClasses(['sim-table' => $isSim, 'pin-table' => $isInbound, 'sb-table' => $isBooster, 'dg-table' => $isDefective]); ?>" aria-label="<?php echo e($config['title']); ?>">
 <thead>
 <tr>
-    <?php if (! ($isSim)): ?>
+    <?php if (! ($hideMeta)): ?>
         <th>Id</th>
     <?php endif; ?>
-    <?php $__currentLoopData = $config['columns']; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $field => $label): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-        <th class="<?php echo \Illuminate\Support\Arr::toCssClasses(['num-col' => in_array($field, $numericColumns, true)]); ?>"><?php echo e($label); ?></th>
+    <?php $__currentLoopData = $tableColumns; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $field => $label): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+        <th <?php if($isInbound && $field === 'campaign'): ?> class="pin-campaign-col" <?php elseif($isBooster && $field === 'specs'): ?> class="sb-specs-col" <?php elseif($isDefective && $field === 'issue'): ?> class="dg-issue-col" <?php elseif(in_array($field, $numericColumns, true)): ?> class="num-col" <?php endif; ?>><?php echo e($label); ?></th>
     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-    <?php if (! ($isSim)): ?>
+    <?php if (! ($hideLastUpdated)): ?>
         <th>Last Updated</th>
     <?php endif; ?>
     <th class="actions-column">Actions</th>
@@ -73,26 +78,83 @@
 </thead>
 <tbody>
 <?php $__empty_1 = true; $__currentLoopData = $records; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $record): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
+<?php
+    $recordId = (int) $record->getKey();
+    $editValues = [];
+    foreach ($config['fields'] as $field) {
+        if ($isInbound && $field === 'campaign') {
+            $editValues['campaign'] = $record->campaign?->name ?: $record->program ?: '';
+            continue;
+        }
+        if ($isInbound && $field === 'mobile_numbers') {
+            $editValues['mobile_numbers'] = $record->mobileList();
+            continue;
+        }
+        if ($isInbound && $field === 'landline_numbers') {
+            $editValues['landline_numbers'] = $record->landlineList();
+            continue;
+        }
+        $value = $record->{$field};
+        if ($value instanceof \DateTimeInterface) {
+            $value = $useMdyDate
+                ? \App\Support\PdcEndorseDate::display($value->format('Y-m-d'))
+                : $value->format('Y-m-d');
+        }
+        $editValues[$field] = $value;
+    }
+?>
 <tr>
-    <?php if (! ($isSim)): ?>
+    <?php if (! ($hideMeta)): ?>
         <td><?php echo e(($records->firstItem() ?? 1) + $loop->index); ?></td>
     <?php endif; ?>
+    <?php if($isInbound): ?>
+        <td class="pin-campaign-col"><span class="pin-campaign"><?php echo e($record->campaignLabel()); ?></span></td>
+        <td>
+            <?php if($record->mobileList() === []): ?>
+                —
+            <?php else: ?>
+                <span class="pin-stack">
+                    <?php $__currentLoopData = $record->mobileList(); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $mobile): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                        <span><?php echo e($mobile); ?></span>
+                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                </span>
+            <?php endif; ?>
+        </td>
+        <td>
+            <?php if($record->landlineList() === []): ?>
+                —
+            <?php else: ?>
+                <span class="pin-stack">
+                    <?php $__currentLoopData = $record->landlineList(); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $landline): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                        <span><?php echo e($landline); ?></span>
+                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                </span>
+            <?php endif; ?>
+        </td>
+        <td><?php echo e($record->gatewayLabel()); ?></td>
+        <td><?php echo e($record->portLabel()); ?></td>
+        <td><?php echo e($record->networkLabel()); ?></td>
+        <td class="pin-remarks-col"><?php echo e($record->remarksLabel()); ?></td>
+    <?php else: ?>
     <?php $__currentLoopData = $config['columns']; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $field=>$label): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
         <?php $isNumericCol = in_array($field, $numericColumns, true); ?>
-        <td class="<?php echo \Illuminate\Support\Arr::toCssClasses(['num-col' => $isNumericCol]); ?>">
+        <td class="<?php echo \Illuminate\Support\Arr::toCssClasses(['num-col' => $isNumericCol, 'sb-specs-col' => $isBooster && $field === 'specs', 'dg-issue-col' => $isDefective && $field === 'issue']); ?>">
             <?php if($field==='monthly_cost'): ?>
                 <span class="num-align" data-label="<?php echo e($label); ?>">₱<?php echo e(number_format((float) $record->$field, 2)); ?></span>
             <?php elseif($field==='status'): ?>
                 <span class="status-pill <?php echo e(in_array($record->$field, ['Active', 'Available']) ? 'online' : (in_array($record->$field, ['In Use', 'Expiring']) ? 'unknown' : 'offline')); ?>"><?php echo e($record->$field); ?></span>
-            <?php elseif(in_array($field, ['contract_start', 'contract_end'], true)): ?>
+            <?php elseif(in_array($field, ['contract_start', 'contract_end', 'reported_on'], true)): ?>
                 <?php
                     $dateValue = $record->$field;
                     if ($dateValue instanceof \DateTimeInterface) {
                         $dateValue = $dateValue->format('Y-m-d');
                     }
-                    $dateValue = $isSim ? \App\Support\PdcEndorseDate::display($dateValue) : $dateValue;
+                    $dateValue = $useMdyDate ? \App\Support\PdcEndorseDate::display($dateValue) : $dateValue;
                 ?>
                 <?php echo e($dateValue); ?>
+
+            <?php elseif($isDefective && $field === 'issue'): ?>
+                <?php echo e($record->$field); ?>
 
             <?php elseif($isNumericCol): ?>
                 <span class="num-align" data-label="<?php echo e($label); ?>"><?php echo e($record->$field); ?></span>
@@ -102,20 +164,8 @@
             <?php endif; ?>
         </td>
     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-    <?php
-        $recordId = (int) $record->getKey();
-        $editValues = [];
-        foreach ($config['fields'] as $field) {
-            $value = $record->{$field};
-            if ($value instanceof \DateTimeInterface) {
-                $value = $isSim
-                    ? \App\Support\PdcEndorseDate::display($value->format('Y-m-d'))
-                    : $value->format('Y-m-d');
-            }
-            $editValues[$field] = $value;
-        }
-    ?>
-    <?php if (! ($isSim)): ?>
+    <?php endif; ?>
+    <?php if (! ($hideLastUpdated)): ?>
         <td><?php echo e($record->updated_at?->format('M d, Y h:i A') ?? '—'); ?></td>
     <?php endif; ?>
     <td class="actions-column">
@@ -167,10 +217,10 @@
 
 <?php $__env->startPush('modals'); ?>
 <?php if(auth()->user()->hasPermission('media.create') || auth()->user()->hasPermission('media.edit')): ?>
-<div class="modal-backdrop" id="moduleModal">
-    <div class="modal">
+<div class="modal-backdrop<?php echo e($isInbound ? ' pin-modal-backdrop' : ''); ?>" id="moduleModal">
+    <div class="modal<?php echo e($isInbound ? ' pin-modal' : ''); ?>">
         <div class="modal-header">
-            <h3 id="moduleModalTitle">Add <?php echo e($config['title']); ?></h3>
+            <h3 id="moduleModalTitle"><?php echo e($isInbound ? 'Add Program Inbound Number' : 'Add '.$config['title']); ?></h3>
             <button type="button" class="close-btn" data-close="moduleModal">×</button>
         </div>
         <form id="moduleForm" method="POST" action="<?php echo e(route($module.'.store')); ?>">
@@ -178,8 +228,58 @@
             <input type="hidden" name="_method" id="moduleMethod" value="POST">
             <div class="modal-body">
                 <div class="form-grid">
+                    <?php if($isInbound): ?>
+                        <div class="form-group full">
+                            <label for="field_campaign">Campaign</label>
+                            <div class="pin-campaign-combo">
+                                <input class="form-control" name="campaign" id="field_campaign" placeholder="Select or type a campaign..." autocomplete="off" required aria-autocomplete="list" aria-controls="pinCampaignMenu">
+                                <div class="pin-campaign-menu" id="pinCampaignMenu" hidden role="listbox">
+                                    <?php $__empty_1 = true; $__currentLoopData = $campaigns; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $campaign): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
+                                        <button class="pin-campaign-option" type="button" role="option" data-name="<?php echo e($campaign->name); ?>"><?php echo e($campaign->name); ?></button>
+                                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
+                                        <div class="pin-campaign-empty">No campaigns yet. Type a new name.</div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pinMobileInput">Mobile Number(s)</label>
+                            <input class="form-control" id="pinMobileInput" autocomplete="off">
+                            <small class="muted pin-number-hint">You can enter multiple mobile numbers.</small>
+                            <div class="pin-chips" id="pinMobileChips" data-pin-chips="mobile"></div>
+                            <div id="pinMobileHidden"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pinLandlineInput">Landline Number(s)</label>
+                            <input class="form-control" id="pinLandlineInput" autocomplete="off">
+                            <small class="muted pin-number-hint">You can enter multiple landline numbers.</small>
+                            <div class="pin-chips" id="pinLandlineChips" data-pin-chips="landline"></div>
+                            <div id="pinLandlineHidden"></div>
+                        </div>
+                        <div class="form-group pin-gsm-wrap" id="pinGsmWrap">
+                            <label for="field_media_gateway_id">GSM Gateway</label>
+                            <select class="form-control" name="media_gateway_id" id="field_media_gateway_id" disabled>
+                                <option value="">Select GSM Gateway</option>
+                                <?php $__currentLoopData = $gsmGateways; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $gateway): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                    <option value="<?php echo e($gateway->id); ?>" data-port="<?php echo e($gateway->port); ?>" data-network="<?php echo e($gateway->network); ?>"><?php echo e($gateway->ip_address); ?></option>
+                                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                            </select>
+                        </div>
+                        <div class="form-group pin-gsm-wrap">
+                            <label for="field_port">Port</label>
+                            <input class="form-control" name="port" id="field_port" readonly tabindex="-1" disabled>
+                        </div>
+                        <div class="form-group pin-gsm-wrap">
+                            <label for="field_network">Network</label>
+                            <input class="form-control" name="network" id="field_network" readonly tabindex="-1" disabled>
+                        </div>
+                        <div class="form-group full">
+                            <label for="field_remarks">Remarks</label>
+                            <textarea class="form-control" name="remarks" id="field_remarks" placeholder="Enter remarks (optional)..."></textarea>
+                        </div>
+                    <?php else: ?>
                     <?php $__currentLoopData = $config['fields']; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $field): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                    <div class="form-group <?php echo e($field==='description' ? 'full' : ''); ?>">
+                    <div class="form-group <?php echo e(in_array($field, ['description', 'specs', 'issue'], true) ? 'full' : ''); ?>">
                         <label for="field_<?php echo e($field); ?>"><?php echo e($config['columns'][$field] ?? ucwords(str_replace('_', ' ', $field))); ?></label>
                         <?php if($field==='status'): ?>
                             <select class="form-control" name="<?php echo e($field); ?>" id="field_<?php echo e($field); ?>">
@@ -196,7 +296,11 @@
                             </select>
                         <?php elseif($field==='description'): ?>
                             <textarea class="form-control" name="<?php echo e($field); ?>" id="field_<?php echo e($field); ?>"></textarea>
-                        <?php elseif($isSim && in_array($field, ['contract_start','contract_end'], true)): ?>
+                        <?php elseif($field==='specs'): ?>
+                            <textarea class="form-control sb-specs-field" name="<?php echo e($field); ?>" id="field_<?php echo e($field); ?>" rows="6"></textarea>
+                        <?php elseif($field==='issue' && $isDefective): ?>
+                            <textarea class="form-control dg-issue-field" name="<?php echo e($field); ?>" id="field_<?php echo e($field); ?>" rows="6"></textarea>
+                        <?php elseif($useMdyDate && in_array($field, ['contract_start','contract_end','reported_on'], true)): ?>
                             <?php echo $__env->make('partials.mdy-date-field', ['field' => $field, 'fieldId' => 'field_'.$field], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
                         <?php elseif(in_array($field, ['contract_start','contract_end','reported_on'])): ?>
                             <input class="form-control" type="date" name="<?php echo e($field); ?>" id="field_<?php echo e($field); ?>">
@@ -207,6 +311,7 @@
                         <?php endif; ?>
                     </div>
                     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="modal-footer">
@@ -228,35 +333,222 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!form || !method) return;
         method.value = 'POST';
         form.action = storeAction;
-        document.getElementById('moduleModalTitle').textContent = <?php echo json_encode('Add '.$config['title'], 15, 512) ?>;
+        document.getElementById('moduleModalTitle').textContent = <?php echo json_encode($isInbound ? 'Add Program Inbound Number' : 'Add '.$config['title'], 15, 512) ?>;
         form.reset();
     }
     document.getElementById('operationAddButton')?.addEventListener('click', () => {
         resetAdd();
         modal?.classList.add('visible');
     });
-    document.querySelectorAll('[data-operation-edit]').forEach((button) => button.addEventListener('click', () => {
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-operation-edit]');
+        if (!button) return;
         const recordId = Number(button.dataset.id);
         if (!Number.isInteger(recordId) || recordId < 1) return;
         const values = JSON.parse(button.dataset.values || '{}');
-        document.getElementById('moduleModalTitle').textContent = <?php echo json_encode('Edit '.$config['title'], 15, 512) ?>;
+        document.getElementById('moduleModalTitle').textContent = <?php echo json_encode($isInbound ? 'Edit Program Inbound Number' : 'Edit '.$config['title'], 15, 512) ?>;
         method.value = 'PUT';
         form.action = <?php echo json_encode(url('/'.$module), 15, 512) ?> + '/' + recordId;
         Object.keys(values).forEach((key) => {
+            if (Array.isArray(values[key])) return;
             const field = document.getElementById('field_' + key);
             if (field) field.value = values[key] ?? '';
         });
         modal?.classList.add('visible');
-    }));
+    });
 });
 </script>
+<?php if($isInbound): ?>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const input = document.getElementById('field_campaign');
+    const menu = document.getElementById('pinCampaignMenu');
+    const gateway = document.getElementById('field_media_gateway_id');
+    const port = document.getElementById('field_port');
+    const network = document.getElementById('field_network');
+    const inboundForm = document.getElementById('moduleForm');
+    const lists = {
+        mobile: [],
+        landline: [],
+    };
+
+    const options = () => [...(menu?.querySelectorAll('.pin-campaign-option') || [])];
+    const filterMenu = () => {
+        if (!input || !menu) return;
+        const query = input.value.trim().toLowerCase();
+        let visible = 0;
+        options().forEach((option) => {
+            const match = !query || option.dataset.name.toLowerCase().includes(query);
+            option.hidden = !match;
+            if (match) visible += 1;
+        });
+        const empty = menu.querySelector('.pin-campaign-empty');
+        if (empty && options().length) empty.hidden = visible > 0;
+    };
+    const openMenu = () => {
+        filterMenu();
+        if (menu) menu.hidden = false;
+        input?.setAttribute('aria-expanded', 'true');
+    };
+    const closeMenu = () => {
+        if (menu) menu.hidden = true;
+        input?.setAttribute('aria-expanded', 'false');
+    };
+    input?.addEventListener('focus', openMenu);
+    input?.addEventListener('input', openMenu);
+    menu?.addEventListener('click', (event) => {
+        const option = event.target.closest('.pin-campaign-option');
+        if (!option) return;
+        input.value = option.dataset.name || '';
+        closeMenu();
+    });
+    document.addEventListener('click', (event) => {
+        if (!(event.target instanceof Element) || !event.target.closest('.pin-campaign-combo')) {
+            closeMenu();
+        }
+    });
+
+    const fillGatewayDetails = () => {
+        const selected = gateway?.selectedOptions?.[0];
+        if (port) port.value = selected?.dataset.port || '';
+        if (network) network.value = selected?.dataset.network || '';
+    };
+    const toggleGsm = () => {
+        const hasMobile = lists.mobile.length > 0;
+        if (gateway) {
+            gateway.disabled = !hasMobile;
+            gateway.required = hasMobile;
+            gateway.setCustomValidity('');
+        }
+        if (port) port.disabled = !hasMobile;
+        if (network) network.disabled = !hasMobile;
+        if (!hasMobile) {
+            if (gateway) gateway.value = '';
+            if (port) port.value = '';
+            if (network) network.value = '';
+        }
+    };
+    const renderChips = (kind) => {
+        const chips = document.getElementById(kind === 'mobile' ? 'pinMobileChips' : 'pinLandlineChips');
+        const hidden = document.getElementById(kind === 'mobile' ? 'pinMobileHidden' : 'pinLandlineHidden');
+        const name = kind === 'mobile' ? 'mobile_numbers[]' : 'landline_numbers[]';
+        if (!chips || !hidden) return;
+        chips.innerHTML = lists[kind].map((value, index) => (
+            '<span class="pin-chip">' + value.replace(/</g, '') +
+            '<button type="button" class="pin-chip-remove" data-pin-remove="' + kind + '" data-index="' + index + '" aria-label="Remove ' + value + '">×</button></span>'
+        )).join('');
+        hidden.innerHTML = lists[kind].map((value) => (
+            '<input type="hidden" name="' + name + '" value="' + String(value).replace(/"/g, '&quot;') + '">'
+        )).join('');
+        if (kind === 'mobile') toggleGsm();
+    };
+    const addNumber = (kind, raw) => {
+        const field = document.getElementById(kind === 'mobile' ? 'pinMobileInput' : 'pinLandlineInput');
+        const value = String(raw || '').trim();
+        if (!value) return;
+        if (!/^[0-9]{1,50}$/.test(value)) {
+            field?.setCustomValidity((kind === 'mobile' ? 'Mobile' : 'Landline') + ' must contain only digits.');
+            field?.reportValidity();
+            return;
+        }
+        const other = kind === 'mobile' ? lists.landline : lists.mobile;
+        if (lists[kind].includes(value) || other.includes(value)) {
+            field?.setCustomValidity('Number is duplicated.');
+            field?.reportValidity();
+            return;
+        }
+        field?.setCustomValidity('');
+        lists[kind].push(value);
+        renderChips(kind);
+    };
+    const bindChipInput = (kind, fieldId) => {
+        const field = document.getElementById(fieldId);
+        field?.addEventListener('input', () => field.setCustomValidity(''));
+        field?.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            addNumber(kind, field.value);
+            if (field.validity.valid) field.value = '';
+        });
+    };
+    bindChipInput('mobile', 'pinMobileInput');
+    bindChipInput('landline', 'pinLandlineInput');
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-pin-remove]');
+        if (!button) return;
+        const kind = button.getAttribute('data-pin-remove');
+        const index = Number(button.getAttribute('data-index'));
+        if (!lists[kind] || Number.isNaN(index)) return;
+        lists[kind].splice(index, 1);
+        renderChips(kind);
+    });
+    gateway?.addEventListener('change', fillGatewayDetails);
+    inboundForm?.addEventListener('submit', (event) => {
+        const mobileField = document.getElementById('pinMobileInput');
+        const landlineField = document.getElementById('pinLandlineInput');
+        mobileField?.setCustomValidity('');
+        landlineField?.setCustomValidity('');
+        if (mobileField?.value.trim()) addNumber('mobile', mobileField.value);
+        if (landlineField?.value.trim()) addNumber('landline', landlineField.value);
+        if (mobileField && mobileField.validity.valid) mobileField.value = '';
+        if (landlineField && landlineField.validity.valid) landlineField.value = '';
+        if ((mobileField && !mobileField.validity.valid) || (landlineField && !landlineField.validity.valid)) {
+            event.preventDefault();
+            return;
+        }
+        toggleGsm();
+        if (lists.mobile.length === 0 && lists.landline.length === 0) {
+            event.preventDefault();
+            const target = landlineField || mobileField;
+            target?.setCustomValidity('Enter at least one Mobile or Landline number.');
+            target?.reportValidity();
+            return;
+        }
+        mobileField?.setCustomValidity('');
+        landlineField?.setCustomValidity('');
+        if (lists.mobile.length > 0 && gateway && !String(gateway.value || '').trim()) {
+            event.preventDefault();
+            gateway.setCustomValidity('Please select a GSM Gateway.');
+            gateway.reportValidity();
+            return;
+        }
+        gateway?.setCustomValidity('');
+    });
+
+    const resetNumbers = () => {
+        lists.mobile = [];
+        lists.landline = [];
+        renderChips('mobile');
+        renderChips('landline');
+        const mobileInput = document.getElementById('pinMobileInput');
+        const landlineInput = document.getElementById('pinLandlineInput');
+        if (mobileInput) mobileInput.value = '';
+        if (landlineInput) landlineInput.value = '';
+        toggleGsm();
+    };
+    document.getElementById('operationAddButton')?.addEventListener('click', resetNumbers);
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-operation-edit]');
+        if (!button) return;
+        const values = JSON.parse(button.dataset.values || '{}');
+        lists.mobile = Array.isArray(values.mobile_numbers) ? values.mobile_numbers.map(String) : [];
+        lists.landline = Array.isArray(values.landline_numbers) ? values.landline_numbers.map(String) : [];
+        renderChips('mobile');
+        renderChips('landline');
+        if (gateway) gateway.value = values.media_gateway_id ?? '';
+        fillGatewayDetails();
+        toggleGsm();
+    });
+});
+</script>
+<?php endif; ?>
 <?php echo $__env->make('partials.inventory-import-script', [
     'previewUrl' => auth()->user()->hasPermission('media.create') ? route($module.'.import.preview') : '',
     'confirmUrl' => auth()->user()->hasPermission('media.create') ? route($module.'.import.confirm') : '',
     'errorsUrl' => auth()->user()->hasPermission('media.create') ? route($module.'.import.errors') : '',
     'previewFields' => array_keys($transferColumns),
 ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
-<?php if($isSim): ?>
+<?php if($useMdyDate): ?>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const minDate = <?php echo json_encode(\App\Support\PdcEndorseDate::MIN_DATE, 15, 512) ?>;
@@ -283,7 +575,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const closeAllCals = () => document.querySelectorAll('#moduleForm .pdc-cal').forEach((cal) => cal.setAttribute('hidden', ''));
 
-    function bindMdyDateField(textId) {
+    function bindMdyDateField(textId, invalidMessage) {
         const dateText = document.getElementById(textId);
         const datePicker = document.getElementById(textId + '_picker');
         const cal = document.getElementById(textId + '_cal');
@@ -474,7 +766,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 const iso = toIso(raw);
                 if (!iso) {
-                    dateText.setCustomValidity('Contract date must be a valid date on or after 1/1/2000.');
+                    dateText.setCustomValidity(invalidMessage || 'Enter a valid date on or after 1/1/2000.');
                     dateText.reportValidity();
                     return false;
                 }
@@ -484,8 +776,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    const startField = bindMdyDateField('field_contract_start');
-    const endField = bindMdyDateField('field_contract_end');
+    const startField = bindMdyDateField('field_contract_start', 'Contract date must be a valid date on or after 1/1/2000.');
+    const endField = bindMdyDateField('field_contract_end', 'Contract date must be a valid date on or after 1/1/2000.');
+    const reportedField = bindMdyDateField('field_reported_on', 'Reported On must be a valid date on or after 1/1/2000.');
     document.addEventListener('click', (event) => {
         if (!(event.target instanceof Element)) return;
         if (event.target.closest('#moduleForm .pdc-date-field')) return;
@@ -495,19 +788,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.key === 'Escape') closeAllCals();
     });
     document.getElementById('moduleForm')?.addEventListener('submit', (event) => {
-        if (!startField.validate() || !endField.validate()) event.preventDefault();
+        if (!startField.validate() || !endField.validate() || !reportedField.validate()) event.preventDefault();
     });
     document.getElementById('operationAddButton')?.addEventListener('click', () => {
         startField.setValue('');
         endField.setValue('');
+        reportedField.setValue('');
         closeAllCals();
     });
-    document.querySelectorAll('[data-operation-edit]').forEach((button) => button.addEventListener('click', () => {
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-operation-edit]');
+        if (!button) return;
         const values = JSON.parse(button.dataset.values || '{}');
         startField.setValue(values.contract_start || '');
         endField.setValue(values.contract_end || '');
+        reportedField.setValue(values.reported_on || '');
         closeAllCals();
-    }));
+    });
 });
 </script>
 <?php endif; ?>

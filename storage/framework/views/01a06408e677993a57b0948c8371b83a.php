@@ -4,104 +4,144 @@
         <h1 class="page-title">Program Location</h1>
         <p class="page-subtitle">GSM gateway inventory grouped by program location.</p>
     </div>
-</div>
-
-<form class="loc-filters" id="programLocationFilters" method="GET" action="<?php echo e(route('program-location')); ?>">
-    <div class="search-box">
-        <span class="search-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
-        </span>
-        <input name="search" value="<?php echo e($search); ?>" placeholder="Search location or code..." aria-label="Search location or code" autocomplete="off">
-        <button type="button" class="search-clear" data-clear-search aria-label="Clear search" title="Clear search">×</button>
-    </div>
-    <label class="loc-filter">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 5h17l-6.6 7.8V19l-3.8-2v-4.2L3.5 5z"></path></svg>
-        <select name="status" aria-label="Filter by gateway status" onchange="this.form.submit()">
-            <option value="">All Gateway Status</option>
-            <option value="active" <?php echo e($status === 'active' ? 'selected' : ''); ?>>Active</option>
-            <option value="none" <?php echo e($status === 'none' ? 'selected' : ''); ?>>None</option>
-        </select>
-    </label>
-    <label class="loc-filter">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 5h17l-6.6 7.8V19l-3.8-2v-4.2L3.5 5z"></path></svg>
-        <select name="location" aria-label="Filter by location" onchange="this.form.submit()">
-            <option value="">All Locations</option>
-            <?php $__currentLoopData = $locationOptions; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $slug => $name): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                <option value="<?php echo e($slug); ?>" <?php echo e($locationFilter === $slug ? 'selected' : ''); ?>><?php echo e($name); ?></option>
-            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-        </select>
-    </label>
-</form>
-
-<div class="table-card table-wrap">
-<table aria-label="Program Location">
-<thead>
-<tr>
-    <th>ID</th>
-    <th>Location</th>
-    <th>Code</th>
-    <th class="num-col">GSM Gateway Records</th>
-    <th>Gateway Status</th>
-    <th>Last Updated</th>
-    <th class="actions-column">Actions</th>
-</tr>
-</thead>
-<tbody>
-<?php $__empty_1 = true; $__currentLoopData = $locations; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $location): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
-<tr>
-    <td><?php echo e(($locations->firstItem() ?? 1) + $loop->index); ?></td>
-    <td>
-        <span class="loc-cell">
-            <span><?php echo e($location['name']); ?></span>
-        </span>
-    </td>
-    <td><?php echo e($location['code']); ?></td>
-    <td class="num-col loc-records-col"><span class="num-align" data-label="GSM Gateway Records"><?php echo e($location['gateways']); ?></span></td>
-    <td>
-        <span class="loc-badge <?php echo e($location['gateways'] > 0 ? 'on' : 'off'); ?>">
-            <span class="loc-badge-dot" aria-hidden="true"></span>
-            <?php echo e($location['gateways'] > 0 ? $location['gateways'].' Active' : '0 None'); ?>
-
-        </span>
-    </td>
-    <td><?php echo e($location['updated_at'] ? \Illuminate\Support\Carbon::parse($location['updated_at'])->format('M d, Y h:i A') : '—'); ?></td>
-    <td class="actions-column">
-        <div class="row-actions">
-            <?php $manageActive = ($locationFilter ?? '') === $location['slug']; ?>
-            <a class="loc-manage<?php echo e($manageActive ? ' active' : ''); ?>" href="<?php echo e(route('program-location.show', $location['slug'])); ?>" title="Manage <?php echo e($location['name']); ?>" <?php if($manageActive): ?> aria-current="page" <?php endif; ?>>Manage</a>
-        </div>
-    </td>
-</tr>
-<?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
-<tr><td colspan="7"><div class="empty-state">No program locations found.</div></td></tr>
-<?php endif; ?>
-</tbody>
-</table>
-<div class="table-footer">
-    <span>Showing <?php echo e($locations->firstItem() ?? 0); ?> to <?php echo e($locations->lastItem() ?? 0); ?> of <?php echo e($locations->total()); ?> entries</span>
-    <div class="footer-right">
-        <div class="pager">
-            <?php if($locations->onFirstPage()): ?>
-                <span class="page-number disabled">‹</span>
-            <?php else: ?>
-                <a class="page-number" href="<?php echo e($locations->previousPageUrl()); ?>">‹</a>
-            <?php endif; ?>
-            <?php for($page = 1; $page <= max($locations->lastPage(), 1); $page++): ?>
-                <?php if($page === $locations->currentPage()): ?>
-                    <span class="page-number active"><?php echo e($page); ?></span>
-                <?php else: ?>
-                    <a class="page-number" href="<?php echo e($locations->url($page)); ?>"><?php echo e($page); ?></a>
-                <?php endif; ?>
-            <?php endfor; ?>
-            <?php if($locations->hasMorePages()): ?>
-                <a class="page-number" href="<?php echo e($locations->nextPageUrl()); ?>">›</a>
-            <?php else: ?>
-                <span class="page-number disabled">›</span>
-            <?php endif; ?>
+    <div class="toolbar">
+        <div class="search-box">
+            <span class="search-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+            </span>
+            <input id="programLocationSearch" type="search" value="<?php echo e($search); ?>" placeholder="Search Sites" aria-label="Search Sites" autocomplete="off">
         </div>
     </div>
 </div>
+
+<div class="loc-map-shell">
+    <div id="programLocationMap" class="loc-map" role="application" aria-label="Program Location map"></div>
+    <script type="application/json" id="programLocationSites"><?php echo json_encode($sites); ?></script>
+    <div class="loc-map-legend" aria-label="Map legend">
+        <div class="loc-map-legend-item"><span class="loc-map-swatch is-on" aria-hidden="true"></span> Gateway Assigned</div>
+        <div class="loc-map-legend-item"><span class="loc-map-swatch is-off" aria-hidden="true"></span> No Gateway Assigned</div>
+    </div>
 </div>
 <?php $__env->stopSection(); ?>
+
+<?php $__env->startPush('modals'); ?>
+<link rel="stylesheet" href="<?php echo e(asset('vendor/leaflet/leaflet.css')); ?>">
+<script src="<?php echo e(asset('vendor/leaflet/leaflet.js')); ?>"></script>
+<script>
+(function () {
+    const root = document.getElementById('programLocationMap');
+    const search = document.getElementById('programLocationSearch');
+    const payload = document.getElementById('programLocationSites');
+    if (!root) return;
+
+    const sites = JSON.parse(payload ? payload.textContent : '[]');
+    const MANILA_CENTER = [14.575, 121.055];
+    const MANILA_ZOOM = 13;
+    const labelDir = {
+        alcar: 'left',
+        ctn: 'top',
+        estancia: 'right',
+        scs: 'right',
+        cg3: 'bottom',
+        skyrise: 'left',
+        pdc: 'right'
+    };
+
+    function escapeHtml(value) {
+        return String(value || '').replace(/[&<>"']/g, function (char) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+        });
+    }
+
+    function pinHtml(site) {
+        return '<span class="loc-pin-dot"></span><span class="loc-pin-label loc-pin-label-' +
+            (labelDir[site.slug] || 'top') + '">' + escapeHtml(site.name) + '</span>';
+    }
+
+    function popupHtml(site) {
+        const assigned = !!site.available;
+        const statusClass = assigned ? 'is-on' : 'is-off';
+        const statusText = assigned ? 'Gateway Assigned' : 'No Gateway Assigned';
+
+        return '<div class="loc-popup"><strong>' + escapeHtml(site.name) + '</strong>' +
+            '<div class="loc-popup-address">' + escapeHtml(site.address) + '</div>' +
+            '<div class="loc-popup-status ' + statusClass + '">' +
+            '<span class="loc-map-swatch ' + statusClass + '" aria-hidden="true"></span> ' + statusText +
+            '</div></div>';
+    }
+
+    function matchesQuery(site, query) {
+        if (!query) return true;
+        return (site.name + ' ' + (site.address || '') + ' ' + site.slug).toLowerCase().indexOf(query) !== -1;
+    }
+
+    if (typeof L === 'undefined') {
+        root.textContent = 'Map library failed to load.';
+        return;
+    }
+
+    const map = L.map(root, { zoomControl: true, scrollWheelZoom: true, dragging: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    const markers = [];
+    sites.forEach(function (site) {
+        const marker = L.marker([site.lat, site.lng], {
+            icon: L.divIcon({
+                className: 'loc-pin loc-pin-' + site.slug + (site.available ? ' is-on' : ' is-off'),
+                html: pinHtml(site),
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
+            }),
+            title: site.name
+        }).addTo(map);
+        marker.bindPopup(popupHtml(site), { maxWidth: 320, autoPan: true, autoPanPadding: [28, 28] });
+        marker._site = site;
+        markers.push(marker);
+    });
+
+    function showMetroManila(animate) {
+        map.setView(MANILA_CENTER, MANILA_ZOOM, { animate: !!animate });
+    }
+
+    function applySearch() {
+        const query = (search?.value || '').trim().toLowerCase();
+        const matched = [];
+        markers.forEach(function (marker) {
+            const hit = matchesQuery(marker._site, query);
+            const el = marker.getElement();
+            if (el) el.classList.toggle('is-dimmed', !!query && !hit);
+            if (hit) matched.push(marker);
+        });
+        if (!query) {
+            map.closePopup();
+            showMetroManila(false);
+            return;
+        }
+        const exact = matched.filter(function (marker) {
+            const site = marker._site;
+            return String(site.name).toLowerCase() === query || String(site.slug).toLowerCase() === query;
+        });
+        const focus = exact[0] || (matched.length === 1 ? matched[0] : null);
+        if (focus) {
+            map.setView(focus.getLatLng(), 16, { animate: true });
+            focus.openPopup();
+        }
+    }
+
+    showMetroManila(false);
+    setTimeout(function () {
+        map.invalidateSize();
+        showMetroManila(false);
+        if (search?.value) applySearch();
+    }, 80);
+    ['input', 'change', 'keyup', 'search'].forEach(function (eventName) {
+        search?.addEventListener(eventName, applySearch);
+    });
+})();
+</script>
+<?php $__env->stopPush(); ?>
 
 <?php echo $__env->make('layouts.app', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?><?php /**PATH C:\xampp\htdocs\OmniChannel\OmniChannel_Inventory_Production_Updated\resources\views/locations/index.blade.php ENDPATH**/ ?>

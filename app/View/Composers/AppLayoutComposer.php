@@ -4,7 +4,6 @@ namespace App\View\Composers;
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\View\View;
-use App\Services\NotificationService;
 
 class AppLayoutComposer
 {
@@ -12,14 +11,12 @@ class AppLayoutComposer
     {
         $map = [
             'dashboard' => ['dashboard', 'Dashboard'],
+            'dashboard.snapshot' => ['dashboard', 'Dashboard'],
             'media-gateways.index' => ['media-gateways', 'Media Gateways'],
             'gsm-gateways.index' => ['gsm-gateways', 'GSM Gateway'],
             'users.index' => ['users', 'Users'],
             'users.create' => ['users', 'Add User'],
             'users.edit' => ['users', 'Edit User'],
-            'user-types.index' => ['user-types', 'User Types'],
-            'user-types.create' => ['user-types', 'Add User Type'],
-            'user-types.edit' => ['user-types', 'Edit User Type'],
             'activity-logs' => ['activity-logs', 'Activity Logs'],
             'login-history' => ['login-history', 'Login History'],
             'profile' => ['profile', 'My Profile'],
@@ -40,8 +37,8 @@ class AppLayoutComposer
             'defective-gsm' => ['defective-gsm', 'Defective GSM'],
             'program-location' => ['program-location', 'Program Location'],
             'program-location.show' => ['program-location', 'Program Location'],
-            'reports' => ['reports', 'Operations Reports'],
-            'reports.export' => ['reports', 'Operations Reports'],
+            'reports' => ['reports', 'Reports'],
+            'reports.export' => ['reports', 'Reports'],
         ];
 
         $name = Route::currentRouteName() ?? '';
@@ -54,21 +51,11 @@ class AppLayoutComposer
             $pageTitle = $label;
         }
 
-        if ($name === 'user-types.edit') {
-            $type = Route::current()?->parameter('userType');
-            if (is_object($type) && isset($type->name)) {
-                $pageTitle = 'Edit User Type: '.$type->name;
-            }
-        }
-
         if (! $view->offsetExists('pageKey')) {
             $view->with('pageKey', $pageKey);
         }
         if (! $view->offsetExists('pageTitle')) {
             $view->with('pageTitle', $pageTitle);
-        }
-        if (! $view->offsetExists('headerAlerts')) {
-            $view->with('headerAlerts', NotificationService::forCurrentUser());
         }
     }
 }

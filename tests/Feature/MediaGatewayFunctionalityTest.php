@@ -12,26 +12,10 @@ class MediaGatewayFunctionalityTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function actingAsSystemAdministrator(): User
+    private function actingAsAdministrator(): User
     {
-        $type = UserType::create([
-            'name' => 'System Administrator',
-            'description' => 'Test role',
-            'permissions' => [
-                'dashboard.view',
-                'media.view',
-                'media.create',
-                'media.edit',
-                'media.delete',
-                'media.export',
-                'users.view',
-                'users.manage',
-                'roles.view',
-                'roles.manage',
-                'logs.view',
-                'maintenance.manage',
-            ],
-        ]);
+        $this->artisan('db:seed', ['--class' => 'Database\\Seeders\\UserTypeSeeder']);
+        $type = UserType::where('name', 'Administrator')->firstOrFail();
 
         $user = User::factory()->create([
             'user_type_id' => $type->id,
@@ -45,7 +29,7 @@ class MediaGatewayFunctionalityTest extends TestCase
 
     public function test_json_list_searches_and_sorts_real_records(): void
     {
-        $this->actingAsSystemAdministrator();
+        $this->actingAsAdministrator();
 
         MediaGateway::create([
             'site_name' => 'Alpha',
@@ -72,7 +56,7 @@ class MediaGatewayFunctionalityTest extends TestCase
 
     public function test_json_requests_create_update_and_delete_a_media_gateway(): void
     {
-        $this->actingAsSystemAdministrator();
+        $this->actingAsAdministrator();
 
         $payload = [
             'site_name' => 'Test Site',
@@ -104,7 +88,7 @@ class MediaGatewayFunctionalityTest extends TestCase
 
     public function test_invalid_ip_address_is_rejected(): void
     {
-        $this->actingAsSystemAdministrator();
+        $this->actingAsAdministrator();
 
         $this->postJson('/media-gateways', [
             'site_name' => 'Test Site',
@@ -119,7 +103,7 @@ class MediaGatewayFunctionalityTest extends TestCase
 
     public function test_export_downloads_an_excel_file_without_gateway_status(): void
     {
-        $this->actingAsSystemAdministrator();
+        $this->actingAsAdministrator();
 
         MediaGateway::create([
             'site_name' => 'PDC',

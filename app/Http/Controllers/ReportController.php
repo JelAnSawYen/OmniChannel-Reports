@@ -2,106 +2,113 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ChannelPort;
-use App\Models\ChannelPrefix;
-use App\Models\MediaGateway;
-use App\Models\NetworkPrefix;
-use App\Models\TelcoCost;
 use App\Services\AuditLogger;
-use App\Services\NotificationService;
-use App\Services\OperationalAlerts;
+use App\Services\OperationalReportService;
+use App\Services\SimplePdfService;
 use App\Services\XlsxService;
 use App\Support\PublicError;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
-    public function index()
+    public function index(Request $request, OperationalReportService $reports)
     {
-        return view('reports.index', $this->snapshot());
+        return view('reports.index', $reports->page($request));
     }
 
-    public function export(Request $request, XlsxService $xlsx, string $type)
-    {
-        abort_unless(in_array($type, ['inventory', 'telco', 'contracts'], true), 404);
+    public function export(
+        Request $request,
+        string $format,
+        OperationalReportService $reports,
+        XlsxService $xlsx,
+        SimplePdfService $pdf
+    ) {
+        abort_unless(in_array($format, ['xlsx', 'pdf', 'csv'], true), 404);
 
-        $data = $this->snapshot();
-
-        [$headers, $rows, $filename, $label] = match ($type) {
-            'inventory' => [
-                ['Item', 'Count'],
-                [
-                    ['Media Gateways', $data['gatewayTotal']],
-                    ['Channel Prefixes', $data['channelPrefixes']],
-                    ['Channel Ports', $data['ports']['total']],
-                    ['Ports In Use', $data['ports']['in_use']],
-                    ['Ports Available', $data['ports']['available']],
-                    ['Ports Disabled', $data['ports']['disabled']],
-                    ['Port Utilization %', $data['ports']['utilization']],
-                    ['Network Prefixes', $data['networkPrefixes']],
-                ],
-                'operations-inventory.xlsx',
-                'inventory snapshot',
-            ],
-            'telco' => [
-                ['Provider', 'Active Monthly Cost', 'Services'],
-                $data['telcoByProvider']->map(fn ($row) => [
-                    $row->provider,
-                    number_format((float) $row->monthly_cost, 2, '.', ''),
-                    $row->services,
-                ]),
-                'telco-cost-by-provider.xlsx',
-                'telco costs by provider',
-            ],
-            default => [
-                ['Provider', 'Site', 'Service Type', 'Monthly Cost', 'Contract End', 'Status'],
-                $data['expiringContracts']->map(fn (TelcoCost $row) => [
-                    $row->provider,
-                    $row->site,
-                    $row->service_type,
-                    number_format((float) $row->monthly_cost, 2, '.', ''),
-                    optional($row->contract_end)?->format('Y-m-d'),
-                    $row->status,
-                ]),
-                'expiring-telco-contracts.xlsx',
-                'expiring telco contracts',
-            ],
-        };
+        $payload = $reports->exportPayload($request);
+        $filename = $this->filename($payload['tab'], $format);
+        $preamble = $this->preamble($payload);
+        $exportRows = $payload['all_rows']->map(fn ($row) => array_values((array) $row))->all();
+        $headers = $payload['headers'];
+        $totals = $payload['totals'];
 
         try {
-            $path = $xlsx->export($headers, $rows, $filename);
+            if ($format === 'xlsx') {
+                $path = $xlsx->exportReport($preamble, $headers, $exportRows, $filename, $totals);
+                AuditLogger::log('Exported', 'Reports', 'Exported '.$payload['title'].' as Excel', null, $request);
+
+                return response()->download($path, $filename)->deleteFileAfterSend(true);
+            }
+
+            if ($format === 'pdf') {
+                $insight = is_string($payload['insight'] ?? null) ? $payload['insight'] : null;
+                $pdfRows = $exportRows;
+                if (is_array($totals)) {
+                    $pdfRows[] = array_values($totals);
+                }
+                $binary = $pdf->render($payload['title'], $preamble, $headers, $pdfRows, $insight);
+                AuditLogger::log('Exported', 'Reports', 'Exported '.$payload['title'].' as PDF', null, $request);
+
+                return response($binary, 200, [
+                    'Content-Type' => 'application/pdf',
+                    'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+                ]);
+            }
+
+            AuditLogger::log('Exported', 'Reports', 'Exported '.$payload['title'].' as CSV', null, $request);
+
+            return $this->csvDownload($filename, $headers, $exportRows, is_array($totals) ? $totals : null);
         } catch (\Throwable $exception) {
-            NotificationService::exportFailed('Reports', 'Export failed.', 'reports');
             return back()->with('error', PublicError::failed('Export', $exception));
         }
-        AuditLogger::log('Exported', 'Reports', 'Exported '.$label, null, $request);
-
-        return response()->download($path, $filename)->deleteFileAfterSend(true);
     }
 
-    private function snapshot(): array
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return list<string>
+     */
+    private function preamble(array $payload): array
     {
-        $telcoByProvider = TelcoCost::query()
-            ->where('status', 'Active')
-            ->selectRaw('provider, SUM(monthly_cost) as monthly_cost, COUNT(*) as services')
-            ->groupBy('provider')
-            ->orderByDesc('monthly_cost')
-            ->get();
-
-        $expiringContracts = TelcoCost::query()
-            ->whereNotNull('contract_end')
-            ->whereBetween('contract_end', [now()->toDateString(), now()->addDays(30)->toDateString()])
-            ->orderBy('contract_end')
-            ->get();
-
-        return [
-            'gatewayTotal' => MediaGateway::count(),
-            'channelPrefixes' => ChannelPrefix::count(),
-            'networkPrefixes' => NetworkPrefix::count(),
-            'ports' => OperationalAlerts::portCapacity(),
-            'activeMonthlyTelco' => (float) TelcoCost::where('status', 'Active')->sum('monthly_cost'),
-            'telcoByProvider' => $telcoByProvider,
-            'expiringContracts' => $expiringContracts,
+        $lines = [
+            (string) $payload['title'],
+            'Generated: '.$payload['generated_at']->format('M d, Y g:i A'),
+            'Generated by: '.(string) $payload['generated_by'],
         ];
+        foreach ($payload['applied_filters'] as $label => $value) {
+            $lines[] = $label.': '.$value;
+        }
+
+        return $lines;
+    }
+
+    /**
+     * @param  list<string>  $headers
+     * @param  list<list<mixed>>  $rows
+     * @param  list<mixed>|null  $totals
+     */
+    private function csvDownload(string $filename, array $headers, array $rows, ?array $totals): StreamedResponse
+    {
+        return response()->streamDownload(function () use ($headers, $rows, $totals) {
+            $handle = fopen('php://output', 'w');
+            if ($handle === false) {
+                return;
+            }
+            fputcsv($handle, $headers);
+            foreach ($rows as $row) {
+                fputcsv($handle, array_values($row));
+            }
+            if (is_array($totals) && $totals !== []) {
+                fputcsv($handle, array_values($totals));
+            }
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    private function filename(string $tab, string $format): string
+    {
+        return $tab.'-'.now()->format('Y-m-d').'.'.$format;
     }
 }

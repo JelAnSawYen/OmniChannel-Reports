@@ -1,227 +1,144 @@
 <?php $__env->startSection('content'); ?>
 <?php
-    $dashIcons = [
+    $kpis = $overview['kpis'];
+    $icons = [
+        'campaigns' => '<path d="m3 11 18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
         'gsm' => '<path d="M4.5 6.5A2.5 2.5 0 0 1 7 4h4.2l3.3 3.3v10.2A2.5 2.5 0 0 1 12 20H7a2.5 2.5 0 0 1-2.5-2.5v-11z"/><rect x="7" y="10.5" width="5" height="5.5" rx="1"/><path d="M17.2 5.4a5.6 5.6 0 0 1 3.3 5"/><path d="M16.8 9.2a2.6 2.6 0 0 1 1.6 2.1"/>',
-        'server' => '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><circle cx="7" cy="7.5" r=".9" fill="currentColor" stroke="none"/><circle cx="7" cy="16.5" r=".9" fill="currentColor" stroke="none"/>',
+        'channels' => '<rect x="4" y="14" width="16" height="5" rx="1.2"/><rect x="4" y="8.5" width="16" height="5" rx="1.2"/><rect x="4" y="3" width="16" height="5" rx="1.2"/>',
         'sim' => '<path d="M6 5.5A2.5 2.5 0 0 1 8.5 3h4.7L18 7.8v10.7A2.5 2.5 0 0 1 15.5 21h-7A2.5 2.5 0 0 1 6 18.5v-13z"/><rect x="9" y="10.5" width="6" height="6" rx="1"/>',
-        'users' => '<circle cx="9.5" cy="8" r="3.2"/><path d="M3.5 20a6 6 0 0 1 12 0"/><path d="M16.5 5.2a3.2 3.2 0 0 1 0 5.6"/><path d="M18 14.4A6 6 0 0 1 21 20"/>',
-        'inbound' => '<path d="M20.5 3.5 15.7 8.3"/><path d="M15.7 4v4.6h4.6"/><path d="M20 16.9v2.3a1.7 1.7 0 0 1-1.9 1.7 16.8 16.8 0 0 1-7.3-2.6 16.5 16.5 0 0 1-5.1-5.1A16.8 16.8 0 0 1 3.1 5.9 1.7 1.7 0 0 1 4.8 4h2.3a1.7 1.7 0 0 1 1.7 1.5c.1.8.3 1.6.6 2.3a1.7 1.7 0 0 1-.4 1.8l-1 1a13.5 13.5 0 0 0 5.1 5.1l1-1a1.7 1.7 0 0 1 1.8-.4c.7.3 1.5.5 2.3.6A1.7 1.7 0 0 1 20 16.9z"/>',
-        'signal' => '<circle cx="12" cy="9" r="1.8"/><path d="M8.6 5.6a4.8 4.8 0 0 0 0 6.8"/><path d="M15.4 5.6a4.8 4.8 0 0 1 0 6.8"/><path d="M6.2 3.2a8.2 8.2 0 0 0 0 11.6"/><path d="M17.8 3.2a8.2 8.2 0 0 1 0 11.6"/><path d="M12 10.8V21"/><path d="M9 21l3-5 3 5"/>',
-        'alert' => '<path d="M10.4 4.3 3 17.4A1.8 1.8 0 0 0 4.6 20h14.8a1.8 1.8 0 0 0 1.6-2.6L13.6 4.3a1.8 1.8 0 0 0-3.2 0z"/><path d="M12 9.5v4"/><path d="M12 16.6h.01"/>',
-        'archive' => '<path d="M13.5 3H7.5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8l-5-5z"/><path d="M13.5 3v5h5"/><path d="M10 12.8v4l3.4-2-3.4-2z"/>',
-        'pin' => '<path d="M12 21c4.4-4 7-7.2 7-10.4A7 7 0 0 0 5 10.6C5 13.8 7.6 17 12 21z"/><circle cx="12" cy="10.2" r="2.4"/>',
-        'building' => '<path d="M4 21V6a1.5 1.5 0 0 1 1.5-1.5h7A1.5 1.5 0 0 1 14 6v15"/><path d="M14 10h4.5A1.5 1.5 0 0 1 20 11.5V21"/><path d="M3 21h18"/><path d="M7 8.5h1.5M7 12h1.5M7 15.5h1.5M11 8.5h1.5M11 12h1.5M11 15.5h1.5M17 14h1"/>',
-        'pulse' => '<path d="M3 12h3.2l2.3-5.5 4 12.5 2.4-7h6.1"/>',
-        'clock' => '<circle cx="12" cy="12" r="9"/><path d="M12 7.4V12l3.2 1.9"/>',
-        'network' => '<circle cx="12" cy="12" r="3"/><path d="M5 12a7 7 0 0 1 7-7"/><path d="M19 12a7 7 0 0 1-7 7"/><circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none"/>',
+        'bars' => '<path d="M4 18V10"/><path d="M10 18V6"/><path d="M16 18v-7"/><path d="M22 18V4"/>',
+        'util' => '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/>',
+        'trend' => '<path d="M4 19h16"/><path d="m4 15 5-5 4 3 7-8"/>',
     ];
-    $chevron = '<path d="m9 6 6 6-6 6"/>';
-    $activityStyle = function (?string $module, ?string $action = null) {
-        $module = (string) $module;
-        $action = (string) $action;
-        if (str_contains($module, 'GSM Gateway') || str_contains($module, 'Media Gateway')) return ['gsm', 'blue'];
-        if (str_contains($module, 'PDC')) return ['server', 'purple'];
-        if (str_contains($module, 'SIM')) return ['sim', 'green'];
-        if (str_contains($module, 'User')) return ['users', 'orange'];
-        if (str_contains($module, 'Inbound')) return ['inbound', 'sky'];
-        if (str_contains($module, 'Booster')) return ['signal', 'pink'];
-        if (str_contains($module, 'Defective')) return ['alert', 'amber'];
-        if (str_contains($module, 'Archive')) return ['archive', 'navy'];
-        if (str_contains($module, 'Location')) return ['pin', 'sky'];
-        if ($action === 'Exported' || str_contains($module, 'Export')) return ['archive', 'green'];
-        return ['clock', 'sky'];
-    };
-    $donutC = 2 * M_PI * 52;
+    $canViewReports = auth()->user()->hasPermission('media.view') && auth()->user()->canAccessModule('reports');
 ?>
-<div class="dashboard-home">
+<div class="dashboard-home" id="dashboardHome" data-snapshot-url="<?php echo e(route('dashboard.snapshot')); ?>" data-fingerprint="<?php echo e($overview['fingerprint']); ?>">
+    <script type="application/json" id="dashOverviewData"><?php echo json_encode($overview, 15, 512) ?></script>
+    <div class="dash-first">
     <div class="dash-hero">
         <div>
             <h1 class="dash-greeting"><?php echo e($greeting); ?>, <?php echo e(auth()->user()->name); ?>!</h1>
-            <p class="dash-meta"><?php echo e(auth()->user()->userType?->name); ?> • <?php echo e(now()->format('l, F d, Y')); ?></p>
+            <p class="dash-meta"><?php echo e($roleName); ?> • <?php echo e($currentDate); ?></p>
         </div>
         <div class="dash-updated">
-            <span>Last updated <?php echo e(now()->format('g:i A')); ?></span>
-            <a class="dash-refresh" href="<?php echo e(route('dashboard')); ?>" title="Refresh dashboard" aria-label="Refresh dashboard">
+            <span>Last updated: <span data-dash-updated><?php echo e($overview['generated_at_label']); ?></span></span>
+            <button type="button" class="dash-refresh" data-dash-refresh title="Refresh dashboard" aria-label="Refresh dashboard">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
-            </a>
+            </button>
         </div>
     </div>
 
     <div class="dash-kpis">
-        <?php $__currentLoopData = $kpis; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $kpi): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-            <div class="dash-kpi dash-kpi-<?php echo e($kpi['tone']); ?>">
-                <div class="dash-kpi-head">
-                    <span class="dash-kpi-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $dashIcons[$kpi['icon']] ?? ''; ?></svg>
-                    </span>
-                    <span class="dash-kpi-label"><?php echo e($kpi['label']); ?></span>
-                </div>
-                <div class="dash-kpi-value"><?php echo e($kpi['value']); ?></div>
-                <div class="dash-kpi-foot">
-                    <span class="dash-kpi-note"><span class="dash-kpi-dot"></span><span><?php echo e($kpi['note']); ?></span></span>
-                    <svg class="dash-spark" viewBox="0 0 72 28" aria-hidden="true">
-                        <path class="dash-spark-line" d="<?php echo e($kpi['spark']['path']); ?>" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
-                    </svg>
+        <div class="dash-kpi dash-kpi-blue">
+            <span class="dash-kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $icons['campaigns']; ?></svg>
+            </span>
+            <div class="dash-kpi-body">
+                <span class="dash-kpi-label">Total Campaigns</span>
+                <div class="dash-kpi-value" data-dash-kpi="campaigns"><?php echo e($kpis['campaigns']['display']); ?></div>
+            </div>
+        </div>
+        <div class="dash-kpi dash-kpi-green">
+            <span class="dash-kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $icons['gsm']; ?></svg>
+            </span>
+            <div class="dash-kpi-body">
+                <span class="dash-kpi-label">Total GSM Gateways</span>
+                <div class="dash-kpi-value" data-dash-kpi="gateways"><?php echo e($kpis['gateways']['display']); ?></div>
+            </div>
+        </div>
+        <div class="dash-kpi dash-kpi-purple">
+            <span class="dash-kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $icons['channels']; ?></svg>
+            </span>
+            <div class="dash-kpi-body">
+                <span class="dash-kpi-label">Total Channels</span>
+                <div class="dash-kpi-value" data-dash-kpi="channels"><?php echo e($kpis['channels']['display']); ?></div>
+            </div>
+        </div>
+        <div class="dash-kpi dash-kpi-orange dash-kpi-sims">
+            <span class="dash-kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $icons['sim']; ?></svg>
+            </span>
+            <div class="dash-kpi-body">
+                <span class="dash-kpi-label">Total SIMs</span>
+                <div class="dash-kpi-value" data-dash-kpi="sims"><?php echo e($kpis['sims']['display']); ?></div>
+                <div class="dash-sim-inline">
+                    <span>Globe</span> <strong data-dash-kpi="globe"><?php echo e($kpis['globe']['display']); ?></strong>
+                    <span class="dash-sim-sep">|</span>
+                    <span>Smart</span> <strong data-dash-kpi="smart"><?php echo e($kpis['smart']['display']); ?></strong>
                 </div>
             </div>
-        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+        </div>
     </div>
 
-    <div class="dash-mid">
-        <section class="dash-card dash-locations">
-            <div class="dash-card-head">
+    <section class="dash-card dash-campaigns">
+        <div class="dash-card-head dash-card-head-stack">
+            <div>
                 <h3>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $dashIcons['pin']; ?></svg>
-                    Program Location Overview
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $icons['bars']; ?></svg>
+                    Campaigns with Most Allocations
                 </h3>
+                <p class="dash-card-sub">Top campaigns based on total allocated channels.</p>
             </div>
-            <div class="dash-loc-grid">
-                <?php $__currentLoopData = $locationOverview; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $location): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                    <div class="dash-loc-tile">
-                        <span class="dash-loc-ico" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $dashIcons['building']; ?></svg>
-                        </span>
-                        <span class="dash-loc-name"><?php echo e($location['name']); ?></span>
-                        <span class="dash-loc-value"><?php echo e($location['value']); ?></span>
-                        <span class="dash-loc-label">Active Sites</span>
-                        <span class="dash-loc-bar tone-<?php echo e($location['tone']); ?>"></span>
-                    </div>
-                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-            </div>
-            <?php if(auth()->user()->hasPermission('media.view')): ?>
-                <a class="dash-card-foot" href="<?php echo e(route('program-location')); ?>">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $dashIcons['pin']; ?></svg>
-                    <span>View all program locations</span>
-                    <svg class="dash-foot-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><?php echo $chevron; ?></svg>
-                </a>
-            <?php endif; ?>
-        </section>
-
-        <section class="dash-card dash-health">
-            <div class="dash-card-head">
-                <h3>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $dashIcons['pulse']; ?></svg>
-                    System Health
-                </h3>
-            </div>
-            <div class="dash-overview-body">
-                <div class="dash-donut-wrap">
-                    <?php $healthOffset = 0; ?>
-                    <svg class="dash-donut" viewBox="0 0 140 140" aria-label="System health <?php echo e($healthPercent); ?> percent <?php echo e($healthTier); ?>">
-                        <circle cx="70" cy="70" r="52" fill="none" stroke="#eef2f7" stroke-width="16"/>
-                        <?php $__currentLoopData = $healthItems; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $item): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                            <?php if($item['value'] > 0 && $healthTotal > 0): ?>
-                                <?php $len = ($item['value'] / $healthTotal) * $donutC; ?>
-                                <circle cx="70" cy="70" r="52" fill="none" stroke="<?php echo e($item['color']); ?>" stroke-width="16" stroke-linecap="butt" stroke-dasharray="<?php echo e($len); ?> <?php echo e($donutC); ?>" stroke-dashoffset="<?php echo e(-$healthOffset); ?>" transform="rotate(-90 70 70)"/>
-                                <?php $healthOffset += $len; ?>
-                            <?php endif; ?>
-                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                    </svg>
-                    <div class="dash-donut-center">
-                        <strong class="dash-health-percent"><?php echo e($healthPercent); ?>%</strong>
-                        <span class="dash-health-tier" data-tier="<?php echo e($healthTier); ?>"><?php echo e($healthTier); ?></span>
-                    </div>
-                </div>
-                <ul class="dash-legend dash-health-legend-links">
-                    <?php $__currentLoopData = $healthItems; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $item): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                        <li>
-                            <a class="dash-legend-link" href="<?php echo e($item['href']); ?>">
-                                <span class="dash-legend-dot" style="background:<?php echo e($item['color']); ?>"></span>
-                                <span class="dash-legend-label"><?php echo e($item['label']); ?></span>
-                                <span class="dash-legend-value"><?php echo e($item['value']); ?> (<?php echo e($item['percent']); ?>%)</span>
-                            </a>
-                        </li>
-                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                </ul>
-            </div>
-            <?php if(auth()->user()->hasPermission('dashboard.view')): ?>
-                <a class="dash-card-foot" href="<?php echo e(route('system-health')); ?>">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $dashIcons['pulse']; ?></svg>
-                    <span>View detailed Health</span>
-                    <svg class="dash-foot-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><?php echo $chevron; ?></svg>
-                </a>
-            <?php endif; ?>
-        </section>
+        </div>
+        <div data-dash-panel="bars"><?php echo $overview['html']['bars']; ?></div>
+        <div class="dash-campaign-insight">
+            <span class="dash-campaign-insight-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v4a4 4 0 0 1-8 0V4z"/><path d="M8 6H6a3 3 0 0 0 3 3"/><path d="M16 6h2a3 3 0 0 1-3 3"/><path d="M12 12v3"/><path d="M9 20h6"/><path d="M10 17h4v3h-4z"/></svg>
+            </span>
+            <p data-dash-insight><?php echo e($overview['campaign_insight']); ?></p>
+        </div>
+    </section>
     </div>
 
     <div class="dash-bottom">
-        <section class="dash-card dash-activity">
-            <div class="dash-card-head">
+    <section class="dash-card dash-utilization">
+        <div class="dash-card-head dash-card-head-stack">
+            <div>
                 <h3>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $dashIcons['clock']; ?></svg>
-                    Recent System Activity
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $icons['util']; ?></svg>
+                    Channel Utilization
                 </h3>
+                <p class="dash-card-sub">Breakdown of allocated channels by campaign and channel type.</p>
             </div>
-            <div class="dash-activity-list">
-                <?php $__empty_1 = true; $__currentLoopData = $recentActivities; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $activity): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
-                    <?php [$icon, $tone] = $activityStyle($activity->module, $activity->action); ?>
-                    <div class="dash-activity-row">
-                        <span class="dash-activity-ico tone-<?php echo e($tone); ?>" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $dashIcons[$icon]; ?></svg>
-                        </span>
-                        <div class="dash-activity-copy">
-                            <div class="dash-activity-text"><?php echo e($activity->description); ?></div>
-                            <div class="dash-activity-module"><?php echo e($activity->module); ?></div>
-                        </div>
-                        <div class="dash-activity-meta">
-                            <span class="dash-activity-user"><?php echo e($activity->user?->name ?? 'System'); ?></span>
-                            <span class="dash-activity-time"><?php echo e($activity->created_at->diffForHumans()); ?></span>
-                        </div>
-                    </div>
-                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
-                    <p class="muted">No activity recorded yet.</p>
+            <div class="dash-util-tools">
+                <label class="search-box dash-util-search">
+                    <span class="search-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+                    </span>
+                    <input type="search" data-dash-util-search placeholder="Search campaign..." aria-label="Search campaign" autocomplete="off">
+                </label>
+                <?php if($canViewReports): ?>
+                    <a class="btn secondary dash-view-all-btn" href="<?php echo e(route('reports', ['tab' => 'channel-utilization'])); ?>">View All</a>
                 <?php endif; ?>
             </div>
-            <?php if(auth()->user()->hasPermission('logs.view')): ?>
-                <a class="dash-card-foot" href="<?php echo e(route('activity-logs')); ?>">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $dashIcons['clock']; ?></svg>
-                    <span>View all activity</span>
-                    <svg class="dash-foot-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><?php echo $chevron; ?></svg>
-                </a>
-            <?php endif; ?>
-        </section>
+        </div>
+        <div data-dash-panel="utilization"><?php echo $overview['html']['utilization']; ?></div>
+    </section>
 
-        <section class="dash-card dash-overview">
-            <div class="dash-card-head">
+    <section class="dash-card dash-trends">
+        <div class="dash-card-head dash-card-head-stack">
+            <div>
                 <h3>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $dashIcons['network']; ?></svg>
-                    Network Overview
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $icons['trend']; ?></svg>
+                    Allocation Trends
                 </h3>
+                <p class="dash-card-sub">Trends of allocated channels over time.</p>
             </div>
-            <div class="dash-overview-body">
-                <div class="dash-donut-wrap">
-                    <?php $assetOffset = 0; ?>
-                    <svg class="dash-donut" viewBox="0 0 140 140" aria-label="Asset distribution">
-                        <circle cx="70" cy="70" r="52" fill="none" stroke="#eef2f7" stroke-width="16"/>
-                        <?php $__currentLoopData = $networkItems; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $item): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                            <?php if($item['value'] > 0 && $totalAssets > 0): ?>
-                                <?php $len = ($item['value'] / $totalAssets) * $donutC; ?>
-                                <circle cx="70" cy="70" r="52" fill="none" stroke="<?php echo e($item['color']); ?>" stroke-width="16" stroke-linecap="butt" stroke-dasharray="<?php echo e($len); ?> <?php echo e($donutC); ?>" stroke-dashoffset="<?php echo e(-$assetOffset); ?>" transform="rotate(-90 70 70)"/>
-                                <?php $assetOffset += $len; ?>
-                            <?php endif; ?>
-                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                    </svg>
-                    <div class="dash-donut-center">
-                        <small>Total Assets</small>
-                        <strong><?php echo e($totalAssets); ?></strong>
-                        <span>Across all modules</span>
-                    </div>
-                </div>
-                <ul class="dash-legend">
-                    <?php $__currentLoopData = $networkItems; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $item): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                        <li <?php if(in_array($item['label'], ['Defective GSM', 'Archive Recordings'], true)): ?> data-accent="1" style="--item-color: <?php echo e($item['color']); ?>" <?php endif; ?>>
-                            <span class="dash-legend-dot" style="background:<?php echo e($item['color']); ?>"></span>
-                            <span class="dash-legend-label"><?php echo e($item['label']); ?></span>
-                            <span class="dash-legend-value"><?php echo e($item['value']); ?> (<?php echo e($item['percent']); ?>%)</span>
-                        </li>
-                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                </ul>
-            </div>
-        </section>
+            <span class="dash-card-meta">
+                Last <?php echo e(\App\Services\DashboardOverviewService::TREND_DAYS); ?> Days
+                <span class="dash-trend-key"><i class="total"></i> Total Channels</span>
+                <span class="dash-trend-key"><i class="sip"></i> SIP</span>
+                <span class="dash-trend-key"><i class="gsm"></i> GSM</span>
+            </span>
+        </div>
+        <div data-dash-panel="trend"><?php echo $overview['html']['trend']; ?></div>
+    </section>
     </div>
 </div>
 <?php $__env->stopSection(); ?>
-<?php if(auth()->user()->hasPermission('media.view')): ?>
+<?php if(auth()->user()->hasPermission('media.view') && auth()->user()->canAccessModule('globe-sim')): ?>
 <?php $__env->startPush('modals'); ?>
 <div class="modal-backdrop" id="simInventoryModal">
     <div class="modal small" role="dialog" aria-modal="true" aria-labelledby="simInventoryModalTitle">

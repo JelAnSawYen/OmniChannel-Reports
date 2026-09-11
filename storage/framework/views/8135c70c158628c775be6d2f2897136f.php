@@ -1,21 +1,19 @@
 <?php $__env->startSection('content'); ?>
 <div class="page-head">
     <div><h1 class="page-title">Users</h1><p class="page-subtitle">Manage system accounts, status, and access levels.</p></div>
-    <?php if(auth()->user()->hasPermission('users.manage')): ?>
-        <a href="<?php echo e(route('users.create')); ?>" class="plus-btn" title="Add User" aria-label="Add User">+</a>
-    <?php endif; ?>
 </div>
 
 <form class="filter-row search-filter-form" method="GET">
     <div class="search-box">
         <span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg></span>
         <input name="search" value="<?php echo e(request('search')); ?>" placeholder="Search Users" autocomplete="off">
-        <button type="button" class="search-clear" data-clear-search aria-label="Clear search" title="Clear search">×</button>
     </div>
     <select class="select" name="user_type_id"><option value="">All User Types</option><?php $__currentLoopData = $userTypes; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $type): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?><option value="<?php echo e($type->id); ?>" <?php echo e(request('user_type_id')==$type->id?'selected':''); ?>><?php echo e($type->name); ?></option><?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?></select>
     <select class="select" name="status"><option value="">All Statuses</option><option value="Active" <?php echo e(request('status')==='Active'?'selected':''); ?>>Active</option><option value="Inactive" <?php echo e(request('status')==='Inactive'?'selected':''); ?>>Inactive</option></select>
     <button class="btn primary" type="submit">Search</button>
-    <?php if(request()->hasAny(['search','user_type_id','status'])): ?><a class="btn secondary" href="<?php echo e(route('users.index')); ?>">Reset</a><?php endif; ?>
+    <?php if(auth()->user()->hasPermission('users.manage')): ?>
+        <a href="<?php echo e(route('users.create')); ?>" class="plus-btn" title="Add User" aria-label="Add User">+</a>
+    <?php endif; ?>
 </form>
 
 <div class="table-card table-wrap">

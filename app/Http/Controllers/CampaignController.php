@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\ChannelAllocationCampaign;
 use App\Services\AuditLogger;
-use App\Services\NotificationService;
 use App\Services\XlsxService;
 use App\Support\InventoryImportCatalog;
 use App\Support\OperationCatalog;
@@ -96,8 +95,6 @@ class CampaignController extends Controller
         try {
             $path = $xlsx->export($headers, $rows, 'campaigns.xlsx');
         } catch (\Throwable $exception) {
-            NotificationService::exportFailed('Campaigns', 'Export failed.', 'campaigns');
-
             return back()->with('error', PublicError::failed('Export', $exception));
         }
 

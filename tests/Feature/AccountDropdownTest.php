@@ -38,8 +38,26 @@ class AccountDropdownTest extends TestCase
             ->assertSee('Live Admin User')
             ->assertSee('Administrator')
             ->assertSee('My Profile')
+            ->assertSee('Logout')
+            ->assertSee('Settings')
+            ->assertSee('User Management')
             ->assertSee('Login History')
-            ->assertSee('Logout');
+            ->assertSee('Audit Logs')
+            ->assertSee('Reports')
+            ->assertDontSee('class="account-caret"', false)
+            ->assertSee('class="account-group-caret"', false);
+
+        $html = $this->get('/dashboard')->getContent();
+        preg_match('/id="accountMenu"(.*)id="logoutButton"/s', $html, $menu);
+        $this->assertNotEmpty($menu);
+        $this->assertStringContainsString('My Profile', $menu[1]);
+        $this->assertStringContainsString('Settings', $menu[1]);
+        $this->assertStringContainsString('User Management', $menu[1]);
+        $this->assertStringContainsString('Login History', $menu[1]);
+        $this->assertStringContainsString('Audit Logs', $menu[1]);
+        $this->assertStringContainsString('Reports', $menu[1]);
+        $this->assertTrue(strpos($menu[1], 'My Profile') < strpos($menu[1], 'Settings'));
+        $this->assertTrue(strpos($menu[1], 'Settings') < strpos($menu[1], 'User Management'));
     }
 
     public function test_profile_login_history_and_logout_work(): void

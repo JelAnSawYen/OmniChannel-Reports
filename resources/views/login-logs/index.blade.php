@@ -11,10 +11,8 @@
         <div class="search-box">
             <span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg></span>
             <input name="search" value="{{ request('search') }}" placeholder="Search email" autocomplete="off">
-            <button type="button" class="search-clear" data-clear-search aria-label="Clear search" title="Clear search">×</button>
         </div>
         <button class="btn primary" type="submit">Search</button>
-        @if(request()->has('search'))<a class="btn secondary" href="{{ route('login-history') }}">Reset</a>@endif
     </form>
     @if($canManageLogs)
         <form class="log-clear-form" method="POST" action="{{ route('login-history.clear-older') }}" data-confirm="Clear all login history older than {{ \App\Services\LogRetentionService::DAYS }} days? This cannot be undone." data-confirm-title="Clear Logs Older Than {{ \App\Services\LogRetentionService::DAYS }} Days" data-confirm-ok="Clear">

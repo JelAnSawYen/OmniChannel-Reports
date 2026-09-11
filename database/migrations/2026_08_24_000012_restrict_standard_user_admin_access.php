@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\UserTypeController;
 use App\Models\UserType;
+use App\Support\RolePermissions;
 use Illuminate\Database\Migrations\Migration;
 
 return new class extends Migration
@@ -10,7 +10,7 @@ return new class extends Migration
     {
         $system = UserType::where('name', 'System Administrator')->first();
         if ($system) {
-            $system->update(['permissions' => array_keys(UserTypeController::PERMISSIONS)]);
+            $system->update(['permissions' => array_keys(RolePermissions::PERMISSIONS)]);
         }
 
         $admin = UserType::where('name', 'Administrator')->first();

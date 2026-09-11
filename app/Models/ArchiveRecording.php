@@ -18,6 +18,8 @@ class ArchiveRecording extends Model
         'storage_path',
         'retention_days',
         'status',
+        'certificate_path',
+        'certificate_name',
     ];
 
     protected function casts(): array
@@ -31,6 +33,21 @@ class ArchiveRecording extends Model
     public function campaign(): BelongsTo
     {
         return $this->belongsTo(ChannelAllocationCampaign::class, 'campaign_id');
+    }
+
+    public function isDeleted(): bool
+    {
+        return strcasecmp((string) $this->status, 'Deleted') === 0;
+    }
+
+    public function isAvailable(): bool
+    {
+        return ! $this->isDeleted();
+    }
+
+    public function statusLabel(): string
+    {
+        return $this->isDeleted() ? 'Deleted' : 'Available';
     }
 
     public function calledAtDisplay(): string

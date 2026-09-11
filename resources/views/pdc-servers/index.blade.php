@@ -11,14 +11,9 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
             </span>
             <input id="pdcSearchInput" name="search" value="{{ $search }}" placeholder="Search PDC Servers" aria-label="Search PDC Servers" autocomplete="off">
-            <button type="button" class="search-clear" data-clear-search aria-label="Clear search" title="Clear search">×</button>
             @if(request('per_page'))<input type="hidden" name="per_page" value="{{ request('per_page') }}">@endif
         </form>
         <button class="btn primary" type="submit" form="pdcSearchForm">Search</button>
-        <a class="btn secondary" href="{{ route('pdc-servers') }}" id="pdcReset">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path></svg>
-            Reset
-        </a>
         @if(auth()->user()->hasPermission('media.export'))
         @include('partials.data-transfer', [
             'canExport' => true,
@@ -387,28 +382,29 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('[data-ca-toggle]').forEach((button) => {
-        button.addEventListener('click', () => {
-            const id = button.getAttribute('data-ca-toggle');
-            const panel = document.getElementById('pdc-panel-' + id);
-            const row = document.querySelector('tr.ca-campaign-row[data-campaign="' + id + '"]');
-            if (!panel) return;
-            const open = panel.hasAttribute('hidden');
-            panel.toggleAttribute('hidden', !open);
-            row?.classList.toggle('open', open);
-            document.querySelectorAll('[data-ca-toggle="' + id + '"]').forEach((el) => {
-                el.setAttribute('aria-expanded', open ? 'true' : 'false');
-            });
+    document.addEventListener('click', (event) => {
+        if (!(event.target instanceof Element)) return;
+        const button = event.target.closest('[data-ca-toggle]');
+        if (!button) return;
+        const id = button.getAttribute('data-ca-toggle');
+        const panel = document.getElementById('pdc-panel-' + id);
+        const row = document.querySelector('tr.ca-campaign-row[data-campaign="' + id + '"]');
+        if (!panel) return;
+        const open = panel.hasAttribute('hidden');
+        panel.toggleAttribute('hidden', !open);
+        row?.classList.toggle('open', open);
+        document.querySelectorAll('[data-ca-toggle="' + id + '"]').forEach((el) => {
+            el.setAttribute('aria-expanded', open ? 'true' : 'false');
         });
     });
 
-    document.querySelectorAll('tr.ca-campaign-row[data-campaign]').forEach((row) => {
-        row.addEventListener('click', (event) => {
-            if (!(event.target instanceof Element)) return;
-            if (event.target.closest('.actions-column, .ca-menu, a, input, select, textarea, label, .action-btn, .plus-btn')) return;
-            if (event.target.closest('[data-ca-toggle]')) return;
-            row.querySelector('[data-ca-toggle]')?.click();
-        });
+    document.addEventListener('click', (event) => {
+        if (!(event.target instanceof Element)) return;
+        const row = event.target.closest('tr.ca-campaign-row[data-campaign]');
+        if (!row) return;
+        if (event.target.closest('.actions-column, .ca-menu, a, input, select, textarea, label, .action-btn, .plus-btn')) return;
+        if (event.target.closest('[data-ca-toggle]')) return;
+        row.querySelector('[data-ca-toggle]')?.click();
     });
 
     const closeCaMenus = (except) => {
@@ -419,24 +415,24 @@ document.addEventListener('DOMContentLoaded', () => {
             menu.querySelector('.ca-menu-btn')?.setAttribute('aria-expanded', 'false');
         });
     };
-    document.querySelectorAll('.ca-menu-btn').forEach((button) => {
-        button.addEventListener('click', (event) => {
-            event.stopPropagation();
-            const menu = button.closest('.ca-menu');
-            const dropdown = menu?.querySelector('.ca-menu-dropdown');
-            if (!menu || !dropdown) return;
-            const willOpen = !menu.classList.contains('open');
-            closeCaMenus();
-            if (!willOpen) return;
-            menu.classList.add('open');
-            dropdown.removeAttribute('hidden');
-            button.setAttribute('aria-expanded', 'true');
-            const rect = button.getBoundingClientRect();
-            dropdown.style.position = 'fixed';
-            dropdown.style.top = (rect.bottom + 4) + 'px';
-            dropdown.style.right = Math.max(8, window.innerWidth - rect.right) + 'px';
-            dropdown.style.left = 'auto';
-        });
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('.ca-menu-btn');
+        if (!button) return;
+        event.stopPropagation();
+        const menu = button.closest('.ca-menu');
+        const dropdown = menu?.querySelector('.ca-menu-dropdown');
+        if (!menu || !dropdown) return;
+        const willOpen = !menu.classList.contains('open');
+        closeCaMenus();
+        if (!willOpen) return;
+        menu.classList.add('open');
+        dropdown.removeAttribute('hidden');
+        button.setAttribute('aria-expanded', 'true');
+        const rect = button.getBoundingClientRect();
+        dropdown.style.position = 'fixed';
+        dropdown.style.top = (rect.bottom + 4) + 'px';
+        dropdown.style.right = Math.max(8, window.innerWidth - rect.right) + 'px';
+        dropdown.style.left = 'auto';
     });
     document.addEventListener('click', (event) => {
         if (!(event.target instanceof Element) || !event.target.closest('.ca-menu')) closeCaMenus();
@@ -690,20 +686,20 @@ document.addEventListener('DOMContentLoaded', () => {
         groupModal?.classList.add('visible');
     });
 
-    document.querySelectorAll('[data-pdc-group-edit]').forEach((button) => {
-        button.addEventListener('click', () => {
-            const values = JSON.parse(button.dataset.values || '{}');
-            groupMethod.value = 'PUT';
-            groupForm.action = groupBase + '/' + button.dataset.id;
-            document.getElementById('pdcGroupModalTitle').textContent = 'Edit PDC Servers';
-            document.getElementById('pdcGroupSubmit').textContent = 'Save';
-            document.getElementById('pdc_campaign_id').value = values.campaign_id ?? '';
-            document.getElementById('pdc_location').value = values.location ?? '';
-            document.getElementById('pdc_date_endorse').value = values.date_endorse ?? '';
-            document.getElementById('pdc_dns').value = values.dns ?? '';
-            if (datePicker) datePicker.value = toIso(values.date_endorse || '');
-            groupModal?.classList.add('visible');
-        });
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-pdc-group-edit]');
+        if (!button) return;
+        const values = JSON.parse(button.dataset.values || '{}');
+        groupMethod.value = 'PUT';
+        groupForm.action = groupBase + '/' + button.dataset.id;
+        document.getElementById('pdcGroupModalTitle').textContent = 'Edit PDC Servers';
+        document.getElementById('pdcGroupSubmit').textContent = 'Save';
+        document.getElementById('pdc_campaign_id').value = values.campaign_id ?? '';
+        document.getElementById('pdc_location').value = values.location ?? '';
+        document.getElementById('pdc_date_endorse').value = values.date_endorse ?? '';
+        document.getElementById('pdc_dns').value = values.dns ?? '';
+        if (datePicker) datePicker.value = toIso(values.date_endorse || '');
+        groupModal?.classList.add('visible');
     });
 
     groupForm?.addEventListener('submit', (event) => {
@@ -746,15 +742,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    document.querySelectorAll('[data-pdc-server-add]').forEach((button) => {
-        button.addEventListener('click', () => {
-            resetServerAdd(button.dataset.group);
+    document.addEventListener('click', (event) => {
+        const addButton = event.target.closest('[data-pdc-server-add]');
+        if (addButton) {
+            resetServerAdd(addButton.dataset.group);
             serverModal?.classList.add('visible');
-        });
-    });
-
-    document.querySelectorAll('[data-pdc-server-edit]').forEach((button) => {
-        button.addEventListener('click', () => {
+            return;
+        }
+        const button = event.target.closest('[data-pdc-server-edit]');
+        if (button) {
             const values = JSON.parse(button.dataset.values || '{}');
             const groupId = button.dataset.group;
             const serverId = button.dataset.id;
@@ -771,27 +767,25 @@ document.addEventListener('DOMContentLoaded', () => {
             if (password) password.value = canReveal ? (values.password ?? '') : '';
             if (sql) sql.value = canReveal ? (values.sql_db_password ?? '') : '';
             serverModal?.classList.add('visible');
-        });
-    });
-
-    document.querySelectorAll('.pdc-secret-toggle').forEach((button) => {
-        button.addEventListener('click', () => {
-            const inputId = button.getAttribute('data-toggle-input');
-            if (inputId) {
-                const input = document.getElementById(inputId);
-                if (!input || !canReveal) return;
-                input.type = input.type === 'password' ? 'text' : 'password';
-                return;
-            }
-            if (!canReveal) return;
-            const wrap = button.closest('.pdc-secret');
-            const mask = wrap?.querySelector('.pdc-secret-mask');
-            const value = wrap?.querySelector('.pdc-secret-value');
-            if (!mask || !value) return;
-            const showing = !value.hasAttribute('hidden');
-            value.toggleAttribute('hidden', showing);
-            mask.toggleAttribute('hidden', !showing);
-        });
+            return;
+        }
+        const toggle = event.target.closest('.pdc-secret-toggle');
+        if (!toggle) return;
+        const inputId = toggle.getAttribute('data-toggle-input');
+        if (inputId) {
+            const input = document.getElementById(inputId);
+            if (!input || !canReveal) return;
+            input.type = input.type === 'password' ? 'text' : 'password';
+            return;
+        }
+        if (!canReveal) return;
+        const wrap = toggle.closest('.pdc-secret');
+        const mask = wrap?.querySelector('.pdc-secret-mask');
+        const value = wrap?.querySelector('.pdc-secret-value');
+        if (!mask || !value) return;
+        const showing = !value.hasAttribute('hidden');
+        value.toggleAttribute('hidden', showing);
+        mask.toggleAttribute('hidden', !showing);
     });
 });
 </script>

@@ -35,90 +35,73 @@ class ArchiveRecordingsPageTest extends TestCase
 
         $page = $this->get('/archive-recordings')->assertOk();
         $html = $page->getContent();
-        $css = file_get_contents(resource_path('css/app.css'));
 
-        $page->assertSee('Archived Recordings')
-            ->assertSee('Search, view, and manage historical call recordings.')
+        $page->assertSee('Archive Recordings')
+            ->assertSee('View, manage, and track archived call recordings.')
             ->assertSee('Atome')
             ->assertSee('Chinabank')
-            ->assertSee('name="campaign"', false)
-            ->assertSee('name="year"', false)
-            ->assertSee('name="month"', false)
-            ->assertSee('Now Playing')
-            ->assertSee('Clear Filters')
-            ->assertSee('Import Audio Logs')
-            ->assertSee('id="arImportAudioBtn"', false)
+            ->assertSee('No archived recordings yet.')
+            ->assertDontSee('No years available for this campaign.')
+            ->assertSee('class="plus-btn"', false)
+            ->assertSee('id="arAddButton"', false)
+            ->assertSee('id="arSearchInput"', false)
+            ->assertSee('placeholder="Search recordings..."', false)
+            ->assertSee('class="toolbar"', false)
+            ->assertSee('id="arAddModal"', false)
+            ->assertSee('Add Archive Records')
+            ->assertSee('Add Records')
+            ->assertSee('Select Campaign')
+            ->assertSee('Select Year')
+            ->assertSee('Select Month')
+            ->assertSee('selected disabled hidden>Select Campaign</option>', false)
+            ->assertSee('selected disabled hidden>Select Year</option>', false)
+            ->assertSee('selected disabled hidden>Select Month</option>', false)
+            ->assertDontSee('data-value="">Select Month</button>', false)
+            ->assertSee('id="arAddMonthWrap"', false)
+            ->assertSee('id="arAddMonthMenu"', false)
+            ->assertSee('ar-add-dd-menu', false)
+            ->assertSee('id="arDeleteModal"', false)
+            ->assertSee('Delete Recording')
+            ->assertSee('A Certificate of Deletion (PDF) is required before this recording can be marked as deleted.')
+            ->assertSee('Choose a PDF file')
+            ->assertSee('Browse')
+            ->assertSee('Only PDF files are allowed.')
+            ->assertSee('This certificate will be permanently stored with the record for audit purposes.')
+            ->assertSee('Confirm Deletion')
+            ->assertSee('Recording Files')
+            ->assertDontSee('Bulk Upload')
+            ->assertDontSee('Clear Filters')
+            ->assertDontSee('class="search-clear"', false)
+            ->assertDontSee('id="archiveSearchInput"', false)
+            ->assertDontSee('Import Audio Logs')
+            ->assertDontSee('Caller Number')
+            ->assertDontSee('Agent Number')
+            ->assertDontSee('Duration')
             ->assertDontSee('Data Transfer')
             ->assertDontSee('id="transferButton"', false)
-            ->assertDontSee('id="importModal"', false)
-            ->assertSee('id="arImportModal"', false)
-            ->assertDontSee('id="arPlayerMeta"', false)
-            ->assertSee('id="arImportCampaign"', false)
-            ->assertSee('Drag & Drop Audio Files Here')
-            ->assertSee('Browse Files')
-            ->assertSee('class="page-head"', false)
-            ->assertSee('class="ar-filter-card"', false)
-            ->assertSee('ar-filter-row-primary', false)
-            ->assertSee('ar-filter-row-secondary', false)
-            ->assertSee('Enter caller number')
-            ->assertSee('Enter agent number')
-            ->assertSee('Search recordings (file name, caller, agent, etc...)')
-            ->assertSee('class="ar-workspace"', false)
-            ->assertSee('data-ar-dd', false)
-            ->assertSee('id="arPlayer"', false)
-            ->assertSee('id="arWaveformCanvas"', false)
-            ->assertSee('Download Recording')
             ->assertDontSee('Hardcoded Campaign')
-            ->assertDontSee('>Server<')
-            ->assertDontSee('Archive Server');
+            ->assertDontSee('>Add</', false);
 
         $this->assertSame(2, ChannelAllocationCampaign::count());
         $this->assertTrue(strpos($html, 'Atome') < strpos($html, 'Chinabank'));
-        $this->assertStringContainsString('.ar-filter-card', $css);
-        $this->assertStringContainsString('.ar-workspace', $css);
-        $this->assertStringContainsString('.ar-dd-menu', $css);
-        $this->assertStringContainsString('--ar-dd-menu-height', $css);
-        $this->assertStringContainsString('top: calc(100% + 4px)', $css);
-        $this->assertStringNotContainsString('.ar-dd.is-up', $css);
-        $this->assertStringNotContainsString('.ar-dd.is-down', $css);
-        $this->assertMatchesRegularExpression('/\.ar-dd-toggle svg\s*\{[^}]*max-width:\s*10px/s', $css);
-        $this->assertMatchesRegularExpression('/\.ar-date-icon svg\s*\{[^}]*max-width:\s*12px/s', $css);
-        $this->assertStringContainsString('width="10"', $html);
-        $this->assertStringContainsString('width="12"', $html);
-        $this->assertTrue(strpos($html, 'id="arImportAudioBtn"') < strpos($html, 'id="archiveSearchInput"'));
-        $this->assertTrue(strpos($html, 'id="archiveSearchInput"') < strpos($html, 'ar-search-btn'));
-        $this->assertStringContainsString('>Archive Recordings</span></a>', $html);
-        $this->assertStringContainsString('.ar-play-circle', $css);
-        $this->assertStringContainsString('.ar-play-circle:not(.is-playing) .ar-icon-play', $css);
-        $this->assertStringContainsString('.ar-play-circle.is-playing .ar-icon-pause', $css);
-        $this->assertStringContainsString('.ar-play-toggle:not(.is-playing) .ar-icon-play', $css);
-        $this->assertStringContainsString('.ar-play-toggle.is-playing .ar-icon-pause', $css);
-        $this->assertStringContainsString('.ar-dd-toggle.has-value span', $css);
-        $this->assertMatchesRegularExpression('/\.ar-import-btn(?:,[^{]*)*\{[^}]*background:\s*var\(--blue\)/s', $css);
-        $this->assertMatchesRegularExpression('/\.ar-import-btn \.btn-icon\s*\{[^}]*color:\s*#fff/s', $css);
-        $this->assertMatchesRegularExpression('/\.ar-skip\s*\{[^}]*border-radius:\s*50%/s', $css);
-        $this->assertStringContainsString('overflow-x: hidden', $css);
-        $this->assertStringContainsString('id="arSkipBack"', $html);
-        $this->assertStringContainsString('id="arSkipForward"', $html);
-        $this->assertStringContainsString('class="ar-skip"', $html);
-        $this->assertStringContainsString('const count = 72', $html);
-        $this->assertStringContainsString('ar-filter-row-secondary', $html);
-        $this->assertStringNotContainsString('spaceAbove', $html);
-        $this->assertStringNotContainsString('positionDropdown', $html);
-        $this->assertStringNotContainsString('is-up', $html);
-        $this->assertStringNotContainsString('data-value="">Select campaign', $html);
-        $this->assertStringNotContainsString('data-value="">Year', $html);
-        $this->assertStringNotContainsString('data-value="">Month', $html);
-        $this->assertStringContainsString('Delete Selected', $html);
-        $this->assertStringNotContainsString('ca-menu-btn', $html);
-        $this->assertStringNotContainsString('class="ca-menu"', $html);
-
-        $atome = ChannelAllocationCampaign::query()->where('name', 'Atome')->first();
-        $emptyYearHtml = $this->get('/archive-recordings?campaign='.$atome->id)->assertOk()->getContent();
-        $this->assertMatchesRegularExpression('/>2026<.*?>2025<.*?>2024<.*?>2023<.*?>2022<.*?>2021<.*?>2020<.*?>2019<.*?>2018</s', $emptyYearHtml);
+        $this->assertStringContainsString('>+</button>', $html);
+        $this->assertStringContainsString('ar-tree-card', $html);
+        $this->assertStringNotContainsString('ar-node-month', $html);
+        $this->assertStringNotContainsString('ar-file-name', $html);
+        $this->assertStringNotContainsString('ar-file-icon', $html);
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertStringContainsString('.ar-node-campaign > .ar-folder', $css);
+        $this->assertMatchesRegularExpression('/\.ar-node-campaign\s*>\s*\.ar-folder\s*\{[^}]*min-height:\s*36px/', $css);
+        $this->assertMatchesRegularExpression('/\.ar-node-campaign\s*>\s*\.ar-folder\s*>\s*span\s*\{[^}]*font-weight:\s*700/', $css);
+        $this->assertStringNotContainsString('ar-folder-icon', $html);
+        $this->assertMatchesRegularExpression('/\.ar-files\s+\.ar-col-name\s*\{[^}]*width:\s*33\.333%/', $css);
+        $this->assertMatchesRegularExpression('/\.ar-files\s+\.ar-col-status\s*\{[^}]*width:\s*33\.333%/', $css);
+        $this->assertMatchesRegularExpression('/\.ar-files\s+\.ar-col-actions\s*\{[^}]*width:\s*33\.334%/', $css);
+        $this->assertDoesNotMatchRegularExpression('/\.ar-files\s*>\s*thead\s*>\s*tr\s*>\s*th\s*\+\s*th,[\s\S]*?border-left:\s*1px/', $css);
+        $this->assertMatchesRegularExpression('/\.ar-files\s*>\s*tbody\s*>\s*tr\s*>\s*td\s*\{[^}]*border:\s*0/', $css);
     }
 
-    public function test_campaign_year_month_workflow_scopes_recordings_and_search(): void
+    public function test_campaign_year_month_hierarchy_scopes_recordings(): void
     {
         $this->actingAs($this->admin);
         $atome = ChannelAllocationCampaign::create(['name' => 'Atome']);
@@ -128,134 +111,62 @@ class ArchiveRecordingsPageTest extends TestCase
             'campaign_id' => $atome->id,
             'file_name' => 'ATOME_20260901_102345.wav',
             'called_at' => '2026-09-01 10:23:45',
-            'caller_number' => '09171234567',
-            'agent_number' => '1001',
-            'duration' => '00:05:12',
             'server' => '',
-            'storage_path' => 'ATOME_20260901_102345.wav',
-            'status' => 'Active',
+            'storage_path' => '',
+            'status' => 'Available',
         ]);
         ArchiveRecording::create([
             'campaign_id' => $atome->id,
             'file_name' => 'ATOME_20260815_090000.wav',
             'called_at' => '2026-08-15 09:00:00',
-            'caller_number' => '09170000000',
-            'agent_number' => '1002',
-            'duration' => '00:01:00',
             'server' => '',
-            'storage_path' => 'ATOME_20260815_090000.wav',
-            'status' => 'Active',
+            'storage_path' => '',
+            'status' => 'Available',
         ]);
         ArchiveRecording::create([
             'campaign_id' => $china->id,
             'file_name' => 'CHINA_20260901_111111.wav',
             'called_at' => '2026-09-01 11:11:11',
-            'caller_number' => '09179999999',
-            'agent_number' => '2001',
-            'duration' => '00:02:00',
             'server' => '',
-            'storage_path' => 'CHINA_20260901_111111.wav',
-            'status' => 'Active',
+            'storage_path' => '',
+            'status' => 'Available',
         ]);
 
-        $yearPage = $this->get('/archive-recordings?campaign='.$atome->id)->assertOk();
-        $yearHtml = $yearPage->getContent();
-        $yearPage->assertDontSee('ATOME_20260901_102345.wav')
-            ->assertDontSee('CHINA_20260901_111111.wav')
-            ->assertDontSee('No years available for this campaign.')
-            ->assertDontSee('>2017<', false);
-        $this->assertMatchesRegularExpression('/>2026<.*?>2025<.*?>2024<.*?>2023<.*?>2022<.*?>2021<.*?>2020<.*?>2019<.*?>2018</s', $yearHtml);
-
-        $this->get('/archive-recordings?campaign='.$atome->id.'&year=2018')
-            ->assertOk()
-            ->assertSee('value="2018"', false)
-            ->assertDontSee('ATOME_20260901_102345.wav');
-
-        $emptyMonthHtml = $this->get('/archive-recordings?campaign='.$atome->id.'&year=2018')->assertOk()->getContent();
-        $this->assertMatchesRegularExpression('/>January<.*?>February<.*?>March<.*?>April<.*?>May<.*?>June<.*?>July<.*?>August<.*?>September<.*?>October<.*?>November<.*?>December</s', $emptyMonthHtml);
-        $this->assertStringNotContainsString('No months available for this year.', $emptyMonthHtml);
-
-        $monthListHtml = $this->get('/archive-recordings?campaign='.$atome->id.'&year=2026')->assertOk()->getContent();
-        $this->assertMatchesRegularExpression('/>January<.*?>February<.*?>March<.*?>April<.*?>May<.*?>June<.*?>July<.*?>August<.*?>September<.*?>October<.*?>November<.*?>December</s', $monthListHtml);
-        $this->get('/archive-recordings?campaign='.$atome->id.'&year=2026')
-            ->assertOk()
+        $page = $this->get('/archive-recordings')->assertOk();
+        $page->assertSee('Atome')
+            ->assertSee('Chinabank')
+            ->assertSee('2026')
             ->assertSee('September')
             ->assertSee('August')
-            ->assertDontSee('ATOME_20260901_102345.wav');
+            ->assertSee('ATOME_20260901_102345.wav')
+            ->assertSee('ATOME_20260815_090000.wav')
+            ->assertSee('CHINA_20260901_111111.wav')
+            ->assertSee('Available')
+            ->assertSee('>Month</th>', false)
+            ->assertSee('>Status</th>', false)
+            ->assertSee('>Action</th>', false)
+            ->assertDontSee('Available/Deleted')
+            ->assertDontSee('>File Name</th>', false)
+            ->assertDontSee('>Actions</th>', false)
+            ->assertDontSee('class="ar-folder-icon"', false)
+            ->assertDontSee('class="ar-node-month"', false)
+            ->assertDontSee('class="ar-file-name"', false)
+            ->assertDontSee('class="ar-file-icon"', false)
+            ->assertSee('class="ar-files"', false)
+            ->assertSee('class="ar-month-row"', false)
+            ->assertSee('class="ar-col-name"', false)
+            ->assertSee('class="ar-col-status"', false)
+            ->assertSee('class="ar-col-actions"', false)
+            ->assertSee('data-ar-text="Atome"', false)
+            ->assertSee('id="arSearchInput"', false)
+            ->assertSee('filterTree', false)
+            ->assertDontSee('09171234567')
+            ->assertDontSee('00:05:12');
 
-        $this->get('/archive-recordings?campaign='.$atome->id.'&year=2018&month=1')
+        $this->get('/archive-recordings?campaign='.$atome->id.'&year=2026&month=9')
             ->assertOk()
-            ->assertSee('January')
-            ->assertSee('No call recordings found for this campaign, year, and month.')
-            ->assertDontSee('ATOME_20260901_102345.wav');
-
-        $monthPage = $this->get('/archive-recordings?campaign='.$atome->id.'&year=2026&month=9')->assertOk();
-        $monthHtml = $monthPage->getContent();
-        $monthPage->assertSee('ATOME_20260901_102345.wav')
-            ->assertSee('09171234567')
-            ->assertSee('1001')
-            ->assertSee('00:05:12')
-            ->assertDontSee('ATOME_20260815_090000.wav')
-            ->assertDontSee('CHINA_20260901_111111.wav')
-            ->assertSee('data-ar-play', false)
-            ->assertSee('class="ar-play-circle"', false)
-            ->assertSee('class="ar-icon-play ar-play-icon"', false)
-            ->assertSee('class="ar-icon-pause"', false)
-            ->assertDontSee('id="arPlayerMeta"', false)
-            ->assertSee('/archive-recordings/');
-        $this->assertSame(substr_count($monthHtml, 'class="ar-play-circle"'), substr_count($monthHtml, 'ar-play-icon'));
-        $this->assertSame(1, substr_count($monthHtml, 'class="ar-play-circle"'));
-        $this->assertGreaterThanOrEqual(2, substr_count($monthHtml, '<polygon points="9,6 9,18 19,12"/>'));
-        $this->assertGreaterThanOrEqual(2, substr_count($monthHtml, 'ar-icon-pause'));
-        $this->assertStringContainsString('ar-dd-toggle has-value', $monthHtml);
-
-        $this->get('/archive-recordings?campaign='.$atome->id.'&year=2026&month=9&search=CHINA')
-            ->assertOk()
-            ->assertDontSee('CHINA_20260901_111111.wav')
-            ->assertDontSee('ATOME_20260901_102345.wav');
-
-        $this->get('/archive-recordings?campaign='.$atome->id.'&year=2026&month=9&search=09171234567')
-            ->assertOk()
+            ->assertSee('open', false)
             ->assertSee('ATOME_20260901_102345.wav');
-
-        $this->get('/archive-recordings?campaign='.$atome->id.'&year=2026&month=9&caller=09171234567')
-            ->assertOk()
-            ->assertSee('ATOME_20260901_102345.wav');
-
-        $cleared = $this->get('/archive-recordings?campaign='.$atome->id.'&year=2026&month=9')->assertOk();
-        $this->assertStringContainsString('id="archiveReset"', $cleared->getContent());
-        $this->assertStringContainsString('href="'.url('/archive-recordings').'"', $cleared->getContent());
-    }
-
-    public function test_pagination_and_records_per_page(): void
-    {
-        $this->actingAs($this->admin);
-        $campaign = ChannelAllocationCampaign::create(['name' => 'Atome']);
-        for ($i = 1; $i <= 12; $i++) {
-            ArchiveRecording::create([
-                'campaign_id' => $campaign->id,
-                'file_name' => 'ATOME_PAGE_'.$i.'.wav',
-                'called_at' => sprintf('2026-09-%02d 10:00:00', $i),
-                'caller_number' => '0917000000'.$i,
-                'agent_number' => '100'.$i,
-                'duration' => '00:01:00',
-                'server' => '',
-                'storage_path' => 'ATOME_PAGE_'.$i.'.wav',
-                'status' => 'Active',
-            ]);
-        }
-
-        $this->get('/archive-recordings?campaign='.$campaign->id.'&year=2026&month=9&per_page=5')
-            ->assertOk()
-            ->assertSee('ATOME_PAGE_1.wav')
-            ->assertDontSee('ATOME_PAGE_6.wav')
-            ->assertSee('page=2', false)
-            ->assertSee('per page');
-
-        $this->get('/archive-recordings?campaign='.$campaign->id.'&year=2026&month=9&per_page=5&sort=newest')
-            ->assertOk()
-            ->assertSee('ATOME_PAGE_12.wav')
-            ->assertDontSee('ATOME_PAGE_1.wav');
     }
 
     public function test_play_and_download_use_existing_file(): void
@@ -272,76 +183,14 @@ class ArchiveRecordingsPageTest extends TestCase
             'campaign_id' => $campaign->id,
             'file_name' => 'play-test.wav',
             'called_at' => '2026-09-01 10:00:00',
-            'caller_number' => '09171111111',
-            'agent_number' => '1001',
-            'duration' => '00:00:01',
             'server' => '',
             'storage_path' => 'archive-recordings/play-test.wav',
-            'status' => 'Active',
+            'status' => 'Available',
         ]);
 
         $this->get('/archive-recordings/'.$record->id.'/play')->assertOk();
         $this->get('/archive-recordings/'.$record->id.'/download')->assertOk()->assertDownload('play-test.wav');
         @unlink($path);
-    }
-
-    public function test_duration_is_read_from_the_audio_file(): void
-    {
-        $this->actingAs($this->admin);
-        $campaign = ChannelAllocationCampaign::create(['name' => 'Atome']);
-        $dir = storage_path('app/archive-recordings');
-        if (! is_dir($dir)) {
-            mkdir($dir, 0777, true);
-        }
-        $wav = $this->silentWav(3);
-        $stored = UploadedFile::fake()->createWithContent('ATOME_20260901_120000.wav', $wav);
-
-        $this->postJson('/archive-recordings/import/audio', [
-            'campaign_id' => $campaign->id,
-            'year' => 2026,
-            'month' => 9,
-            'files' => [$stored],
-        ])->assertOk()->assertJson(['ok' => true, 'records' => 1]);
-
-        $record = ArchiveRecording::query()->where('file_name', 'ATOME_20260901_120000.wav')->first();
-        $this->assertNotNull($record);
-        $this->assertSame('00:00:03', $record->duration);
-
-        $this->get('/archive-recordings?campaign='.$campaign->id.'&year=2026&month=9')
-            ->assertOk()
-            ->assertSee('00:00:03');
-
-        $existingPath = $dir.'/existing-duration.wav';
-        file_put_contents($existingPath, $this->silentWav(5));
-        ArchiveRecording::create([
-            'campaign_id' => $campaign->id,
-            'file_name' => 'existing-duration.wav',
-            'called_at' => '2026-09-02 10:00:00',
-            'server' => '',
-            'storage_path' => 'archive-recordings/existing-duration.wav',
-            'duration' => '',
-            'status' => 'Active',
-        ]);
-        $this->get('/archive-recordings?campaign='.$campaign->id.'&year=2026&month=9')
-            ->assertOk()
-            ->assertSee('00:00:05');
-        $this->assertSame('00:00:05', ArchiveRecording::query()->where('file_name', 'existing-duration.wav')->value('duration'));
-
-        foreach (ArchiveRecording::query()->get() as $imported) {
-            @unlink(storage_path('app/private/'.$imported->storage_path));
-            @unlink(storage_path('app/'.$imported->storage_path));
-        }
-        @unlink($existingPath);
-    }
-
-    private function silentWav(int $seconds): string
-    {
-        $sampleRate = 8000;
-        $samples = $seconds * $sampleRate;
-        $data = str_repeat("\x00\x00", $samples);
-        $fmt = pack('v', 1).pack('v', 1).pack('V', $sampleRate).pack('V', $sampleRate * 2).pack('v', 2).pack('v', 16);
-
-        return 'RIFF'.pack('V', 36 + strlen($data)).'WAVEfmt '.pack('V', 16).$fmt.'data'.pack('V', strlen($data)).$data;
     }
 
     public function test_added_channel_allocation_campaign_appears_automatically(): void
@@ -389,12 +238,14 @@ class ArchiveRecordingsPageTest extends TestCase
         $this->assertTrue(ArchiveRecording::query()->where('campaign_id', $campaign->id)->where('file_name', 'RCBC_20260901_102345.wav')->exists());
         $record = ArchiveRecording::query()->where('file_name', 'RCBC_20260901_102345.wav')->first();
         $this->assertSame('2026-09-01 10:23:45', $record->called_at->format('Y-m-d H:i:s'));
+        $this->assertSame('Available', $record->status);
         $this->assertNotEmpty($record->storage_path);
         $this->assertFileExists(storage_path('app/private/'.$record->storage_path));
-        $this->get('/archive-recordings?campaign='.$campaign->id.'&year=2026&month=9')
+        $this->get('/archive-recordings')
             ->assertOk()
             ->assertSee('RCBC_20260901_102345.wav')
-            ->assertSee('RCBC_20260901_110512.mp3');
+            ->assertSee('RCBC_20260901_110512.mp3')
+            ->assertSee('Available');
         $this->get('/archive-recordings/'.$record->id.'/play')->assertOk();
         $this->get('/archive-recordings/'.$record->id.'/download')->assertOk()->assertDownload('RCBC_20260901_102345.wav');
         $this->assertStringContainsString('campaign='.$campaign->id, (string) $response->json('redirect'));
@@ -441,39 +292,86 @@ class ArchiveRecordingsPageTest extends TestCase
         $this->assertSame(0, ArchiveRecording::count());
     }
 
-    public function test_individual_and_bulk_delete_remove_recordings(): void
+    public function test_delete_requires_pdf_certificate_and_keeps_recording(): void
     {
         $this->actingAs($this->admin);
         $campaign = ChannelAllocationCampaign::create(['name' => 'Atome']);
-        $one = ArchiveRecording::create([
+        $record = ArchiveRecording::create([
             'campaign_id' => $campaign->id,
             'file_name' => 'ATOME_DEL_1.wav',
             'called_at' => '2026-09-01 10:00:00',
             'server' => '',
             'storage_path' => '',
-            'status' => 'Active',
-        ]);
-        $two = ArchiveRecording::create([
-            'campaign_id' => $campaign->id,
-            'file_name' => 'ATOME_DEL_2.wav',
-            'called_at' => '2026-09-01 11:00:00',
-            'server' => '',
-            'storage_path' => '',
-            'status' => 'Active',
-        ]);
-        $three = ArchiveRecording::create([
-            'campaign_id' => $campaign->id,
-            'file_name' => 'ATOME_DEL_3.wav',
-            'called_at' => '2026-09-01 12:00:00',
-            'server' => '',
-            'storage_path' => '',
-            'status' => 'Active',
+            'status' => 'Available',
         ]);
 
-        $this->delete('/archive-recordings/'.$one->id)->assertRedirect();
-        $this->assertFalse(ArchiveRecording::query()->whereKey($one->id)->exists());
+        $this->from('/archive-recordings')->delete('/archive-recordings/'.$record->id)->assertRedirect('/archive-recordings');
+        $record->refresh();
+        $this->assertSame('Available', $record->status);
+        $this->assertTrue(ArchiveRecording::query()->whereKey($record->id)->exists());
 
-        $this->delete('/archive-recordings/bulk', ['ids' => [$two->id, $three->id]])->assertRedirect();
-        $this->assertSame(0, ArchiveRecording::count());
+        $this->from('/archive-recordings')->delete('/archive-recordings/'.$record->id, [
+            'certificate' => UploadedFile::fake()->create('note.txt', 10, 'text/plain'),
+        ])->assertRedirect('/archive-recordings');
+        $record->refresh();
+        $this->assertSame('Available', $record->status);
+        $this->assertNull($record->certificate_path);
+
+        $this->from('/archive-recordings')->delete('/archive-recordings/'.$record->id, [
+            'certificate' => UploadedFile::fake()->create('certificate.pdf', 20, 'application/pdf'),
+        ])->assertRedirect('/archive-recordings');
+        $record->refresh();
+        $this->assertSame('Deleted', $record->status);
+        $this->assertNotEmpty($record->certificate_path);
+        $this->assertFileExists(storage_path('app/private/'.$record->certificate_path));
+        $this->assertTrue(ArchiveRecording::query()->whereKey($record->id)->exists());
+
+        $page = $this->get('/archive-recordings')->assertOk();
+        $page->assertSee('Deleted')
+            ->assertSee('ATOME_DEL_1.wav')
+            ->assertSee('/archive-recordings/'.$record->id.'/certificate', false)
+            ->assertDontSee('data-ar-delete data-id="'.$record->id.'"', false);
+
+        $this->get('/archive-recordings/'.$record->id.'/certificate')->assertOk();
+        @unlink(storage_path('app/private/'.$record->certificate_path));
+    }
+
+    public function test_duration_is_read_from_the_audio_file(): void
+    {
+        $this->actingAs($this->admin);
+        $campaign = ChannelAllocationCampaign::create(['name' => 'Atome']);
+        $dir = storage_path('app/archive-recordings');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+        $wav = $this->silentWav(3);
+        $stored = UploadedFile::fake()->createWithContent('ATOME_20260901_120000.wav', $wav);
+
+        $this->postJson('/archive-recordings/import/audio', [
+            'campaign_id' => $campaign->id,
+            'year' => 2026,
+            'month' => 9,
+            'files' => [$stored],
+        ])->assertOk()->assertJson(['ok' => true, 'records' => 1]);
+
+        $record = ArchiveRecording::query()->where('file_name', 'ATOME_20260901_120000.wav')->first();
+        $this->assertNotNull($record);
+        $this->assertSame('00:00:03', $record->duration);
+        $this->assertSame('Available', $record->status);
+
+        foreach (ArchiveRecording::query()->get() as $imported) {
+            @unlink(storage_path('app/private/'.$imported->storage_path));
+            @unlink(storage_path('app/'.$imported->storage_path));
+        }
+    }
+
+    private function silentWav(int $seconds): string
+    {
+        $sampleRate = 8000;
+        $samples = $seconds * $sampleRate;
+        $data = str_repeat("\x00\x00", $samples);
+        $fmt = pack('v', 1).pack('v', 1).pack('V', $sampleRate).pack('V', $sampleRate * 2).pack('v', 2).pack('v', 16);
+
+        return 'RIFF'.pack('V', 36 + strlen($data)).'WAVEfmt '.pack('V', 16).$fmt.'data'.pack('V', strlen($data)).$data;
     }
 }
