@@ -20,6 +20,7 @@ class ArchiveRecording extends Model
         'status',
         'certificate_path',
         'certificate_name',
+        'location',
     ];
 
     protected function casts(): array

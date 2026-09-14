@@ -1,19 +1,29 @@
 <?php
+
 namespace App\Console\Commands;
+
+use App\Services\DatabaseBackupService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Storage;
+use Throwable;
+
 class BackupDatabase extends Command
 {
-    protected $signature='system:backup';
-    protected $description='Create a timestamped SQLite database backup';
-    public function handle(): int
+    protected $signature = 'system:backup';
+
+    protected $description = 'Create a timestamped backup of the active application database';
+
+    public function handle(DatabaseBackupService $backups): int
     {
-        $source=database_path('database.sqlite');
-        if(!is_file($source)){ $this->error('SQLite database file not found.'); return self::FAILURE; }
-        Storage::makeDirectory('backups');
-        $name='backups/backup_'.now()->format('Y-m-d_H-i-s').'.sqlite';
-        Storage::put($name,file_get_contents($source));
+        try {
+            $name = $backups->create();
+        } catch (Throwable $exception) {
+            $this->error($exception->getMessage());
+
+            return self::FAILURE;
+        }
+
         $this->info('Backup created: '.$name);
+
         return self::SUCCESS;
     }
 }

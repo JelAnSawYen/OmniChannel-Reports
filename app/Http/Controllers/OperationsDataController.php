@@ -10,6 +10,7 @@ use App\Support\OperationCatalog;
 use App\Support\PdcEndorseDate;
 use App\Support\ProgramInboundNumberValidator;
 use App\Support\PublicError;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -29,7 +30,7 @@ class OperationsDataController extends Controller
             $perPage=10;
         }
         $search=trim((string)$request->query('search'));
-        $records=$query->latest()->paginate($perPage)->withQueryString();
+        $records=$query->orderBy('id')->paginate($perPage)->withQueryString();
         $gateways=MediaGateway::orderBy('site_code')->get(['site_code','site_name']);
         $statusOptions=$this->statusOptions($module);
         $campaigns = OperationCatalog::isInbound($module)
@@ -57,7 +58,12 @@ class OperationsDataController extends Controller
         if ($error=$this->integrityError($module,$data)) {
             return back()->with('error',$error)->withInput();
         }
-        $record=$config['model']::create($data); AuditLogger::log('Added',$config['title'],$config['title'].' record added', $record->id,$request);
+        try {
+            $record=$config['model']::create($data);
+        } catch (UniqueConstraintViolationException $exception) {
+            throw $this->uniqueConstraintValidation($module, $exception);
+        }
+        AuditLogger::log('Added',$config['title'],$config['title'].' record added', $record->id,$request);
         return back()->with('success',$config['title'].' record added successfully.');
     }
 
@@ -78,7 +84,11 @@ class OperationsDataController extends Controller
         if ($error = $this->integrityError($module, $data)) {
             return back()->with('error', $error)->withInput();
         }
-        $record->update($data);
+        try {
+            $record->update($data);
+        } catch (UniqueConstraintViolationException $exception) {
+            throw $this->uniqueConstraintValidation($module, $exception);
+        }
         AuditLogger::log('Updated', $config['title'], $config['title'].' record updated', $record->id, $request);
 
         return back()->with('success', $config['title'].' record updated successfully.');
@@ -450,5 +460,25 @@ class OperationsDataController extends Controller
         }
 
         return $data;
+    }
+
+    private function uniqueConstraintValidation(string $module, UniqueConstraintViolationException $exception): ValidationException
+    {
+        if (OperationCatalog::isSim($module)) {
+            $message = $exception->getMessage();
+            if (str_contains($message, 'mobile_number')) {
+                return ValidationException::withMessages([
+                    'mobile_number' => 'The mobile number has already been taken.',
+                ]);
+            }
+
+            return ValidationException::withMessages([
+                'imei' => 'The IMEI has already been taken.',
+            ]);
+        }
+
+        return ValidationException::withMessages([
+            'id' => PublicError::failed('Save', $exception),
+        ]);
     }
 }

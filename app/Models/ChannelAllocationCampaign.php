@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 
 class ChannelAllocationCampaign extends Model
 {
@@ -54,12 +56,24 @@ class ChannelAllocationCampaign extends Model
     public static function findOrCreateByName(string $name): self
     {
         $name = trim($name);
-        $existing = static::keyedByName()->get(mb_strtolower($name));
-        if ($existing) {
-            return $existing;
-        }
 
-        return static::query()->create(['name' => $name]);
+        return DB::transaction(function () use ($name) {
+            $existing = static::query()
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+                ->lockForUpdate()
+                ->first();
+            if ($existing) {
+                return $existing;
+            }
+
+            try {
+                return static::query()->create(['name' => $name]);
+            } catch (UniqueConstraintViolationException) {
+                return static::query()
+                    ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+                    ->firstOrFail();
+            }
+        });
     }
 
     public function allocations(): HasMany
@@ -79,9 +93,13 @@ class ChannelAllocationCampaign extends Model
 
     public function refreshTotalChannelsAllocated(): int
     {
-        $sum = (int) $this->allocations()->sum('total_channel_allocated');
-        $this->forceFill(['total_channels_allocated' => $sum])->save();
+        return DB::transaction(function () {
+            $campaign = static::query()->whereKey($this->id)->lockForUpdate()->firstOrFail();
+            $sum = (int) $campaign->allocations()->lockForUpdate()->sum('total_channel_allocated');
+            $campaign->forceFill(['total_channels_allocated' => $sum])->save();
+            $this->forceFill(['total_channels_allocated' => $sum]);
 
-        return $sum;
+            return $sum;
+        });
     }
 }

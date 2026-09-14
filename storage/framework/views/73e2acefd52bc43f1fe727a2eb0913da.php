@@ -6,11 +6,13 @@
         'gsm' => '<path d="M4.5 6.5A2.5 2.5 0 0 1 7 4h4.2l3.3 3.3v10.2A2.5 2.5 0 0 1 12 20H7a2.5 2.5 0 0 1-2.5-2.5v-11z"/><rect x="7" y="10.5" width="5" height="5.5" rx="1"/><path d="M17.2 5.4a5.6 5.6 0 0 1 3.3 5"/><path d="M16.8 9.2a2.6 2.6 0 0 1 1.6 2.1"/>',
         'channels' => '<rect x="4" y="14" width="16" height="5" rx="1.2"/><rect x="4" y="8.5" width="16" height="5" rx="1.2"/><rect x="4" y="3" width="16" height="5" rx="1.2"/>',
         'sim' => '<path d="M6 5.5A2.5 2.5 0 0 1 8.5 3h4.7L18 7.8v10.7A2.5 2.5 0 0 1 15.5 21h-7A2.5 2.5 0 0 1 6 18.5v-13z"/><rect x="9" y="10.5" width="6" height="6" rx="1"/>',
+        'defective' => '<path d="M10.4 4.3 3 17.4A1.8 1.8 0 0 0 4.6 20h14.8a1.8 1.8 0 0 0 1.6-2.6L13.6 4.3a1.8 1.8 0 0 0-3.2 0z"/><path d="M12 9.5v4"/><path d="M12 16.6h.01"/>',
+        'inbound' => '<path d="M20 16.9v2.3a1.7 1.7 0 0 1-1.9 1.7 16.8 16.8 0 0 1-7.3-2.6 16.5 16.5 0 0 1-5.1-5.1A16.8 16.8 0 0 1 3.1 5.9 1.7 1.7 0 0 1 4.8 4h2.3a1.7 1.7 0 0 1 1.7 1.5c.1.8.3 1.6.6 2.3a1.7 1.7 0 0 1-.4 1.8l-1 1a13.5 13.5 0 0 0 5.1 5.1l1-1a1.7 1.7 0 0 1 1.8-.4c.7.3 1.5.5 2.3.6A1.7 1.7 0 0 1 20 16.9z"/>',
         'bars' => '<path d="M4 18V10"/><path d="M10 18V6"/><path d="M16 18v-7"/><path d="M22 18V4"/>',
         'util' => '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/>',
         'trend' => '<path d="M4 19h16"/><path d="m4 15 5-5 4 3 7-8"/>',
     ];
-    $canViewReports = auth()->user()->hasPermission('media.view') && auth()->user()->canAccessModule('reports');
+    $canViewUtilization = auth()->user()->hasPermission('dashboard.view') && auth()->user()->canAccessModule('dashboard');
 ?>
 <div class="dashboard-home" id="dashboardHome" data-snapshot-url="<?php echo e(route('dashboard.snapshot')); ?>" data-fingerprint="<?php echo e($overview['fingerprint']); ?>">
     <script type="application/json" id="dashOverviewData"><?php echo json_encode($overview, 15, 512) ?></script>
@@ -21,7 +23,7 @@
             <p class="dash-meta"><?php echo e($roleName); ?> • <?php echo e($currentDate); ?></p>
         </div>
         <div class="dash-updated">
-            <span>Last updated: <span data-dash-updated><?php echo e($overview['generated_at_label']); ?></span></span>
+            <span>Updated <span data-dash-updated><?php echo e($overview['generated_at_label']); ?></span></span>
             <button type="button" class="dash-refresh" data-dash-refresh title="Refresh dashboard" aria-label="Refresh dashboard">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
             </button>
@@ -43,7 +45,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $icons['gsm']; ?></svg>
             </span>
             <div class="dash-kpi-body">
-                <span class="dash-kpi-label">Total GSM Gateways</span>
+                <span class="dash-kpi-label">Total GSM Gateway</span>
                 <div class="dash-kpi-value" data-dash-kpi="gateways"><?php echo e($kpis['gateways']['display']); ?></div>
             </div>
         </div>
@@ -52,7 +54,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $icons['channels']; ?></svg>
             </span>
             <div class="dash-kpi-body">
-                <span class="dash-kpi-label">Total Channels</span>
+                <span class="dash-kpi-label">Total SIP Channels</span>
                 <div class="dash-kpi-value" data-dash-kpi="channels"><?php echo e($kpis['channels']['display']); ?></div>
             </div>
         </div>
@@ -67,6 +69,29 @@
                     <span>Globe</span> <strong data-dash-kpi="globe"><?php echo e($kpis['globe']['display']); ?></strong>
                     <span class="dash-sim-sep">|</span>
                     <span>Smart</span> <strong data-dash-kpi="smart"><?php echo e($kpis['smart']['display']); ?></strong>
+                </div>
+            </div>
+        </div>
+        <div class="dash-kpi dash-kpi-pink">
+            <span class="dash-kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $icons['defective']; ?></svg>
+            </span>
+            <div class="dash-kpi-body">
+                <span class="dash-kpi-label">Defective GSM</span>
+                <div class="dash-kpi-value" data-dash-kpi="defective"><?php echo e($kpis['defective']['display']); ?></div>
+            </div>
+        </div>
+        <div class="dash-kpi dash-kpi-sky">
+            <span class="dash-kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?php echo $icons['inbound']; ?></svg>
+            </span>
+            <div class="dash-kpi-body">
+                <span class="dash-kpi-label">Inbound Numbers</span>
+                <div class="dash-kpi-value" data-dash-kpi="inbound"><?php echo e($kpis['inbound']['display']); ?></div>
+                <div class="dash-sim-inline">
+                    <span>Mobile</span> <strong data-dash-kpi="mobile"><?php echo e($kpis['mobile']['display']); ?></strong>
+                    <span class="dash-sim-sep">|</span>
+                    <span>Landline</span> <strong data-dash-kpi="landline"><?php echo e($kpis['landline']['display']); ?></strong>
                 </div>
             </div>
         </div>
@@ -109,8 +134,8 @@
                     </span>
                     <input type="search" data-dash-util-search placeholder="Search campaign..." aria-label="Search campaign" autocomplete="off">
                 </label>
-                <?php if($canViewReports): ?>
-                    <a class="btn secondary dash-view-all-btn" href="<?php echo e(route('reports', ['tab' => 'channel-utilization'])); ?>">View All</a>
+                <?php if($canViewUtilization): ?>
+                    <a class="btn secondary dash-view-all-btn" href="<?php echo e(route('channel-utilization')); ?>">View All</a>
                 <?php endif; ?>
             </div>
         </div>

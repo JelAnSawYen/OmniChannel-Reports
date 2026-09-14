@@ -42,7 +42,7 @@ class OperationalAlerts
                     'count' => $expiringContracts,
                     'label' => 'Telco contract(s) expiring within 30 days.',
                     'tone' => 'unknown',
-                    'href' => route('reports'),
+                    'href' => route('telco-cost'),
                 ];
             }
         }

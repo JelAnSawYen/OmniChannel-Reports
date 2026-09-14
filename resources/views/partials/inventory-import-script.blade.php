@@ -100,8 +100,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const name = file.name || '';
         const ok = /\.(xlsx|xls)$/i.test(name);
-        importFileStatus.textContent = name;
-        importFileStatus.classList.toggle('ready', ok);
+        if (importFileStatus) {
+            importFileStatus.textContent = name;
+            importFileStatus.classList.toggle('ready', ok);
+        }
         importPreviewButton.disabled = !ok;
         if (!ok) showImportError('Only .xlsx, .xls files are allowed.');
     });

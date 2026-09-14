@@ -86,9 +86,9 @@ class OperationCatalog
             ],
             'pdc' => [
                 'name' => 'PDC',
-                'address' => 'Ayala Triangle Gardens Tower 2, Paseo de Roxas corner Makati Avenue, Makati City 1226, Philippines',
-                'lat' => 14.5576051,
-                'lng' => 121.0254632,
+                'address' => '6819 Ayala Avenue, Makati City, RCBC Plaza',
+                'lat' => 14.5607611,
+                'lng' => 121.0165333,
                 'assigned' => false,
             ],
         ];
@@ -180,8 +180,9 @@ class OperationCatalog
                     'caller_number' => 'Caller Number',
                     'agent_number' => 'Agent Number',
                     'duration' => 'Duration',
+                    'location' => 'Location',
                 ],
-                'fields' => ['campaign_id', 'file_name', 'called_at', 'caller_number', 'agent_number', 'duration', 'storage_path'],
+                'fields' => ['campaign_id', 'file_name', 'called_at', 'caller_number', 'agent_number', 'duration', 'location', 'storage_path'],
             ],
             'globe-sim' => [
                 'title' => 'Globe SIM',

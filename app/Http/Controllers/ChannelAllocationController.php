@@ -13,6 +13,7 @@ use App\Support\PublicError;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -69,20 +70,32 @@ class ChannelAllocationController extends Controller
     {
         $data = $request->validate($this->campaignRules(true));
         $allocation = $this->optionalAllocation($request);
-        $campaign = ChannelAllocationCampaign::query()->findOrFail((int) $data['campaign_id']);
 
-        $campaign->update([
-            'media_gateway' => $data['media_gateway'] ?? null,
-            'total_channels_allocated' => $data['total_channels_allocated'] ?? $campaign->total_channels_allocated,
-            'caller_id' => $data['caller_id'] ?? null,
-            'prefix' => $data['prefix'] ?? null,
-            'remarks' => $data['remarks'] ?? null,
-        ]);
+        try {
+            $campaign = DB::transaction(function () use ($data, $allocation) {
+                $campaign = ChannelAllocationCampaign::query()
+                    ->whereKey((int) $data['campaign_id'])
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-        if ($allocation !== null) {
-            $allocation['sort_order'] = (int) $campaign->allocations()->max('sort_order') + 1;
-            $campaign->allocations()->create($allocation);
-            $campaign->refreshTotalChannelsAllocated();
+                $campaign->update([
+                    'media_gateway' => $data['media_gateway'] ?? null,
+                    'total_channels_allocated' => $data['total_channels_allocated'] ?? $campaign->total_channels_allocated,
+                    'caller_id' => $data['caller_id'] ?? null,
+                    'prefix' => $data['prefix'] ?? null,
+                    'remarks' => $data['remarks'] ?? null,
+                ]);
+
+                if ($allocation !== null) {
+                    $allocation['sort_order'] = (int) $campaign->allocations()->lockForUpdate()->max('sort_order') + 1;
+                    $campaign->allocations()->create($allocation);
+                    $campaign->refreshTotalChannelsAllocated();
+                }
+
+                return $campaign;
+            });
+        } catch (\Throwable $exception) {
+            return back()->with('error', PublicError::failed('Save', $exception))->withInput();
         }
 
         AuditLogger::log('Added', 'Channel Allocation', 'Campaign added', $campaign->id, $request);
@@ -93,13 +106,22 @@ class ChannelAllocationController extends Controller
     public function update(Request $request, ChannelAllocationCampaign $campaign): RedirectResponse
     {
         $data = $request->validate($this->campaignRules());
-        $campaign->update([
-            'media_gateway' => $data['media_gateway'] ?? null,
-            'total_channels_allocated' => $data['total_channels_allocated'] ?? null,
-            'caller_id' => $data['caller_id'] ?? null,
-            'prefix' => $data['prefix'] ?? null,
-            'remarks' => $data['remarks'] ?? null,
-        ]);
+
+        try {
+            DB::transaction(function () use ($campaign, $data) {
+                $locked = ChannelAllocationCampaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
+                $locked->update([
+                    'media_gateway' => $data['media_gateway'] ?? null,
+                    'total_channels_allocated' => $data['total_channels_allocated'] ?? null,
+                    'caller_id' => $data['caller_id'] ?? null,
+                    'prefix' => $data['prefix'] ?? null,
+                    'remarks' => $data['remarks'] ?? null,
+                ]);
+            });
+        } catch (\Throwable $exception) {
+            return back()->with('error', PublicError::failed('Update', $exception))->withInput();
+        }
+
         AuditLogger::log('Updated', 'Channel Allocation', 'Campaign updated', $campaign->id, $request);
 
         return back()->with('success', 'Campaign updated successfully.');
@@ -117,10 +139,19 @@ class ChannelAllocationController extends Controller
     public function storeAllocation(Request $request, ChannelAllocationCampaign $campaign): RedirectResponse
     {
         $data = $this->validatedAllocationFromSip($request);
-        $data['media_gateway'] = ($data['media_gateway'] ?? null) ?: $campaign->media_gateway;
-        $data['sort_order'] = (int) $campaign->allocations()->max('sort_order') + 1;
-        $campaign->allocations()->create($data);
-        $campaign->refreshTotalChannelsAllocated();
+
+        try {
+            DB::transaction(function () use ($campaign, $data) {
+                $locked = ChannelAllocationCampaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
+                $data['media_gateway'] = ($data['media_gateway'] ?? null) ?: $locked->media_gateway;
+                $data['sort_order'] = (int) $locked->allocations()->lockForUpdate()->max('sort_order') + 1;
+                $locked->allocations()->create($data);
+                $locked->refreshTotalChannelsAllocated();
+            });
+        } catch (\Throwable $exception) {
+            return back()->with('error', PublicError::failed('Save', $exception))->withInput();
+        }
+
         AuditLogger::log('Added', 'Channel Allocation', 'Allocation added', $campaign->id, $request);
 
         return back()
@@ -132,8 +163,22 @@ class ChannelAllocationController extends Controller
     {
         abort_unless($allocation->campaign_id === $campaign->id, 404);
         $data = $this->validatedAllocationFromSip($request);
-        $allocation->update($data);
-        $campaign->refreshTotalChannelsAllocated();
+
+        try {
+            DB::transaction(function () use ($campaign, $allocation, $data) {
+                ChannelAllocationCampaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
+                $locked = ChannelAllocation::query()
+                    ->whereKey($allocation->id)
+                    ->where('campaign_id', $campaign->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                $locked->update($data);
+                $campaign->refreshTotalChannelsAllocated();
+            });
+        } catch (\Throwable $exception) {
+            return back()->with('error', PublicError::failed('Update', $exception))->withInput();
+        }
+
         AuditLogger::log('Updated', 'Channel Allocation', 'Allocation updated', $allocation->id, $request);
 
         return back()
@@ -146,8 +191,22 @@ class ChannelAllocationController extends Controller
     {
         abort_unless($allocation->campaign_id === $campaign->id, 404);
         $id = $allocation->id;
-        $allocation->delete();
-        $campaign->refreshTotalChannelsAllocated();
+
+        try {
+            DB::transaction(function () use ($campaign, $allocation) {
+                ChannelAllocationCampaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
+                $locked = ChannelAllocation::query()
+                    ->whereKey($allocation->id)
+                    ->where('campaign_id', $campaign->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                $locked->delete();
+                $campaign->refreshTotalChannelsAllocated();
+            });
+        } catch (\Throwable $exception) {
+            return back()->with('error', PublicError::failed('Delete', $exception));
+        }
+
         AuditLogger::log('Deleted', 'Channel Allocation', 'Allocation deleted', $id, $request);
 
         return back()

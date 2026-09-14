@@ -17,7 +17,7 @@ class AppLayoutComposer
             'users.index' => ['users', 'Users'],
             'users.create' => ['users', 'Add User'],
             'users.edit' => ['users', 'Edit User'],
-            'activity-logs' => ['activity-logs', 'Activity Logs'],
+            'activity-logs' => ['activity-logs', 'Audit Logs'],
             'login-history' => ['login-history', 'Login History'],
             'profile' => ['profile', 'My Profile'],
             'maintenance' => ['maintenance', 'Maintenance'],
@@ -37,12 +37,11 @@ class AppLayoutComposer
             'defective-gsm' => ['defective-gsm', 'Defective GSM'],
             'program-location' => ['program-location', 'Program Location'],
             'program-location.show' => ['program-location', 'Program Location'],
-            'reports' => ['reports', 'Reports'],
-            'reports.export' => ['reports', 'Reports'],
+            'channel-utilization' => ['channel-utilization', 'Channel Utilization'],
         ];
 
         $name = Route::currentRouteName() ?? '';
-        [$pageKey, $pageTitle] = $map[$name] ?? ['', 'OmniChannel Reports'];
+        [$pageKey, $pageTitle] = $map[$name] ?? ['', 'OmniChannel Inventory'];
 
         if ($name === 'program-location.show') {
             $slug = (string) Route::current()->parameter('location');

@@ -9,6 +9,7 @@ use App\Models\UserType;
 use App\Services\XlsxService;
 use App\Support\InventoryImportCatalog;
 use App\Support\OperationCatalog;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -269,5 +270,45 @@ class SimInventoryFieldsTest extends TestCase
         ], $headers);
         $this->assertNotContains('Id', $headers);
         $this->assertNotContains('Last Updated', $headers);
+    }
+
+    public function test_imei_uniqueness_is_enforced_in_the_database(): void
+    {
+        $this->assertTrue(Schema::hasIndex('globe_sims', 'globe_sims_imei_unique'));
+        $this->assertTrue(Schema::hasIndex('smart_sims', 'smart_sims_imei_unique'));
+
+        GlobeSim::query()->create([
+            'imei' => '356938035649001',
+            'mobile_number' => '09175550001',
+            'network' => 'Globe',
+        ]);
+
+        try {
+            GlobeSim::query()->create([
+                'imei' => '356938035649001',
+                'mobile_number' => '09175550002',
+                'network' => 'Globe',
+            ]);
+            $this->fail('Duplicate Globe IMEI was inserted.');
+        } catch (UniqueConstraintViolationException) {
+            $this->assertSame(1, GlobeSim::query()->where('imei', '356938035649001')->count());
+        }
+
+        SmartSim::query()->create([
+            'imei' => '356938035649101',
+            'mobile_number' => '09175550101',
+            'network' => 'Smart',
+        ]);
+
+        try {
+            SmartSim::query()->create([
+                'imei' => '356938035649101',
+                'mobile_number' => '09175550102',
+                'network' => 'Smart',
+            ]);
+            $this->fail('Duplicate Smart IMEI was inserted.');
+        } catch (UniqueConstraintViolationException) {
+            $this->assertSame(1, SmartSim::query()->where('imei', '356938035649101')->count());
+        }
     }
 }

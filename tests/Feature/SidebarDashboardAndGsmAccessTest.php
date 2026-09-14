@@ -32,6 +32,28 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         ]);
     }
 
+    public function test_sidebar_brand_shows_ssg_logo_and_inventory_name(): void
+    {
+        $this->actingAs($this->user($this->adminType));
+
+        $this->get('/dashboard')
+            ->assertOk()
+            ->assertSee('class="brand-logo"', false)
+            ->assertSee('images/ssg-logo-white.png', false)
+            ->assertSee('images/ssg-favicon.png', false)
+            ->assertSee('<title>Dashboard</title>', false)
+            ->assertSee('<div class="brand-title">OmniChannel Inventory</div>', false)
+            ->assertDontSee('<div class="brand-subtitle">Inventory</div>', false)
+            ->assertDontSee('<div class="brand-subtitle">Reports</div>', false)
+            ->assertSee('>Dashboard</span></a>', false)
+            ->assertSee('class="nav-item nav-parent-row" id="networkToggle"', false)
+            ->assertSee('id="networkCaret"', false)
+            ->assertSee('class="nav-caret" id="networkCaret"', false)
+            ->assertDontSee('<button type="button" class="nav-caret"', false)
+            ->assertDontSee('>⌃</span>', false)
+            ->assertDontSee('>⌄</span>', false);
+    }
+
     public function test_sidebar_operations_and_locations_are_reachable(): void
     {
         $this->actingAs($this->user($this->adminType));
@@ -111,6 +133,35 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             ->assertDontSee('>Operations</div>', false);
     }
 
+    public function test_browser_tab_titles_match_the_current_page(): void
+    {
+        $this->actingAs($this->user($this->adminType));
+
+        $titles = [
+            '/dashboard' => 'Dashboard',
+            '/campaigns' => 'Campaigns',
+            '/pdc-servers' => 'PDC Servers',
+            '/sip-channels' => 'SIP Channels',
+            '/channel-allocation' => 'Channel Allocation',
+            '/archive-recordings' => 'Archive Recordings',
+            '/gsm-gateways' => 'GSM Gateway',
+            '/globe-sim' => 'Globe SIM',
+            '/smart-sim' => 'Smart SIM',
+            '/program-inbound-numbers' => 'Program Inbound Numbers',
+            '/signal-boosters' => 'Signal Boosters',
+            '/users' => 'Users',
+            '/activity-logs' => 'Audit Logs',
+            '/channel-utilization' => 'Channel Utilization',
+        ];
+
+        foreach ($titles as $url => $title) {
+            $this->get($url)
+                ->assertOk()
+                ->assertSee('<title>'.$title.'</title>', false)
+                ->assertDontSee('<title>'.$title.' - OmniChannel Inventory</title>', false);
+        }
+    }
+
     public function test_operational_pages_use_gsm_gateway_layout(): void
     {
         $this->actingAs($this->user($this->adminType));
@@ -181,8 +232,8 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             ->assertSee('account-group-caret', false)
             ->assertDontSee('>User Types</a>', false)
             ->assertSee('Total Campaigns')
-            ->assertSee('Total GSM Gateways')
-            ->assertSee('Total Channels')
+            ->assertSee('Total GSM Gateway')
+            ->assertSee('Total SIP Channels')
             ->assertSee('Total SIMs')
             ->assertSee('Campaigns with Most Allocations')
             ->assertSee('Channel Utilization')
@@ -339,7 +390,11 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             ->assertSee('Globe SIM')
             ->assertSee('class="page-head"', false)
             ->assertSee('class="nav-group open" id="networkGroup"', false)
-            ->assertSee('id="networkToggle"', false)
+            ->assertSee('class="nav-item nav-parent-row" id="networkToggle"', false)
+            ->assertSee('id="networkCaret"', false)
+            ->assertSee('class="nav-caret" id="networkCaret"', false)
+            ->assertDontSee('>⌄</span>', false)
+            ->assertDontSee('<button type="button" class="nav-caret"', false)
             ->assertSee('href="'.url('/globe-sim').'"', false)
             ->assertSee('href="'.url('/smart-sim').'"', false)
             ->assertDontSee('href="'.url('/network').'"', false);

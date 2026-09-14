@@ -8,28 +8,7 @@ class AudioDuration
 {
     public static function formatFromRecording(ArchiveRecording $recording): ?string
     {
-        $candidates = [];
-        $stored = trim((string) $recording->storage_path);
-        if ($stored !== '') {
-            $candidates[] = $stored;
-            $candidates[] = storage_path('app/'.$stored);
-            $candidates[] = storage_path('app/private/'.$stored);
-            $candidates[] = public_path($stored);
-        }
-        $fileName = trim((string) $recording->file_name);
-        if ($fileName !== '') {
-            $candidates[] = storage_path('app/archive-recordings/'.$fileName);
-            $candidates[] = storage_path('app/private/archive-recordings/'.$fileName);
-        }
-
-        foreach ($candidates as $path) {
-            $formatted = self::formatFromFile($path);
-            if ($formatted !== null) {
-                return $formatted;
-            }
-        }
-
-        return null;
+        return self::formatFromFile(ArchiveStorage::resolveRecording($recording));
     }
 
     public static function formatFromFile(?string $path): ?string

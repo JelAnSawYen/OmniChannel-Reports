@@ -5,12 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="<?php echo e(csrf_token()); ?>">
     <title><?php echo e($title ?? 'Telco Cost Consolidation'); ?></title>
+    <link rel="icon" type="image/png" href="<?php echo e(asset('images/ssg-favicon.png')); ?>?v=<?php echo e(@filemtime(public_path('images/ssg-favicon.png')) ?: '1'); ?>">
+    <link rel="shortcut icon" href="<?php echo e(asset('favicon.ico')); ?>?v=<?php echo e(@filemtime(public_path('favicon.ico')) ?: '1'); ?>">
+    <?php if(request()->routeIs('login')): ?>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet">
+    <?php endif; ?>
     <style>
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; font-family: inherit; }
+        html, body {
+            font-family: "Segoe UI", Inter, Arial, sans-serif;
+        }
         body {
             margin: 0;
             min-height: 100vh;
-            font-family: Arial, sans-serif;
+            font-family: "Segoe UI", Inter, Arial, sans-serif;
             background-image:
                 linear-gradient(rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.25)),
                 url('<?php echo e(asset('images/login-bg.jpg')); ?>');
@@ -20,6 +30,24 @@
             display: flex;
             align-items: center;
             justify-content: center;
+        }
+        button, input, select, textarea {
+            font-family: inherit;
+        }
+        ::placeholder {
+            font-family: inherit;
+        }
+        .login-page h1,
+        .login-page p,
+        .login-page input,
+        .login-page input::placeholder,
+        .login-page .toggle-password,
+        .login-page .card-link,
+        .login-page .footer,
+        .login-page .footer a,
+        .login-page .error-message,
+        .login-page .status-message {
+            font-family: "Segoe UI", Inter, Arial, sans-serif;
         }
         .login-card {
             width: 360px;
@@ -31,6 +59,7 @@
             backdrop-filter: blur(3px);
         }
         .icon { font-size: 42px; margin-bottom: 12px; color: #334155; }
+        .login-logo { display: block; margin: 0 auto; width: 132px; max-width: 70%; height: auto; object-fit: contain; }
         h1 { margin: 0 0 25px; font-size: 22px; font-weight: 500; color: #475569; }
         p.hint { margin: -10px 0 18px; font-size: 13px; color: #64748b; text-align: left; }
         input {
@@ -54,7 +83,7 @@
         .toggle-password:hover { background: transparent; color: #334155; }
         .login-button {
             width: 100%; padding: 12px; border: none; border-radius: 7px;
-            background: #475569; color: white; font-size: 14px; cursor: pointer;
+            background: #475569; color: white; font-size: 14px; font-weight: 600; cursor: pointer;
         }
         .login-button:hover { background: #334155; }
         .error-message {
@@ -73,11 +102,59 @@
             padding: 10px; margin-bottom: 15px; word-break: break-all; color: #334155;
         }
         .code-list { text-align: left; font-family: Consolas, monospace; font-size: 13px; color: #334155; margin: 0 0 15px; padding-left: 18px; }
+        body.login-page {
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.10)),
+                url('<?php echo e(asset('images/login-bg.jpg')); ?>?v=<?php echo e(@filemtime(public_path('images/login-bg.jpg')) ?: '1'); ?>');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+        .login-page .icon { margin-bottom: 8px; }
+        .login-page .login-logo { width: 72px; max-width: 40%; }
+        .login-page h1 {
+            font-family: Inter, "Segoe UI", Arial, sans-serif;
+            font-weight: 600;
+            color: #475569;
+            text-align: center;
+        }
+        .login-page .card-link {
+            font-family: Inter, "Segoe UI", Arial, sans-serif;
+            font-weight: 600;
+            color: #2563EB;
+        }
+        .login-page .input-with-icon { position: relative; margin-bottom: 15px; }
+        .login-page .input-with-icon input { margin-bottom: 0; padding-left: 40px; }
+        .login-page .input-with-icon.password-wrapper input { padding-right: 42px; }
+        .login-page input[type="password"]::-ms-reveal,
+        .login-page input[type="password"]::-ms-clear,
+        .login-page input[type="text"]::-ms-reveal,
+        .login-page input[type="text"]::-ms-clear {
+            display: none;
+        }
+        .login-page .field-icon {
+            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+            width: 18px; height: 18px; color: #475569; pointer-events: none; display: block;
+        }
+        .login-page .toggle-password {
+            display: none; align-items: center; justify-content: center;
+            color: #475569; width: 22px; height: 22px; z-index: 2;
+        }
+        .login-page .toggle-password.has-value { display: flex; }
+        .login-page .toggle-password svg { width: 18px; height: 18px; pointer-events: none; }
+        .login-page .toggle-password .icon-eye { display: none; }
+        .login-page .toggle-password .icon-eye-off { display: block; }
+        .login-page .toggle-password.is-visible .icon-eye { display: block; }
+        .login-page .toggle-password.is-visible .icon-eye-off { display: none; }
     </style>
 </head>
-<body>
+<body class="<?php echo e(request()->routeIs('login') ? 'login-page' : ''); ?>">
     <div class="login-card">
-        <div class="icon">📈</div>
+        <?php if(request()->routeIs('login')): ?>
+            <div class="icon"><img class="login-logo" src="<?php echo e(asset('images/ssg-logo.png')); ?>" alt="SSG"></div>
+        <?php else: ?>
+            <div class="icon">📈</div>
+        <?php endif; ?>
         <h1><?php echo e($heading ?? 'Support Services Group (APAC)'); ?></h1>
         <?php if($errors->any()): ?>
             <div class="error-message"><?php echo e($errors->first()); ?></div>

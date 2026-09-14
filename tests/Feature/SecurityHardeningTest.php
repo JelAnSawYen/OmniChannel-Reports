@@ -77,6 +77,33 @@ class SecurityHardeningTest extends TestCase
         $this->post('/login', ['email' => 'brute@example.com', 'password' => 'wrong'])->assertStatus(429);
     }
 
+    public function test_forwarded_for_header_does_not_bypass_login_throttling(): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            $this->withHeader('X-Forwarded-For', '203.0.113.'.$i)
+                ->post('/login', ['email' => 'spoof@example.com', 'password' => 'wrong'])
+                ->assertStatus(302);
+        }
+
+        $this->withHeader('X-Forwarded-For', '203.0.113.99')
+            ->post('/login', ['email' => 'spoof@example.com', 'password' => 'wrong'])
+            ->assertStatus(429);
+    }
+
+    public function test_upload_probe_is_not_publicly_available(): void
+    {
+        $this->assertFileDoesNotExist(public_path('upload_probe.php'));
+        $this->get('/upload_probe.php')->assertNotFound();
+    }
+
+    public function test_session_cookies_are_httponly_with_lax_samesite(): void
+    {
+        $this->assertTrue((bool) config('session.http_only'));
+        $this->assertSame('lax', config('session.same_site'));
+        $this->assertFalse((bool) config('session.secure'));
+        $this->assertSame([], config('app.trusted_proxies'));
+    }
+
     public function test_standard_user_cannot_manage_users(): void
     {
         $admin = $this->user($this->adminType, ['name' => 'Keep Admin', 'email' => 'keep.admin@example.com']);

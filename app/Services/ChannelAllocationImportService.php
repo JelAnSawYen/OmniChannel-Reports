@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ChannelAllocationCampaign;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -238,22 +239,30 @@ class ChannelAllocationImportService
             foreach ($payload as $item) {
                 $campaign = ChannelAllocationCampaign::query()
                     ->whereRaw('LOWER(name) = ?', [mb_strtolower((string) $item['name'])])
+                    ->lockForUpdate()
                     ->first();
 
                 if (! $campaign) {
-                    $campaign = ChannelAllocationCampaign::query()->create([
-                        'name' => $item['name'],
-                        'media_gateway' => $item['media_gateway'],
-                        'caller_id' => $item['caller_id'],
-                        'prefix' => $item['prefix'],
-                        'remarks' => $item['remarks'],
-                        'total_channels_allocated' => 0,
-                        'sort_order' => (int) ChannelAllocationCampaign::query()->max('sort_order') + 1,
-                    ]);
-                    $campaignCount++;
+                    try {
+                        $campaign = ChannelAllocationCampaign::query()->create([
+                            'name' => $item['name'],
+                            'media_gateway' => $item['media_gateway'],
+                            'caller_id' => $item['caller_id'],
+                            'prefix' => $item['prefix'],
+                            'remarks' => $item['remarks'],
+                            'total_channels_allocated' => 0,
+                            'sort_order' => (int) ChannelAllocationCampaign::query()->max('sort_order') + 1,
+                        ]);
+                        $campaignCount++;
+                    } catch (UniqueConstraintViolationException) {
+                        $campaign = ChannelAllocationCampaign::query()
+                            ->whereRaw('LOWER(name) = ?', [mb_strtolower((string) $item['name'])])
+                            ->lockForUpdate()
+                            ->firstOrFail();
+                    }
                 }
 
-                $sort = (int) $campaign->allocations()->max('sort_order');
+                $sort = (int) $campaign->allocations()->lockForUpdate()->max('sort_order');
                 foreach ($item['allocations'] as $allocation) {
                     $sort++;
                     $campaign->allocations()->create([

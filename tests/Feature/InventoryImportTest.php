@@ -120,6 +120,53 @@ class InventoryImportTest extends TestCase
         $this->assertNotContains('Id', $headers);
     }
 
+    public function test_import_appends_after_existing_records_and_ignores_excel_ids(): void
+    {
+        $this->actingAs($this->admin);
+        $first = MediaGateway::create([
+            'site_name' => 'Estancia',
+            'site_code' => 'EST-OLD-1',
+            'ip_address' => '10.9.1.1',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'port' => '8',
+        ]);
+        $second = MediaGateway::create([
+            'site_name' => 'Alcar',
+            'site_code' => 'ALC-OLD-2',
+            'ip_address' => '10.9.1.2',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'port' => '8',
+        ]);
+
+        $path = $this->spreadsheet([
+            ['Id', 'Hostname IP', 'Serial Number', 'Plan', 'Port', 'Network', 'Function', 'Site', 'User', 'Password'],
+            [1, '10.24.40.10', 'NEW-A', '', '4', '', '', 'CTN', 'root', 'x'],
+            [2, '10.24.40.11', 'NEW-B', '', '4', '', '', 'SCS', 'root', 'x'],
+            [3, '10.24.40.12', 'NEW-C', '', '4', '', '', 'PDC', 'root', 'x'],
+        ]);
+
+        $preview = $this->postJson('/gsm-gateways/import/preview', [
+            'file' => $this->upload($path),
+        ])->assertOk()->json();
+        $this->assertTrue($preview['valid'], $preview['rows'][0]['error'] ?? '');
+
+        $this->postJson('/gsm-gateways/import/confirm', ['token' => $preview['token']])
+            ->assertOk()
+            ->assertJson(['records' => 3]);
+
+        $this->assertSame([$first->id, $second->id], MediaGateway::query()->whereIn('id', [$first->id, $second->id])->orderBy('id')->pluck('id')->all());
+        $this->assertSame(
+            ['EST-OLD-1', 'ALC-OLD-2', 'NEW-A', 'NEW-B', 'NEW-C'],
+            MediaGateway::query()->orderBy('id')->pluck('site_code')->all()
+        );
+        $this->assertSame(
+            [$first->id, $second->id, $second->id + 1, $second->id + 2, $second->id + 3],
+            MediaGateway::query()->orderBy('id')->pluck('id')->all()
+        );
+    }
+
     public function test_ipv4_is_unique_across_pdc_and_gsm_modules(): void
     {
         $this->actingAs($this->admin);

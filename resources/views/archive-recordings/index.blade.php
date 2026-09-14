@@ -51,12 +51,14 @@
                                         <colgroup>
                                             <col class="ar-col-name">
                                             <col class="ar-col-status">
+                                            <col class="ar-col-location">
                                             <col class="ar-col-actions">
                                         </colgroup>
                                         <thead>
                                             <tr>
                                                 <th>Month</th>
-                                                <th>Status</th>
+                                                <th class="ar-status-column">Status</th>
+                                                <th>Location</th>
                                                 <th class="actions-column">Action</th>
                                             </tr>
                                         </thead>
@@ -67,13 +69,20 @@
                                                     $availableRecord = $monthNode['recordings']->first(fn ($recording) => $recording->isAvailable());
                                                     $deletedRecord = $monthNode['recordings']->first(fn ($recording) => $recording->isDeleted());
                                                     $monthAvailable = $availableRecord !== null;
-                                                    $monthSearchText = trim($monthNode['label'].' '.$monthNode['month'].' '.$monthNode['recordings']->pluck('file_name')->filter()->implode(' '));
+                                                    $monthLocation = trim((string) (
+                                                        $availableRecord?->location
+                                                        ?? $deletedRecord?->location
+                                                        ?? $monthNode['recordings']->pluck('location')->filter()->first()
+                                                        ?? ''
+                                                    ));
+                                                    $monthSearchText = trim($monthNode['label'].' '.$monthNode['month'].' '.$monthLocation.' '.$monthNode['recordings']->pluck('file_name')->filter()->implode(' '));
                                                 @endphp
                                                 <tr class="ar-month-row{{ $monthSelected ? ' ar-month-selected' : '' }}" data-ar-text="{{ $monthSearchText }}">
                                                     <td>{{ $monthNode['label'] }}</td>
-                                                    <td>
+                                                    <td class="ar-status-column">
                                                         <span class="status-pill {{ $monthAvailable ? 'active' : 'inactive' }}">{{ $monthAvailable ? 'Available' : 'Deleted' }}</span>
                                                     </td>
+                                                    <td>{{ $monthLocation !== '' ? $monthLocation : '—' }}</td>
                                                     <td class="actions-column">
                                                         <div class="row-actions">
                                                             @if($monthAvailable && $canDelete && $availableRecord)
@@ -81,7 +90,7 @@
                                                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="m6 7 1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>
                                                                 </button>
                                                             @elseif(! $monthAvailable && $deletedRecord)
-                                                                <a class="action-btn edit" href="{{ route('archive-recordings.certificate', $deletedRecord) }}" title="View Certificate of Deletion" aria-label="View Certificate of Deletion for {{ $monthNode['label'] }}">
+                                                                <a class="action-btn edit" href="{{ route('archive-recordings.certificate', $deletedRecord) }}" target="_blank" rel="noopener noreferrer" title="View Certificate of Deletion" aria-label="View Certificate of Deletion for {{ $monthNode['label'] }}">
                                                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h5"/></svg>
                                                                 </a>
                                                             @else
@@ -156,6 +165,17 @@
                         </select>
                     </div>
                 </div>
+                <div class="form-group full ar-add-location-group">
+                    <label for="arAddLocation">Location</label>
+                    <div class="ar-add-dd" id="arAddLocationWrap">
+                        <input class="form-control" id="arAddLocation" type="text" placeholder="Search or type a location" autocomplete="off" aria-haspopup="listbox" aria-expanded="false" aria-controls="arAddLocationMenu">
+                        <div class="ar-add-dd-menu" id="arAddLocationMenu" hidden role="listbox" aria-labelledby="arAddLocation">
+                            @foreach(($locationOptions ?? []) as $locationOption)
+                                <button class="ar-add-dd-option" type="button" role="option" data-value="{{ $locationOption['value'] }}">{{ $locationOption['label'] }}</button>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
                 <div class="form-group full">
                     <label for="arAddFiles">Recording Files</label>
                     <input class="form-control" id="arAddFiles" type="file" accept=".wav,.mp3,.mpeg,.mpga,.ogg,.oga,.webm,.m4a,.aac,.flac,.wma,audio/*" multiple>
@@ -166,7 +186,7 @@
         </div>
         <div class="modal-footer">
             <button type="button" class="btn secondary" data-close="arAddModal">Cancel</button>
-            <button type="button" class="btn primary" id="arAddSubmit">Add Records</button>
+            <button type="button" class="btn primary" id="arAddSubmit">Save</button>
         </div>
     </div>
 </div>
@@ -329,6 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
         monthToggle?.setAttribute('aria-expanded', 'false');
     };
     const openMonthMenu = () => {
+        closeLocationMenu();
         monthWrap?.classList.add('is-open');
         if (monthMenu) monthMenu.hidden = false;
         monthToggle?.setAttribute('aria-expanded', 'true');
@@ -348,11 +369,55 @@ document.addEventListener('DOMContentLoaded', () => {
             closeMonthMenu();
         });
     });
+    const locationWrap = document.getElementById('arAddLocationWrap');
+    const locationInput = document.getElementById('arAddLocation');
+    const locationMenu = document.getElementById('arAddLocationMenu');
+    const closeLocationMenu = () => {
+        locationWrap?.classList.remove('is-open');
+        if (locationMenu) locationMenu.hidden = true;
+        locationInput?.setAttribute('aria-expanded', 'false');
+    };
+    const openLocationMenu = () => {
+        closeMonthMenu();
+        locationWrap?.classList.add('is-open');
+        if (locationMenu) locationMenu.hidden = false;
+        locationInput?.setAttribute('aria-expanded', 'true');
+    };
+    const filterLocationOptions = () => {
+        const query = String(locationInput?.value || '').trim().toLowerCase();
+        locationMenu?.querySelectorAll('.ar-add-dd-option').forEach((option) => {
+            const text = String(option.textContent || '').trim().toLowerCase();
+            option.hidden = query !== '' && !text.includes(query);
+        });
+    };
+    locationInput?.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (locationWrap?.classList.contains('is-open')) closeLocationMenu();
+        else openLocationMenu();
+    });
+    locationInput?.addEventListener('input', () => {
+        if (!locationWrap?.classList.contains('is-open')) openLocationMenu();
+        filterLocationOptions();
+    });
+    locationMenu?.querySelectorAll('.ar-add-dd-option').forEach((option) => {
+        option.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (locationInput) locationInput.value = option.getAttribute('data-value') || option.textContent.trim();
+            locationMenu.querySelectorAll('.ar-add-dd-option').forEach((item) => item.classList.toggle('is-selected', item === option));
+            closeLocationMenu();
+        });
+    });
+
     document.addEventListener('click', (event) => {
         if (monthWrap && !monthWrap.contains(event.target)) closeMonthMenu();
+        if (locationWrap && !locationWrap.contains(event.target)) closeLocationMenu();
     });
     document.getElementById('arAddModal')?.addEventListener('click', (event) => {
-        if (event.target.closest('[data-close="arAddModal"]')) closeMonthMenu();
+        if (event.target.closest('[data-close="arAddModal"]')) {
+            closeMonthMenu();
+            closeLocationMenu();
+        }
     });
 
     addFiles?.addEventListener('change', () => {
@@ -387,6 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('campaign_id', addCampaign.value);
         formData.append('year', addYear.value);
         formData.append('month', addMonth.value);
+        formData.append('location', document.getElementById('arAddLocation')?.value || '');
         selectedAudio.forEach((file) => formData.append('files[]', file));
         addSubmit.disabled = true;
         try {

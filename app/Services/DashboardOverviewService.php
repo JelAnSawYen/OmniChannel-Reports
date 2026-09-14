@@ -4,11 +4,14 @@ namespace App\Services;
 
 use App\Models\ChannelAllocation;
 use App\Models\ChannelAllocationCampaign;
+use App\Models\DefectiveGsm;
 use App\Models\GlobeSim;
 use App\Models\MediaGateway;
+use App\Models\ProgramInboundNumber;
 use App\Models\SipChannel;
 use App\Models\SmartSim;
 use App\Support\ChannelTypeClassifier;
+use App\Support\ProgramInboundNumberValidator;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -25,17 +28,23 @@ class DashboardOverviewService
      */
     public function payload(): array
     {
-        $allocations = ChannelAllocation::query()->with('campaign')->get();
+        $allocations = ChannelAllocation::query()
+            ->select(['id', 'campaign_id', 'network', 'channel_allocation', 'total_channel_allocated', 'created_at'])
+            ->with(['campaign:id,name'])
+            ->get();
         $utilization = $this->utilization($allocations);
         $campaignRows = $this->campaignRows($allocations);
         $campaigns = array_slice($campaignRows, 0, self::TOP_CAMPAIGNS);
         $trend = $this->trend($allocations);
 
         $campaignCount = ChannelAllocationCampaign::count();
-        $gatewayCount = MediaGateway::count();
+        $gatewayPorts = $this->sumGatewayPorts();
+        $sipChannels = (int) SipChannel::query()->sum('channel_count');
         $globeCount = GlobeSim::count();
         $smartCount = SmartSim::count();
         $simCount = $globeCount + $smartCount;
+        $defectiveCount = DefectiveGsm::count();
+        $inbound = $this->inboundNumberCounts();
 
         $kpis = [
             'campaigns' => [
@@ -43,12 +52,12 @@ class DashboardOverviewService
                 'display' => number_format($campaignCount),
             ],
             'gateways' => [
-                'value' => $gatewayCount,
-                'display' => number_format($gatewayCount),
+                'value' => $gatewayPorts,
+                'display' => number_format($gatewayPorts),
             ],
             'channels' => [
-                'value' => $utilization['total'],
-                'display' => number_format($utilization['total']),
+                'value' => $sipChannels,
+                'display' => number_format($sipChannels),
             ],
             'sims' => [
                 'value' => $simCount,
@@ -61,6 +70,22 @@ class DashboardOverviewService
             'smart' => [
                 'value' => $smartCount,
                 'display' => number_format($smartCount),
+            ],
+            'defective' => [
+                'value' => $defectiveCount,
+                'display' => number_format($defectiveCount),
+            ],
+            'mobile' => [
+                'value' => $inbound['mobile'],
+                'display' => number_format($inbound['mobile']),
+            ],
+            'landline' => [
+                'value' => $inbound['landline'],
+                'display' => number_format($inbound['landline']),
+            ],
+            'inbound' => [
+                'value' => $inbound['total'],
+                'display' => number_format($inbound['total']),
             ],
         ];
 
@@ -89,6 +114,55 @@ class DashboardOverviewService
         $payload['fingerprint'] = $this->fingerprint($payload);
 
         return $payload;
+    }
+
+    private function sumGatewayPorts(): int
+    {
+        return (int) MediaGateway::query()
+            ->toBase()
+            ->selectRaw('COALESCE(SUM(CAST(port AS INTEGER)), 0) as total')
+            ->value('total');
+    }
+
+    /**
+     * @return array{mobile: int, landline: int, total: int}
+     */
+    private function inboundNumberCounts(): array
+    {
+        $mobile = 0;
+        $landline = 0;
+
+        ProgramInboundNumber::query()
+            ->select(['id', 'mobile_numbers', 'landline_numbers', 'number'])
+            ->orderBy('id')
+            ->chunkById(200, function ($rows) use (&$mobile, &$landline) {
+                foreach ($rows as $row) {
+                    $mobile += count($this->expandPhoneNumbers($row->mobileList()));
+                    $landline += count($this->expandPhoneNumbers($row->landlineList()));
+                }
+            });
+
+        return [
+            'mobile' => $mobile,
+            'landline' => $landline,
+            'total' => $mobile + $landline,
+        ];
+    }
+
+    /**
+     * @param  list<string>  $items
+     * @return list<string>
+     */
+    private function expandPhoneNumbers(array $items): array
+    {
+        $numbers = [];
+        foreach ($items as $item) {
+            foreach (ProgramInboundNumberValidator::normalize($item) as $number) {
+                $numbers[] = $number;
+            }
+        }
+
+        return $numbers;
     }
 
     /**
@@ -128,7 +202,7 @@ class DashboardOverviewService
      * @param  Collection<int, ChannelAllocation>  $allocations
      * @return list<array{name: string, total: int, sip: int, gsm: int, total_display: string, sip_display: string, gsm_display: string}>
      */
-    private function campaignRows(Collection $allocations): array
+    public function campaignRows(Collection $allocations): array
     {
         return $allocations
             ->groupBy('campaign_id')
@@ -370,12 +444,12 @@ class DashboardOverviewService
      */
     private function trendHtml(array $trend): string
     {
-        $width = 920;
-        $height = 260;
-        $padL = 44;
-        $padR = 16;
+        $width = 1080;
+        $height = 420;
+        $padL = 88;
+        $padR = 72;
         $padT = 16;
-        $padB = 32;
+        $padB = 64;
         $plotW = $width - $padL - $padR;
         $plotH = $height - $padT - $padB;
         $max = max(1, (int) $trend['max']);
@@ -383,30 +457,39 @@ class DashboardOverviewService
         $totalPath = $this->linePath($trend['total'], $count, $max, $padL, $padT, $plotW, $plotH);
         $sipPath = $this->linePath($trend['sip'], $count, $max, $padL, $padT, $plotW, $plotH);
         $gsmPath = $this->linePath($trend['gsm'], $count, $max, $padL, $padT, $plotW, $plotH);
+        $labelIndexes = $this->trendLabelIndexes($count);
 
         $grid = '';
         foreach ([0, 0.25, 0.5, 0.75, 1] as $step) {
             $y = $padT + ($plotH * (1 - $step));
-            $grid .= '<line x1="'.$padL.'" y1="'.$y.'" x2="'.($width - $padR).'" y2="'.$y.'" stroke="#eef2f7" stroke-width="1"/>';
-            $grid .= '<text x="'.($padL - 8).'" y="'.($y + 3).'" text-anchor="end" fill="#94a3b8" font-size="9">'.$this->e(number_format((int) round($max * $step))).'</text>';
+            $grid .= '<line x1="'.$padL.'" y1="'.$y.'" x2="'.($width - $padR).'" y2="'.$y.'" stroke="#e8eef5" stroke-width="1"/>';
+            $grid .= '<text x="'.($padL - 14).'" y="'.($y + 5).'" text-anchor="end" fill="#0f172a" font-size="16" font-weight="700">'.$this->e(number_format((int) round($max * $step))).'</text>';
         }
+        foreach ($labelIndexes as $index) {
+            $x = $this->trendX($index, $count, $padL, $plotW);
+            $grid .= '<line x1="'.$x.'" y1="'.$padT.'" x2="'.$x.'" y2="'.($padT + $plotH).'" stroke="#e8eef5" stroke-width="1"/>';
+        }
+        $axisY = $padT + ($plotH / 2);
+        $grid .= '<text x="18" y="'.$axisY.'" text-anchor="middle" fill="#0f172a" font-size="16" font-weight="700" transform="rotate(-90 18 '.$axisY.')">Allocated Channels</text>';
 
-        $labelIndexes = [0, 7, 14, 21, $count - 1];
         $axis = '';
-        foreach (array_unique($labelIndexes) as $index) {
+        foreach ($labelIndexes as $index) {
             if (! isset($trend['labels'][$index])) {
                 continue;
             }
-            $x = $count <= 1 ? $padL : $padL + ($index / ($count - 1)) * $plotW;
-            $axis .= '<text x="'.$x.'" y="'.($height - 10).'" text-anchor="middle" fill="#94a3b8" font-size="9">'.$this->e($trend['labels'][$index]).'</text>';
+            $x = $this->trendX($index, $count, $padL, $plotW);
+            $axis .= '<text class="dash-trend-date" x="'.$x.'" y="'.($height - 22).'" text-anchor="middle" fill="#000000" font-size="20" font-weight="700">'.$this->e($trend['labels'][$index]).'</text>';
         }
 
         return '<div class="dash-trend-wrap">'
-            .'<svg class="dash-trend-svg" viewBox="0 0 '.$width.' '.$height.'" role="img" aria-label="Allocation trends for the last '.self::TREND_DAYS.' days">'
+            .'<svg class="dash-trend-svg" viewBox="0 0 '.$width.' '.$height.'" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Allocation trends for the last '.self::TREND_DAYS.' days">'
             .$grid
-            .'<path d="'.$totalPath.'" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'
-            .'<path d="'.$sipPath.'" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
-            .'<path d="'.$gsmPath.'" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+            .'<path d="'.$totalPath.'" fill="none" stroke="#2563eb" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>'
+            .'<path d="'.$sipPath.'" fill="none" stroke="#16a34a" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>'
+            .'<path d="'.$gsmPath.'" fill="none" stroke="#ea580c" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>'
+            .$this->trendDots($trend['total'], $labelIndexes, $count, $max, $padL, $padT, $plotW, $plotH, '#2563eb')
+            .$this->trendDots($trend['sip'], $labelIndexes, $count, $max, $padL, $padT, $plotW, $plotH, '#16a34a')
+            .$this->trendDots($trend['gsm'], $labelIndexes, $count, $max, $padL, $padT, $plotW, $plotH, '#ea580c')
             .$axis
             .'</svg></div>';
     }
@@ -418,12 +501,71 @@ class DashboardOverviewService
     {
         $parts = [];
         foreach ($values as $index => $value) {
-            $x = $count <= 1 ? $padL : $padL + ($index / ($count - 1)) * $plotW;
-            $y = $padT + $plotH - (($value / $max) * $plotH);
-            $parts[] = ($index === 0 ? 'M' : 'L').round($x, 1).','.round($y, 1);
+            $x = $this->trendX($index, $count, $padL, $plotW);
+            $y = $this->trendY((int) $value, $max, $padT, $plotH);
+            $parts[] = ($index === 0 ? 'M' : 'L').$x.','.$y;
         }
 
         return implode(' ', $parts);
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function trendLabelIndexes(int $count): array
+    {
+        if ($count <= 1) {
+            return [0];
+        }
+
+        $ticks = min(8, $count);
+        $indexes = [];
+        for ($i = 0; $i < $ticks; $i++) {
+            $indexes[] = (int) round($i * ($count - 1) / ($ticks - 1));
+        }
+
+        return array_values(array_unique($indexes));
+    }
+
+    /**
+     * @param  list<int>  $values
+     * @param  list<int>  $labelIndexes
+     */
+    private function trendDots(array $values, array $labelIndexes, int $count, int $max, float $padL, float $padT, float $plotW, float $plotH, string $color): string
+    {
+        $indexes = $labelIndexes;
+        for ($i = 1; $i < $count; $i++) {
+            if ((int) ($values[$i] ?? 0) !== (int) ($values[$i - 1] ?? 0)) {
+                $indexes[] = $i - 1;
+                $indexes[] = $i;
+            }
+        }
+        $indexes[] = 0;
+        $indexes[] = max(0, $count - 1);
+        $indexes = array_values(array_unique($indexes));
+        sort($indexes);
+
+        $dots = '';
+        foreach ($indexes as $index) {
+            if (! isset($values[$index])) {
+                continue;
+            }
+            $x = $this->trendX($index, $count, $padL, $plotW);
+            $y = $this->trendY((int) $values[$index], $max, $padT, $plotH);
+            $dots .= '<circle cx="'.$x.'" cy="'.$y.'" r="6" fill="'.$color.'" stroke="#fff" stroke-width="1.5"/>';
+        }
+
+        return $dots;
+    }
+
+    private function trendX(int $index, int $count, float $padL, float $plotW): float
+    {
+        return $count <= 1 ? $padL : round($padL + ($index / ($count - 1)) * $plotW, 1);
+    }
+
+    private function trendY(int $value, int $max, float $padT, float $plotH): float
+    {
+        return round($padT + $plotH - (($value / $max) * $plotH), 1);
     }
 
     /**

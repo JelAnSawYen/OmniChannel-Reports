@@ -369,7 +369,6 @@
                 <label class="import-file-label" for="importFileInput">Choose Excel File</label>
                 <div class="import-file-row">
                     <input class="form-control" type="file" id="importFileInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
-                    <span class="import-file-status" id="importFileStatus">No file chosen</span>
                 </div>
                 <p class="muted import-file-hint">Only .xlsx, .xls files are allowed.</p>
                 <p class="import-upload-error" id="importUploadError" hidden></p>
@@ -780,8 +779,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const name = file.name || '';
         const ok = /\.(xlsx|xls)$/i.test(name);
-        importFileStatus.textContent = name;
-        importFileStatus.classList.toggle('ready', ok);
+        if (importFileStatus) {
+            importFileStatus.textContent = name;
+            importFileStatus.classList.toggle('ready', ok);
+        }
         importPreviewButton.disabled = !ok;
         if (!ok) showImportError('Only .xlsx, .xls files are allowed.');
     });

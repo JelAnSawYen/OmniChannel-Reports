@@ -181,4 +181,7 @@ return [
 
     ],
 
+    'mysqldump_path' => env('MYSQLDUMP_PATH'),
+    'mysql_client_path' => env('MYSQL_CLIENT_PATH'),
+
 ];

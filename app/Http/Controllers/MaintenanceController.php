@@ -3,18 +3,22 @@ namespace App\Http\Controllers;
 use App\Models\AuditLog;
 use App\Models\MailSetting;
 use App\Services\AuditLogger;
+use App\Services\DatabaseBackupService;
 use App\Support\EnvWriter;
 use App\Support\MailFailure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\DB;
+use Throwable;
 class MaintenanceController extends Controller
 {
-    public function index()
+    public function index(DatabaseBackupService $backups)
     {
-        $backups = collect(Storage::files('backups'))->filter(fn($p)=>str_ends_with($p,'.sqlite'))->sortDesc()->values();
-        return view('maintenance.index', ['backups'=>$backups, 'mailSettings'=>MailSetting::current()]);
+        return view('maintenance.index', [
+            'backups' => $backups->list(),
+            'mailSettings' => MailSetting::current(),
+            'databaseDriverLabel' => $backups->driverLabel(),
+        ]);
     }
 
     public function saveMail(Request $request)
@@ -79,42 +83,36 @@ class MaintenanceController extends Controller
 
         return back()->with('success', 'A test message was sent to '.$to.'.');
     }
-    public function backup(Request $request)
+    public function backup(Request $request, DatabaseBackupService $backups)
     {
-        $source = database_path('database.sqlite');
-        if (!is_file($source)) return back()->with('error','SQLite database file was not found.');
-        Storage::makeDirectory('backups');
-        $name='backups/backup_'.now()->format('Y-m-d_H-i-s').'.sqlite';
-        Storage::put($name, file_get_contents($source));
-        AuditLogger::log('Created Backup','Maintenance','Created SQLite database backup',null,$request);
+        try {
+            $backups->create();
+        } catch (Throwable $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+        AuditLogger::log('Created Backup','Maintenance','Created '.$backups->driverLabel().' database backup',null,$request);
         return back()->with('success','Database backup created successfully.');
     }
-    public function download(string $filename)
+    public function download(string $filename, DatabaseBackupService $backups)
     {
-        abort_unless(preg_match('/^backup_[0-9_-]+\.sqlite$/',$filename),404);
+        abort_unless($backups->isDownloadable($filename),404);
         $diskPath = 'backups/'.$filename;
         abort_unless(Storage::exists($diskPath),404);
         return Storage::download($diskPath, $filename);
     }
-
-    public function restore(Request $request)
+    public function restore(Request $request, DatabaseBackupService $backups)
     {
-        $request->validate(['backup_file'=>['required','file','max:51200','extensions:sqlite,db']]);
+        $request->validate(['backup_file'=>['required','file','max:51200','extensions:sqlite,db,sql']]);
         $uploaded=$request->file('backup_file');
         $source=$uploaded->getRealPath();
         if (!$source || !is_file($source)) return back()->with('error','The selected backup file could not be read.');
-        $header = (string) file_get_contents($source, false, null, 0, 16);
-        if ($header !== "SQLite format 3\0") {
-            AuditLogger::log('Restore Rejected','Maintenance','Uploaded restore file was not a valid SQLite database',null,$request);
-            return back()->with('error','The uploaded file is not a valid SQLite database.');
+        try {
+            $backups->restoreUploaded($source, (string) $uploaded->getClientOriginalName());
+        } catch (Throwable $exception) {
+            AuditLogger::log('Restore Rejected','Maintenance',$exception->getMessage(),null,$request);
+            return back()->with('error',$exception->getMessage());
         }
-        $current=database_path('database.sqlite');
-        Storage::makeDirectory('backups');
-        $safety='backups/pre_restore_'.now()->format('Y-m-d_H-i-s').'.sqlite';
-        if (is_file($current)) Storage::put($safety,file_get_contents($current));
-        AuditLogger::log('Restore Started','Maintenance','Restoring SQLite database from uploaded backup',null,$request);
-        DB::disconnect('sqlite');
-        if (!copy($source,$current)) return back()->with('error','Database restore failed.');
+        AuditLogger::log('Restore Started','Maintenance','Restoring '.$backups->driverLabel().' database from uploaded backup',null,$request);
         return back()->with('success','Database restored successfully. Restart the Laravel server if the current request cache still shows old data.');
     }
 

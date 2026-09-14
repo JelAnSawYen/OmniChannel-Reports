@@ -6,6 +6,7 @@ use App\Services\AuditLogger;
 use App\Services\XlsxService;
 use App\Support\InventoryImportCatalog;
 use App\Support\OperationCatalog;
+use App\Support\ProgramLocationStatus;
 use App\Support\PublicError;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -32,13 +33,15 @@ class LocationController extends Controller
                 'address' => $site['address'],
                 'lat' => $site['lat'],
                 'lng' => $site['lng'],
-                'available' => (bool) ($site['assigned'] ?? false),
+                'available' => ProgramLocationStatus::assigned($slug, (bool) ($site['assigned'] ?? false)),
             ];
         })->values();
 
         return view('locations.index', [
             'sites' => $sites,
             'search' => $search,
+            'canConfigure' => (bool) $request->user()?->hasPermission('media.edit'),
+            'statusUpdateUrlTemplate' => url('/program-location/__SLUG__/status'),
         ]);
     }
 
@@ -65,6 +68,34 @@ class LocationController extends Controller
             'search' => $search,
             'perPage' => $perPage,
         ]);
+    }
+
+    public function updateStatus(Request $request, string $location)
+    {
+        $this->locationName($location);
+        $this->guardMutation('media.edit');
+
+        $data = $request->validate([
+            'assigned' => ['required', 'boolean'],
+        ]);
+
+        ProgramLocationStatus::set($location, (bool) $data['assigned']);
+        AuditLogger::log(
+            'Updated',
+            'Program Location',
+            'Updated gateway assignment status for '.$location,
+            null,
+            $request
+        );
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'assigned' => (bool) $data['assigned'],
+            ]);
+        }
+
+        return back()->with('success', 'Location status updated successfully.');
     }
 
     public function store(Request $request, string $location)

@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\ChannelAllocation;
 use App\Models\ChannelAllocationCampaign;
+use App\Models\DefectiveGsm;
 use App\Models\GlobeSim;
 use App\Models\MediaGateway;
+use App\Models\ProgramInboundNumber;
 use App\Models\SipChannel;
 use App\Models\SmartSim;
 use App\Models\User;
@@ -43,14 +45,25 @@ class DashboardOverviewTest extends TestCase
         $page = $this->actingAs($this->admin)->get('/dashboard')->assertOk();
         $page->assertSee($this->admin->name)
             ->assertSee('Administrator • '.now()->format('F j, Y'))
-            ->assertSee('Last updated:')
+            ->assertSee('Updated ')
+            ->assertDontSee('Last updated:')
             ->assertSee('data-dash-refresh', false)
             ->assertSee('Total Campaigns')
-            ->assertSee('Total GSM Gateways')
-            ->assertSee('Total Channels')
+            ->assertSee('Total GSM Gateway')
+            ->assertSee('Total SIP Channels')
             ->assertSee('Total SIMs')
+            ->assertSee('Defective GSM')
+            ->assertSee('Inbound Numbers')
             ->assertSee('>Globe</span>', false)
             ->assertSee('>Smart</span>', false)
+            ->assertSee('>Mobile</span>', false)
+            ->assertSee('>Landline</span>', false)
+            ->assertDontSee('Total GSM Gateways')
+            ->assertDontSee('Globe SIMs')
+            ->assertDontSee('Smart SIMs')
+            ->assertDontSee('Mobile Numbers')
+            ->assertDontSee('Landline Numbers')
+            ->assertDontSee('Total Inbound Numbers')
             ->assertSee('Campaigns with Most Allocations')
             ->assertSee('Top campaigns based on total allocated channels.')
             ->assertSee('fill="#2563eb"', false)
@@ -67,7 +80,7 @@ class DashboardOverviewTest extends TestCase
             ->assertSee('>Total</td>', false)
             ->assertSee('280')
             ->assertSee('View All')
-            ->assertSee('href="'.url('/reports').'?tab=channel-utilization"', false)
+            ->assertSee('href="'.url('/channel-utilization').'"', false)
             ->assertSee('Allocation Trends')
             ->assertSee('Last 30 Days')
             ->assertSee('data-snapshot-url="'.url('/dashboard/snapshot').'"', false)
@@ -83,6 +96,7 @@ class DashboardOverviewTest extends TestCase
 
         $html = $page->getContent();
         $this->assertSame(1, substr_count($html, 'id="simInventoryModal"'));
+        $this->assertSame(6, substr_count($html, 'class="dash-kpi '));
         $this->assertStringContainsString('data-dash-kpi="globe"', $html);
         $this->assertStringContainsString('data-dash-kpi="smart"', $html);
         $this->assertStringContainsString('BPI Collection', $html);
@@ -97,11 +111,15 @@ class DashboardOverviewTest extends TestCase
 
         $json = $this->actingAs($this->admin)->getJson('/dashboard/snapshot')->assertOk();
         $json->assertJsonPath('kpis.campaigns.value', 2)
-            ->assertJsonPath('kpis.gateways.value', 1)
-            ->assertJsonPath('kpis.channels.value', 740)
+            ->assertJsonPath('kpis.gateways.value', 32)
+            ->assertJsonPath('kpis.channels.value', 500)
             ->assertJsonPath('kpis.sims.value', 3)
             ->assertJsonPath('kpis.globe.value', 2)
             ->assertJsonPath('kpis.smart.value', 1)
+            ->assertJsonPath('kpis.defective.value', 1)
+            ->assertJsonPath('kpis.mobile.value', 3)
+            ->assertJsonPath('kpis.landline.value', 2)
+            ->assertJsonPath('kpis.inbound.value', 5)
             ->assertJsonPath('utilization.total', 740)
             ->assertJsonPath('utilization.allocated', 520)
             ->assertJsonPath('utilization.sip', 280)
@@ -119,9 +137,21 @@ class DashboardOverviewTest extends TestCase
         $this->assertNotEmpty($json->json('html.bars'));
         $this->assertNotEmpty($json->json('html.utilization'));
         $this->assertNotEmpty($json->json('html.trend'));
+        $trendHtml = (string) $json->json('html.trend');
+        $this->assertStringContainsString('fill="#000000"', $trendHtml);
+        $this->assertStringContainsString('font-size="20"', $trendHtml);
+        $this->assertStringContainsString('text-anchor="middle"', $trendHtml);
+        $this->assertStringContainsString('stroke-width="4.5"', $trendHtml);
+        $this->assertStringContainsString('class="dash-trend-date"', $trendHtml);
+        $this->assertSame(8, substr_count($trendHtml, 'class="dash-trend-date"'));
+        $this->assertStringContainsString('<circle', $trendHtml);
+        $this->assertStringContainsString('Allocated Channels', $trendHtml);
         $this->assertArrayNotHasKey('insights', $json->json());
         $this->assertCount(30, $json->json('trend.labels'));
         $this->assertCount(30, $json->json('trend.total'));
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertStringContainsString('.dash-bottom{display:grid;grid-template-columns:1.11fr 1fr;gap:11px;align-items:stretch;', $css);
+        $this->assertStringContainsString('.dash-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:16px;row-gap:16px;align-items:stretch}', $css);
 
         $payload = app(DashboardOverviewService::class)->payload();
         $this->assertSame($payload['fingerprint'], $json->json('fingerprint'));
@@ -130,7 +160,8 @@ class DashboardOverviewTest extends TestCase
         $this->actingAs($this->standard)->get('/dashboard')
             ->assertOk()
             ->assertSee('Standard User')
-            ->assertDontSee('View All');
+            ->assertSee('View All')
+            ->assertSee('href="'.url('/channel-utilization').'"', false);
 
         $this->actingAs($this->standard)->getJson('/dashboard/snapshot')
             ->assertOk()
@@ -169,6 +200,33 @@ class DashboardOverviewTest extends TestCase
         $this->assertSame(50, $payload['trend']['total'][29]);
     }
 
+    public function test_inbound_kpis_count_every_phone_number_not_database_rows(): void
+    {
+        $campaign = ChannelAllocationCampaign::create(['name' => 'Inbound Count']);
+
+        ProgramInboundNumber::create([
+            'number' => '09171234567',
+            'program' => 'Inbound Count',
+            'status' => 'Active',
+            'campaign_id' => $campaign->id,
+            'mobile_numbers' => ['09171234567', '09181234567'],
+            'landline_numbers' => ['0281234567'],
+        ]);
+        ProgramInboundNumber::create([
+            'number' => '09201234567',
+            'program' => 'Inbound Count',
+            'status' => 'Active',
+            'campaign_id' => $campaign->id,
+            'mobile_numbers' => ['09201234567'],
+            'landline_numbers' => '0287654321; 0288889999',
+        ]);
+
+        $payload = app(DashboardOverviewService::class)->payload();
+        $this->assertSame(3, $payload['kpis']['mobile']['value']);
+        $this->assertSame(3, $payload['kpis']['landline']['value']);
+        $this->assertSame(6, $payload['kpis']['inbound']['value']);
+    }
+
     private function seedOverview(): void
     {
         $bpi = ChannelAllocationCampaign::create(['name' => 'BPI Collection']);
@@ -205,6 +263,23 @@ class DashboardOverviewTest extends TestCase
             'ip_address' => '10.28.240.21',
             'username' => 'root',
             'database' => 'asteriskcdrdb',
+            'port' => '32',
+        ]);
+
+        DefectiveGsm::create([
+            'asset_code' => 'GSM-D-01',
+            'location' => 'Estancia',
+            'issue' => 'No signal',
+            'status' => 'Open',
+        ]);
+
+        ProgramInboundNumber::create([
+            'number' => '09171234567',
+            'program' => 'BPI Collection',
+            'status' => 'Active',
+            'campaign_id' => $bpi->id,
+            'mobile_numbers' => ['09171234567', '09181234567', '09191234567'],
+            'landline_numbers' => ['0281234567', '0287654321'],
         ]);
 
         GlobeSim::create([

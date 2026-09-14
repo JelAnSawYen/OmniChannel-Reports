@@ -34,11 +34,31 @@ class LoginAuthenticationTest extends TestCase
 
     public function test_login_page_is_available(): void
     {
-        $this->get('/login')->assertOk()->assertSee('Login');
+        $this->get('/login')
+            ->assertOk()
+            ->assertSee('Login')
+            ->assertSee('<title>OmniChannel Inventory</title>', false);
     }
 
-    public function test_generated_login_urls_follow_the_request_host_instead_of_app_url(): void
+    public function test_untrusted_forwarded_host_does_not_rewrite_login_urls(): void
     {
+        $response = $this->call('GET', '/login', [], [], [], [
+            'HTTP_HOST' => '127.0.0.1:8011',
+            'REMOTE_ADDR' => '127.0.0.1',
+            'HTTP_X_FORWARDED_HOST' => 'tunnel.example.test',
+            'HTTP_X_FORWARDED_PROTO' => 'https',
+            'HTTP_X_FORWARDED_PORT' => '443',
+        ]);
+
+        $response->assertOk();
+        $response->assertDontSee('https://tunnel.example.test/login', false);
+        $this->assertStringContainsString('127.0.0.1:8011', $response->getContent());
+    }
+
+    public function test_trusted_proxy_forwarded_host_is_used_for_login_urls(): void
+    {
+        config(['app.trusted_proxies' => ['127.0.0.1']]);
+
         $response = $this->call('GET', '/login', [], [], [], [
             'HTTP_HOST' => '127.0.0.1:8011',
             'REMOTE_ADDR' => '127.0.0.1',
@@ -52,8 +72,30 @@ class LoginAuthenticationTest extends TestCase
         $this->assertStringNotContainsString('127.0.0.1', $response->getContent());
     }
 
-    public function test_login_redirect_preserves_the_forwarded_request_host(): void
+    public function test_untrusted_forwarded_host_does_not_change_login_redirect(): void
     {
+        $user = $this->makeUser($this->standardType);
+
+        $response = $this->call('POST', '/login', [
+            'email' => $user->email,
+            'password' => 'Password123!Aa',
+        ], [], [], [
+            'HTTP_HOST' => '127.0.0.1:8011',
+            'REMOTE_ADDR' => '127.0.0.1',
+            'HTTP_X_FORWARDED_HOST' => 'tunnel.example.test',
+            'HTTP_X_FORWARDED_PROTO' => 'https',
+            'HTTP_X_FORWARDED_PORT' => '443',
+        ]);
+
+        $location = (string) $response->headers->get('Location');
+        $response->assertRedirect();
+        $this->assertStringNotContainsString('tunnel.example.test', $location);
+        $this->assertStringContainsString('127.0.0.1:8011', $location);
+    }
+
+    public function test_trusted_proxy_preserves_the_forwarded_request_host_on_login_redirect(): void
+    {
+        config(['app.trusted_proxies' => ['127.0.0.1']]);
         $user = $this->makeUser($this->standardType);
 
         $response = $this->call('POST', '/login', [

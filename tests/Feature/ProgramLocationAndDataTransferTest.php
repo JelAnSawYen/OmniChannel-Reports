@@ -34,6 +34,15 @@ class ProgramLocationAndDataTransferTest extends TestCase
         ]);
     }
 
+    protected function tearDown(): void
+    {
+        $path = \App\Support\ProgramLocationStatus::path();
+        if (is_file($path)) {
+            @unlink($path);
+        }
+        parent::tearDown();
+    }
+
     private function mapSitesFromHtml(string $html): array
     {
         $this->assertTrue(
@@ -133,8 +142,9 @@ class ProgramLocationAndDataTransferTest extends TestCase
         $this->assertTrue($byName['SCS']['available']);
         $this->assertTrue($byName['SKYRISE']['available']);
         $this->assertFalse($byName['PDC']['available']);
-        $this->assertStringContainsString('Ayala Triangle Gardens Tower 2', $byName['PDC']['address']);
-        $this->assertEqualsWithDelta(14.5576051, $byName['PDC']['lat'], 0.001);
+        $this->assertSame('6819 Ayala Avenue, Makati City, RCBC Plaza', $byName['PDC']['address']);
+        $this->assertEqualsWithDelta(14.5607611, $byName['PDC']['lat'], 0.001);
+        $this->assertEqualsWithDelta(121.0165333, $byName['PDC']['lng'], 0.001);
         $this->assertEqualsWithDelta(10.3177541, $byName['SKYRISE']['lat'], 0.001);
         foreach ($sites as $site) {
             $this->assertNotEmpty($site['lat']);
@@ -162,9 +172,20 @@ class ProgramLocationAndDataTransferTest extends TestCase
         $this->gateway('Estancia', 'EST-IDX', '10.31.31.2');
 
         $html = $this->get('/program-location')->assertOk()->getContent();
-        $this->assertStringContainsString('id="programLocationMap"', $html);
-        $this->assertStringContainsString('placeholder="Search Sites"', $html);
-        $this->assertStringContainsString('applySearch', $html);
+        $this->assertStringContainsString('id="locConfigPanel"', $html);
+        $this->assertStringContainsString('loc-popup-edit', $html);
+        $this->assertStringContainsString('GSM Gateway Configuration', $html);
+        $this->assertStringContainsString('id="locConfigName"', $html);
+        $this->assertStringContainsString('id="locConfigAddress"', $html);
+        $this->assertStringContainsString('id="locConfigStatus"', $html);
+        $this->assertStringContainsString('No Gateway Assigned', $html);
+        $this->assertStringContainsString('Gateway Assigned', $html);
+        $this->assertStringContainsString('Assign GSM Gateway', $html);
+        $this->assertStringNotContainsString('>Edit<', $html);
+        $configForm = \Illuminate\Support\Str::between($html, 'id="locConfigForm"', '</form>');
+        $this->assertStringNotContainsString('<select', $configForm);
+        $this->assertStringNotContainsString('hostname', $configForm);
+        $this->assertStringNotContainsString('ip_address', $configForm);
         $this->assertStringNotContainsString('All Gateway Status', $html);
         $this->assertStringNotContainsString('class="table-card table-wrap"', $html);
 
@@ -179,6 +200,26 @@ class ProgramLocationAndDataTransferTest extends TestCase
             ->assertSee('id="programLocationMap"', false)
             ->assertSee('value="sky"', false)
             ->assertSee('id="programLocationSites"', false);
+    }
+
+    public function test_program_location_status_can_be_saved_without_creating_a_location(): void
+    {
+        $this->actingAs($this->admin);
+
+        $this->putJson('/program-location/pdc/status', ['assigned' => true])
+            ->assertOk()
+            ->assertJson(['ok' => true, 'assigned' => true]);
+
+        $sites = collect($this->mapSitesFromHtml($this->get('/program-location')->assertOk()->getContent()));
+        $this->assertTrue($sites->firstWhere('name', 'PDC')['available']);
+        $this->assertCount(7, $sites);
+
+        $this->putJson('/program-location/pdc/status', ['assigned' => false])
+            ->assertOk()
+            ->assertJson(['ok' => true, 'assigned' => false]);
+
+        $sites = collect($this->mapSitesFromHtml($this->get('/program-location')->assertOk()->getContent()));
+        $this->assertFalse($sites->firstWhere('name', 'PDC')['available']);
     }
 
     public function test_standard_user_cannot_access_program_location(): void

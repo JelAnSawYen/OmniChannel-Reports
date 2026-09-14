@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsureEmailIsVerified;
 use App\Http\Middleware\EnsureMfaCompleted;
 use App\Http\Middleware\PermissionMiddleware;
 use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\TrustConfiguredProxies;
 use App\Http\Middleware\ModuleAccessMiddleware;
 use App\Http\Middleware\UserTypeMiddleware;
 use Illuminate\Auth\Middleware\EnsureEmailIsVerified as LaravelEnsureEmailIsVerified;
@@ -20,7 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->trustProxies(at: '*');
+        $middleware->append(TrustConfiguredProxies::class);
         $middleware->web(append: [
             SecurityHeaders::class,
         ]);

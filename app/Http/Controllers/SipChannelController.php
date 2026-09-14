@@ -27,7 +27,7 @@ class SipChannelController extends Controller
             $perPage = 10;
         }
 
-        $query = SipChannel::query()->with('campaign')->latest();
+        $query = SipChannel::query()->with('campaign')->orderBy('id');
         if ($search !== '') {
             $query->where(function ($channels) use ($search) {
                 $channels->where('etpi_sip_name', 'like', "%{$search}%")

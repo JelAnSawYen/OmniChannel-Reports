@@ -37,6 +37,8 @@ class RolePermissions
         'gsm-gateways',
         'media-gateways',
         'channel-allocation',
+        'globe-sim',
+        'smart-sim',
     ];
 
     public const ADMINISTRATOR_PERMISSIONS = [

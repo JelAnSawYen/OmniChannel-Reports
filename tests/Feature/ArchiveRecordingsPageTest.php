@@ -49,10 +49,30 @@ class ArchiveRecordingsPageTest extends TestCase
             ->assertSee('class="toolbar"', false)
             ->assertSee('id="arAddModal"', false)
             ->assertSee('Add Archive Records')
-            ->assertSee('Add Records')
+            ->assertSee('>Save</button>', false)
+            ->assertDontSee('>Add Records</button>', false)
             ->assertSee('Select Campaign')
             ->assertSee('Select Year')
             ->assertSee('Select Month')
+            ->assertSee('id="arAddLocation"', false)
+            ->assertSee('for="arAddLocation">Location</label>', false)
+            ->assertSee('data-value="ALCAR"', false)
+            ->assertSee('>Alcar</button>', false)
+            ->assertSee('data-value="ESTANCIA"', false)
+            ->assertSee('>Estancia</button>', false)
+            ->assertSee('data-value="SKYRISE"', false)
+            ->assertSee('>Skyrise</button>', false)
+            ->assertSee('data-value="CG3"', false)
+            ->assertSee('>CG3</button>', false)
+            ->assertSee('data-value="CTN"', false)
+            ->assertSee('>CTN</button>', false)
+            ->assertSee('data-value="SCS"', false)
+            ->assertSee('>SCS</button>', false)
+            ->assertSee('data-value="PDC"', false)
+            ->assertSee('>PDC</button>', false)
+            ->assertDontSee('>ALCAR</button>', false)
+            ->assertDontSee('>ESTANCIA</button>', false)
+            ->assertDontSee('>SKYRISE</button>', false)
             ->assertSee('selected disabled hidden>Select Campaign</option>', false)
             ->assertSee('selected disabled hidden>Select Year</option>', false)
             ->assertSee('selected disabled hidden>Select Month</option>', false)
@@ -94,9 +114,12 @@ class ArchiveRecordingsPageTest extends TestCase
         $this->assertMatchesRegularExpression('/\.ar-node-campaign\s*>\s*\.ar-folder\s*\{[^}]*min-height:\s*36px/', $css);
         $this->assertMatchesRegularExpression('/\.ar-node-campaign\s*>\s*\.ar-folder\s*>\s*span\s*\{[^}]*font-weight:\s*700/', $css);
         $this->assertStringNotContainsString('ar-folder-icon', $html);
-        $this->assertMatchesRegularExpression('/\.ar-files\s+\.ar-col-name\s*\{[^}]*width:\s*33\.333%/', $css);
-        $this->assertMatchesRegularExpression('/\.ar-files\s+\.ar-col-status\s*\{[^}]*width:\s*33\.333%/', $css);
-        $this->assertMatchesRegularExpression('/\.ar-files\s+\.ar-col-actions\s*\{[^}]*width:\s*33\.334%/', $css);
+        $this->assertMatchesRegularExpression('/\.ar-files\s+\.ar-col-name[\s\S]*?width:\s*25%/', $css);
+        $this->assertMatchesRegularExpression('/\.ar-files\s+\.ar-col-status[\s\S]*?width:\s*25%/', $css);
+        $this->assertMatchesRegularExpression('/\.ar-files\s+\.ar-col-location[\s\S]*?width:\s*25%/', $css);
+        $this->assertMatchesRegularExpression('/\.ar-files\s+\.ar-col-actions[\s\S]*?width:\s*25%/', $css);
+        $this->assertMatchesRegularExpression('/th\.ar-status-column,[\s\S]*?text-align:\s*center/', $css);
+        $this->assertMatchesRegularExpression('/th\.actions-column,[\s\S]*?text-align:\s*center/', $css);
         $this->assertDoesNotMatchRegularExpression('/\.ar-files\s*>\s*thead\s*>\s*tr\s*>\s*th\s*\+\s*th,[\s\S]*?border-left:\s*1px/', $css);
         $this->assertMatchesRegularExpression('/\.ar-files\s*>\s*tbody\s*>\s*tr\s*>\s*td\s*\{[^}]*border:\s*0/', $css);
     }
@@ -114,6 +137,7 @@ class ArchiveRecordingsPageTest extends TestCase
             'server' => '',
             'storage_path' => '',
             'status' => 'Available',
+            'location' => 'Estancia',
         ]);
         ArchiveRecording::create([
             'campaign_id' => $atome->id,
@@ -122,6 +146,7 @@ class ArchiveRecordingsPageTest extends TestCase
             'server' => '',
             'storage_path' => '',
             'status' => 'Available',
+            'location' => 'CTN',
         ]);
         ArchiveRecording::create([
             'campaign_id' => $china->id,
@@ -130,6 +155,7 @@ class ArchiveRecordingsPageTest extends TestCase
             'server' => '',
             'storage_path' => '',
             'status' => 'Available',
+            'location' => 'Skyrise',
         ]);
 
         $page = $this->get('/archive-recordings')->assertOk();
@@ -142,8 +168,12 @@ class ArchiveRecordingsPageTest extends TestCase
             ->assertSee('ATOME_20260815_090000.wav')
             ->assertSee('CHINA_20260901_111111.wav')
             ->assertSee('Available')
+            ->assertSee('Estancia')
+            ->assertSee('CTN')
+            ->assertSee('Skyrise')
             ->assertSee('>Month</th>', false)
             ->assertSee('>Status</th>', false)
+            ->assertSee('>Location</th>', false)
             ->assertSee('>Action</th>', false)
             ->assertDontSee('Available/Deleted')
             ->assertDontSee('>File Name</th>', false)
@@ -156,6 +186,7 @@ class ArchiveRecordingsPageTest extends TestCase
             ->assertSee('class="ar-month-row"', false)
             ->assertSee('class="ar-col-name"', false)
             ->assertSee('class="ar-col-status"', false)
+            ->assertSee('class="ar-col-location"', false)
             ->assertSee('class="ar-col-actions"', false)
             ->assertSee('data-ar-text="Atome"', false)
             ->assertSee('id="arSearchInput"', false)
@@ -216,6 +247,7 @@ class ArchiveRecordingsPageTest extends TestCase
             'Caller Number',
             'Agent Number',
             'Duration',
+            'Location',
             'Storage Path',
         ], $headers);
     }
@@ -231,6 +263,7 @@ class ArchiveRecordingsPageTest extends TestCase
             'campaign_id' => $campaign->id,
             'year' => 2026,
             'month' => 9,
+            'location' => 'ALCAR',
             'files' => [$one, $two],
         ])->assertOk()->assertJson(['ok' => true, 'records' => 2]);
 
@@ -239,13 +272,15 @@ class ArchiveRecordingsPageTest extends TestCase
         $record = ArchiveRecording::query()->where('file_name', 'RCBC_20260901_102345.wav')->first();
         $this->assertSame('2026-09-01 10:23:45', $record->called_at->format('Y-m-d H:i:s'));
         $this->assertSame('Available', $record->status);
+        $this->assertSame('ALCAR', $record->location);
         $this->assertNotEmpty($record->storage_path);
         $this->assertFileExists(storage_path('app/private/'.$record->storage_path));
         $this->get('/archive-recordings')
             ->assertOk()
             ->assertSee('RCBC_20260901_102345.wav')
             ->assertSee('RCBC_20260901_110512.mp3')
-            ->assertSee('Available');
+            ->assertSee('Available')
+            ->assertSee('ALCAR');
         $this->get('/archive-recordings/'.$record->id.'/play')->assertOk();
         $this->get('/archive-recordings/'.$record->id.'/download')->assertOk()->assertDownload('RCBC_20260901_102345.wav');
         $this->assertStringContainsString('campaign='.$campaign->id, (string) $response->json('redirect'));
@@ -330,9 +365,11 @@ class ArchiveRecordingsPageTest extends TestCase
         $page->assertSee('Deleted')
             ->assertSee('ATOME_DEL_1.wav')
             ->assertSee('/archive-recordings/'.$record->id.'/certificate', false)
+            ->assertSee('target="_blank"', false)
             ->assertDontSee('data-ar-delete data-id="'.$record->id.'"', false);
 
-        $this->get('/archive-recordings/'.$record->id.'/certificate')->assertOk();
+        $certificate = $this->get('/archive-recordings/'.$record->id.'/certificate')->assertOk();
+        $this->assertStringContainsString('inline', (string) $certificate->headers->get('Content-Disposition'));
         @unlink(storage_path('app/private/'.$record->certificate_path));
     }
 
@@ -363,6 +400,41 @@ class ArchiveRecordingsPageTest extends TestCase
             @unlink(storage_path('app/private/'.$imported->storage_path));
             @unlink(storage_path('app/'.$imported->storage_path));
         }
+    }
+
+    public function test_play_and_download_reject_paths_outside_archive_storage(): void
+    {
+        $this->actingAs($this->admin);
+        $campaign = ChannelAllocationCampaign::create(['name' => 'Atome']);
+        $secret = storage_path('app/secret-outside.txt');
+        file_put_contents($secret, 'RIFFSECRET');
+        $record = ArchiveRecording::create([
+            'campaign_id' => $campaign->id,
+            'file_name' => 'outside.wav',
+            'called_at' => '2026-09-01 10:00:00',
+            'server' => '',
+            'storage_path' => '../secret-outside.txt',
+            'status' => 'Available',
+        ]);
+
+        $this->from('/archive-recordings')->get('/archive-recordings/'.$record->id.'/play')
+            ->assertRedirect('/archive-recordings')
+            ->assertSessionHas('error', 'The recording file is not available.');
+        $this->from('/archive-recordings')->get('/archive-recordings/'.$record->id.'/download')
+            ->assertRedirect('/archive-recordings')
+            ->assertSessionHas('error', 'The recording file is not available.');
+
+        $record->update(['storage_path' => $secret]);
+        $this->from('/archive-recordings')->get('/archive-recordings/'.$record->id.'/play')
+            ->assertRedirect('/archive-recordings')
+            ->assertSessionHas('error', 'The recording file is not available.');
+
+        $record->update(['storage_path' => '%2e%2e/secret-outside.txt']);
+        $this->from('/archive-recordings')->get('/archive-recordings/'.$record->id.'/play')
+            ->assertRedirect('/archive-recordings')
+            ->assertSessionHas('error', 'The recording file is not available.');
+
+        @unlink($secret);
     }
 
     private function silentWav(int $seconds): string

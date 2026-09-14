@@ -123,4 +123,13 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    | Trusted reverse proxies (comma-separated). Empty means forwarded headers
+    | are ignored. Never set this to "*".
+    */
+    'trusted_proxies' => array_values(array_filter(
+        array_map('trim', explode(',', (string) env('TRUSTED_PROXIES', ''))),
+        fn (string $value) => $value !== '' && $value !== '*' && $value !== '**'
+    )),
+
 ];

@@ -7,7 +7,9 @@ use App\Models\ChannelAllocationCampaign;
 use App\Services\ArchiveRecordingImportService;
 use App\Services\AuditLogger;
 use App\Services\XlsxService;
+use App\Support\ArchiveStorage;
 use App\Support\AudioDuration;
+use App\Support\OperationCatalog;
 use App\Support\PublicError;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -63,6 +65,7 @@ class ArchiveRecordingController extends Controller
         }
 
         $recordingsByCampaign = ArchiveRecording::query()
+            ->select(['id', 'campaign_id', 'file_name', 'called_at', 'location', 'status'])
             ->orderBy('file_name')
             ->orderBy('id')
             ->get()
@@ -110,6 +113,12 @@ class ArchiveRecordingController extends Controller
             'selectedMonth' => $selectedMonth > 0 ? $selectedMonth : null,
             'monthNames' => self::MONTH_NAMES,
             'yearOptions' => self::ARCHIVE_YEARS,
+            'locationOptions' => collect(OperationCatalog::locationMapSites())
+                ->map(fn (array $site, string $slug) => [
+                    'value' => $site['name'],
+                    'label' => OperationCatalog::locations()[$slug] ?? $site['name'],
+                ])
+                ->values(),
         ]);
     }
 
@@ -228,6 +237,7 @@ class ArchiveRecordingController extends Controller
                 $record->caller_number,
                 $record->agent_number,
                 $record->durationDisplay() === '—' ? '' : $record->durationDisplay(),
+                $record->location,
                 $record->storage_path,
             ];
         });
@@ -332,6 +342,7 @@ class ArchiveRecordingController extends Controller
             'campaign_id' => ['required', 'integer', 'exists:channel_allocation_campaigns,id'],
             'year' => ['required', 'integer', Rule::in(self::ARCHIVE_YEARS)],
             'month' => ['required', 'integer', 'between:1,12'],
+            'location' => ['nullable', 'string', 'max:255'],
             'files' => ['required', 'array', 'min:1'],
             'files.*' => ['file', 'max:102400'],
         ], [
@@ -398,10 +409,11 @@ class ArchiveRecordingController extends Controller
         $campaignId = (int) $request->input('campaign_id');
         $year = (int) $request->input('year');
         $month = (int) $request->input('month');
+        $location = trim((string) $request->input('location', ''));
         $imported = 0;
 
         try {
-            DB::transaction(function () use ($validFiles, $campaignId, $year, $month, &$imported) {
+            DB::transaction(function () use ($validFiles, $campaignId, $year, $month, $location, &$imported) {
                 foreach ($validFiles as $file) {
                     $original = basename(str_replace('\\', '/', (string) $file->getClientOriginalName()));
                     if ($original === '' || $original === '.' || $original === '..') {
@@ -420,6 +432,7 @@ class ArchiveRecordingController extends Controller
                         'server' => '',
                         'storage_path' => $path,
                         'status' => 'Available',
+                        'location' => $location !== '' ? $location : null,
                     ]);
                     $duration = AudioDuration::formatFromRecording($recording);
                     if ($duration !== null) {
@@ -605,46 +618,12 @@ class ArchiveRecordingController extends Controller
 
     private function resolveFile(ArchiveRecording $recording): ?string
     {
-        $candidates = [];
-        $stored = trim((string) $recording->storage_path);
-        if ($stored !== '') {
-            $candidates[] = $stored;
-            $candidates[] = storage_path('app/'.$stored);
-            $candidates[] = storage_path('app/private/'.$stored);
-            $candidates[] = public_path($stored);
-        }
-        $fileName = trim((string) $recording->file_name);
-        if ($fileName !== '') {
-            $candidates[] = storage_path('app/archive-recordings/'.$fileName);
-            $candidates[] = storage_path('app/private/archive-recordings/'.$fileName);
-        }
-
-        foreach ($candidates as $path) {
-            if (is_file($path)) {
-                return $path;
-            }
-        }
-
-        return null;
+        return ArchiveStorage::resolveRecording($recording);
     }
 
     private function resolveCertificate(ArchiveRecording $recording): ?string
     {
-        $candidates = [];
-        $stored = trim((string) $recording->certificate_path);
-        if ($stored !== '') {
-            $candidates[] = $stored;
-            $candidates[] = storage_path('app/'.$stored);
-            $candidates[] = storage_path('app/private/'.$stored);
-        }
-
-        foreach ($candidates as $path) {
-            if (is_file($path)) {
-                return $path;
-            }
-        }
-
-        return null;
+        return ArchiveStorage::resolveCertificate($recording);
     }
 
     private function deleteStoredFile(ArchiveRecording $recording): void

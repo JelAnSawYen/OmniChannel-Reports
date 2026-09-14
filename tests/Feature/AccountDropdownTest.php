@@ -43,7 +43,7 @@ class AccountDropdownTest extends TestCase
             ->assertSee('User Management')
             ->assertSee('Login History')
             ->assertSee('Audit Logs')
-            ->assertSee('Reports')
+            ->assertDontSee('>Reports</', false)
             ->assertDontSee('class="account-caret"', false)
             ->assertSee('class="account-group-caret"', false);
 
@@ -55,7 +55,7 @@ class AccountDropdownTest extends TestCase
         $this->assertStringContainsString('User Management', $menu[1]);
         $this->assertStringContainsString('Login History', $menu[1]);
         $this->assertStringContainsString('Audit Logs', $menu[1]);
-        $this->assertStringContainsString('Reports', $menu[1]);
+        $this->assertStringNotContainsString('Reports', $menu[1]);
         $this->assertTrue(strpos($menu[1], 'My Profile') < strpos($menu[1], 'Settings'));
         $this->assertTrue(strpos($menu[1], 'Settings') < strpos($menu[1], 'User Management'));
     }

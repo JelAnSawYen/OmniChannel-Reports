@@ -16,8 +16,8 @@ use App\Http\Controllers\SipChannelController;
 use App\Http\Controllers\ChannelAllocationController;
 use App\Http\Controllers\ArchiveRecordingController;
 use App\Http\Controllers\CampaignController;
+use App\Http\Controllers\ChannelUtilizationController;
 use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SystemHealthController;
 use App\Http\Controllers\UserController;
 use App\Support\OperationCatalog;
@@ -94,11 +94,11 @@ Route::middleware(['auth', 'account.active'])->group(function () {
             Route::delete('/maintenance/logs', [MaintenanceController::class, 'clearLogs'])->middleware('permission:maintenance.manage')->name('maintenance.logs.clear');
         });
 
-        Route::get('/reports', [ReportController::class, 'index'])->middleware(['permission:media.view', 'module:reports'])->name('reports');
-        Route::get('/reports/export/{format}', [ReportController::class, 'export'])->middleware(['permission:media.export', 'module:reports'])->where('format', 'xlsx|pdf|csv')->name('reports.export');
+        Route::get('/channel-utilization', [ChannelUtilizationController::class, 'index'])->middleware(['permission:dashboard.view', 'module:dashboard'])->name('channel-utilization');
 
         Route::middleware('module:program-location')->group(function () {
             Route::get('/program-location', [LocationController::class, 'index'])->middleware('permission:media.view')->name('program-location');
+            Route::put('/program-location/{location}/status', [LocationController::class, 'updateStatus'])->middleware('permission:media.edit')->name('program-location.status');
             Route::get('/program-location/{location}/export', [LocationController::class, 'export'])->middleware('permission:media.export')->name('program-location.export');
             Route::get('/program-location/{location}/import/template', [LocationController::class, 'importTemplate'])->middleware('permission:media.create')->name('program-location.import.template');
             Route::get('/program-location/{location}/import/errors', [LocationController::class, 'importErrors'])->middleware('permission:media.create')->name('program-location.import.errors');

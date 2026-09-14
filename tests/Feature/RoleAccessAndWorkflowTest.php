@@ -99,7 +99,8 @@ class RoleAccessAndWorkflowTest extends TestCase
         $this->get('/user-types')->assertNotFound();
         $this->get('/maintenance')->assertForbidden();
         $this->get('/dashboard')->assertOk()->assertSee('Total Campaigns');
-        $this->get('/reports')->assertOk();
+        $this->get('/channel-utilization')->assertOk();
+        $this->get('/reports')->assertNotFound();
         $this->post('/channel-prefix', [
             'prefix' => '63',
             'channel' => 'SIP',
@@ -156,8 +157,9 @@ class RoleAccessAndWorkflowTest extends TestCase
         $this->get('/maintenance')->assertForbidden();
         $this->post('/maintenance/backup')->assertForbidden();
         $this->get('/media-gateways/export')->assertOk();
-        $this->get('/reports')->assertOk();
-        $this->get('/reports/export/xlsx')->assertOk();
+        $this->get('/channel-utilization')->assertOk();
+        $this->get('/reports')->assertNotFound();
+        $this->get('/reports/export/xlsx')->assertNotFound();
     }
 
     public function test_standard_user_is_view_and_export_only_on_allowed_modules(): void
@@ -174,7 +176,8 @@ class RoleAccessAndWorkflowTest extends TestCase
         $this->get('/gsm-gateways')->assertOk();
         $this->get('/channel-allocation')->assertOk();
         $this->get('/media-gateways/export')->assertOk();
-        $this->get('/reports')->assertForbidden();
+        $this->get('/channel-utilization')->assertOk();
+        $this->get('/reports')->assertNotFound();
         $this->get('/telco-cost')->assertForbidden();
         $this->get('/channel-prefix/export')->assertForbidden();
         $this->post('/channel-prefix', [
@@ -228,8 +231,9 @@ class RoleAccessAndWorkflowTest extends TestCase
         $this->actingAs($this->user($type));
 
         $this->get('/media-gateways/export')->assertForbidden();
-        $this->get('/reports')->assertOk();
-        $this->get('/reports/export/xlsx')->assertForbidden();
+        $this->get('/channel-utilization')->assertOk();
+        $this->get('/reports')->assertNotFound();
+        $this->get('/reports/export/xlsx')->assertNotFound();
     }
 
     public function test_activity_logs_render_complete_descriptions(): void

@@ -28,6 +28,7 @@ class ArchiveRecordingImportService
             'caller_number' => 'Caller Number',
             'agent_number' => 'Agent Number',
             'duration' => 'Duration',
+            'location' => 'Location',
             'storage_path' => 'Storage Path',
         ];
     }
@@ -157,6 +158,7 @@ class ArchiveRecordingImportService
                     'caller_number' => $this->nullable($values['caller_number']),
                     'agent_number' => $this->nullable($values['agent_number']),
                     'duration' => $duration,
+                    'location' => $this->nullable($values['location'] ?? ''),
                     'storage_path' => $storagePath,
                     'server' => '',
                     'status' => 'Active',

@@ -94,21 +94,10 @@ function initGlobal(){
 
     document.addEventListener('click',e=>{
         if(!e.target.closest('.account-wrap'))qs('#accountMenu')?.classList.remove('open');
-        if(!e.target.closest('.rpt-export'))qs('#reportExportMenu')?.classList.remove('open');
-    });
-
-    const reportExportButton=qs('#reportExportButton');
-    const reportExportMenu=qs('#reportExportMenu');
-    reportExportButton?.addEventListener('click',e=>{
-        e.stopPropagation();
-        const willOpen=!reportExportMenu?.classList.contains('open');
-        reportExportMenu?.classList.toggle('open',willOpen);
-        reportExportButton.setAttribute('aria-expanded',willOpen?'true':'false');
     });
 
     const networkGroup=qs('#networkGroup');
     const networkToggle=qs('#networkToggle');
-    const networkCaret=qs('#networkCaret');
     const locationNav=qs('#sidebarNav');
     const locationScrollKey='omnichannel.sidebar.navScroll';
     if(locationNav){
@@ -121,7 +110,6 @@ function initGlobal(){
     const syncNetworkOpen=()=>{
         const open=networkGroup?.classList.contains('open');
         networkToggle?.setAttribute('aria-expanded',open?'true':'false');
-        networkCaret?.setAttribute('aria-expanded',open?'true':'false');
     };
     const toggleNetwork=e=>{
         e.preventDefault();
@@ -130,7 +118,7 @@ function initGlobal(){
         syncNetworkOpen();
     };
     networkToggle?.addEventListener('click',toggleNetwork);
-    networkCaret?.addEventListener('click',toggleNetwork);
+    syncNetworkOpen();
 
     qs('#logoutButton')?.addEventListener('click',()=>{
         qs('#accountMenu')?.classList.remove('open');

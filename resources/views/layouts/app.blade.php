@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ $pageTitle ?? 'OmniChannel Reports' }} - OmniChannel Reports</title>
+    <title>{{ $pageTitle ?? 'OmniChannel Inventory' }}</title>
+    <link rel="icon" type="image/png" href="{{ asset('images/ssg-favicon.png') }}?v={{ @filemtime(public_path('images/ssg-favicon.png')) ?: '1' }}">
+    <link rel="shortcut icon" href="{{ asset('favicon.ico') }}?v={{ @filemtime(public_path('favicon.ico')) ?: '1' }}">
     <script>
         (function () {
             try {
@@ -24,7 +26,10 @@
 <body data-user-type="{{ auth()->user()->userType?->name }}" data-page="{{ $pageKey ?? '' }}" data-resource-base="{{ $resource['base'] ?? '' }}" data-can-edit="{{ (auth()->user()?->hasPermission('media.edit') && auth()->user()?->canMutateGateways()) ? '1' : '0' }}" data-can-delete="{{ (auth()->user()?->hasPermission('media.delete') && auth()->user()?->canMutateGateways()) ? '1' : '0' }}" data-can-reveal-secrets="{{ auth()->user()?->canExportGatewaySecrets() ? '1' : '0' }}">
 <div class="app-shell">
     <aside class="sidebar" id="sidebar" aria-label="Sidebar navigation">
-        <div class="brand"><div class="brand-title">OmniChannel</div><div class="brand-subtitle">Reports</div></div>
+        <div class="brand">
+            <img class="brand-logo" src="{{ asset('images/ssg-logo-white.png') }}" alt="SSG">
+            <div class="brand-title">OmniChannel Inventory</div>
+        </div>
         <button class="sidebar-close" id="sidebarClose" type="button" aria-label="Close navigation">×</button>
         <div class="sidebar-nav" id="sidebarNav">
         <nav class="nav-section">
@@ -46,13 +51,11 @@
                 @if(auth()->user()->canAccessModule('gsm-gateways'))<a href="{{ route('gsm-gateways.index') }}" class="nav-item {{ request()->routeIs('gsm-gateways.*') ? 'active' : '' }}"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 6.5A2.5 2.5 0 0 1 7 4h4.2l3.3 3.3v10.2A2.5 2.5 0 0 1 12 20H7a2.5 2.5 0 0 1-2.5-2.5v-11z"/><rect x="7" y="10.5" width="5" height="5.5" rx="1"/><path d="M17.2 5.4a5.6 5.6 0 0 1 3.3 5"/><path d="M16.8 9.2a2.6 2.6 0 0 1 1.6 2.1"/></svg></span><span>GSM Gateway</span></a>@endif
                 @if(auth()->user()->canAccessModule('globe-sim'))
                 <div class="nav-group{{ $networkOpen ? ' open' : '' }}" id="networkGroup">
-                    <div class="nav-parent-row">
-                        <button type="button" class="nav-item" id="networkToggle" aria-expanded="{{ $networkOpen ? 'true' : 'false' }}" aria-controls="networkSub">
-                            <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></svg></span>
-                            <span>Network</span>
-                        </button>
-                        <button type="button" class="nav-caret" id="networkCaret" aria-expanded="{{ $networkOpen ? 'true' : 'false' }}" aria-controls="networkSub" aria-label="Toggle Network">⌄</button>
-                    </div>
+                    <button type="button" class="nav-item nav-parent-row" id="networkToggle" aria-expanded="{{ $networkOpen ? 'true' : 'false' }}" aria-controls="networkSub">
+                        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></svg></span>
+                        <span>Network</span>
+                        <span class="nav-caret" id="networkCaret" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+                    </button>
                     <div class="nav-sub" id="networkSub">
                         <a href="{{ route('globe-sim') }}" class="nav-item nav-subitem {{ request()->routeIs('globe-sim') ? 'active' : '' }}"><span class="nav-icon"><img class="nav-icon-img" src="{{ asset('icons/globe-sim.png') }}" alt=""></span><span>Globe SIM</span></a>
                         <a href="{{ route('smart-sim') }}" class="nav-item nav-subitem {{ request()->routeIs('smart-sim') ? 'active' : '' }}"><span class="nav-icon"><img class="nav-icon-img" src="{{ asset('icons/smart-sim.png') }}" alt=""></span><span>Smart SIM</span></a>
@@ -87,10 +90,9 @@
                         $navUserManagement = auth()->user()->canAccessAdministration() && auth()->user()->hasPermission('users.view');
                         $navLoginHistory = auth()->user()->hasPermission('logs.view');
                         $navAuditLogs = auth()->user()->hasPermission('logs.view');
-                        $navReports = auth()->user()->hasPermission('media.view') && auth()->user()->canAccessModule('reports');
-                        $settingsOpen = request()->routeIs('users.*', 'login-history', 'activity-logs', 'reports', 'reports.export');
+                        $settingsOpen = request()->routeIs('users.*', 'login-history', 'activity-logs');
                     @endphp
-                    @if($navUserManagement || $navLoginHistory || $navAuditLogs || $navReports)
+                    @if($navUserManagement || $navLoginHistory || $navAuditLogs)
                     <div class="account-group{{ $settingsOpen ? ' open' : '' }}" id="accountSettingsGroup">
                         <button type="button" class="account-item account-group-toggle" id="accountSettingsToggle" aria-expanded="{{ $settingsOpen ? 'true' : 'false' }}" aria-controls="accountSettingsSub">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
@@ -101,7 +103,6 @@
                             @if($navUserManagement)<a class="account-item account-subitem {{ request()->routeIs('users.*') ? 'active' : '' }}" href="{{ route('users.index') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9.5" cy="8" r="3.2"/><path d="M3.5 20a6 6 0 0 1 12 0"/><path d="M16.5 5.2a3.2 3.2 0 0 1 0 5.6"/><path d="M18 14.4A6 6 0 0 1 21 20"/></svg>User Management</a>@endif
                             @if($navLoginHistory)<a class="account-item account-subitem {{ request()->routeIs('login-history') ? 'active' : '' }}" href="{{ route('login-history') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.9-6.4"/><path d="M3.2 4.6v4.6h4.6"/><path d="M12 8.2V12l2.9 1.8"/></svg>Login History</a>@endif
                             @if($navAuditLogs)<a class="account-item account-subitem {{ request()->routeIs('activity-logs') ? 'active' : '' }}" href="{{ route('activity-logs') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4.5h10A1.5 1.5 0 0 1 18.5 6v14L12 16.8 5.5 20V6A1.5 1.5 0 0 1 7 4.5z"/><path d="M9 8.2h6M9 11.2h6"/></svg>Audit Logs</a>@endif
-                            @if($navReports)<a class="account-item account-subitem {{ request()->routeIs('reports', 'reports.export') ? 'active' : '' }}" href="{{ route('reports') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 18V8"/><path d="M10 18V5"/><path d="M15 18v-8"/><path d="M20 18V3"/></svg>Reports</a>@endif
                         </div>
                     </div>
                     @endif
@@ -118,7 +119,7 @@
         <div class="page-container">
             @yield('content')
         </div>
-        <footer class="app-footer">© {{ now()->year }} OmniChannel Reports. All rights reserved.</footer>
+        <footer class="app-footer">© {{ now()->year }} OmniChannel Inventory. All rights reserved.</footer>
     </main>
 </div>
 <div class="modal-backdrop" id="logoutModal"><div class="modal small"><div class="modal-header"><h3>Confirm Logout</h3><button type="button" class="close-btn" data-close="logoutModal">×</button></div><div class="modal-body"><p>Are you sure you want to logout?</p></div><div class="modal-footer"><button type="button" class="btn secondary" data-close="logoutModal">No</button><form method="POST" action="{{ route('logout') }}">@csrf<button class="btn danger" type="submit">Yes</button></form></div></div></div>

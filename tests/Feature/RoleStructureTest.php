@@ -152,12 +152,17 @@ class RoleStructureTest extends TestCase
             ->assertDontSee('href="'.url('/signal-boosters').'"', false)
             ->assertDontSee('href="'.url('/defective-gsm').'"', false)
             ->assertDontSee('href="'.url('/program-location').'"', false)
-            ->assertDontSee('href="'.url('/globe-sim').'"', false)
-            ->assertDontSee('id="networkGroup"', false);
+            ->assertSee('id="networkGroup"', false)
+            ->assertSee('href="'.url('/globe-sim').'"', false)
+            ->assertSee('href="'.url('/smart-sim').'"', false);
 
         $this->get('/campaigns')->assertOk();
         $this->get('/gsm-gateways')->assertOk();
         $this->get('/channel-allocation')->assertOk();
+        $this->get('/globe-sim')->assertOk()->assertSee('Globe SIM');
+        $this->get('/smart-sim')->assertOk()->assertSee('Smart SIM');
+        $this->get('/channel-utilization')->assertOk()->assertSee('Channel Utilization');
+        $this->get('/reports')->assertNotFound();
     }
 
     public function test_standard_user_is_denied_restricted_pages_and_actions(): void
@@ -171,13 +176,10 @@ class RoleStructureTest extends TestCase
             '/pdc-servers',
             '/sip-channels',
             '/archive-recordings',
-            '/globe-sim',
-            '/smart-sim',
             '/program-inbound-numbers',
             '/signal-boosters',
             '/defective-gsm',
             '/program-location',
-            '/reports',
             '/system-health',
             '/activity-logs',
             '/login-history',
@@ -186,6 +188,9 @@ class RoleStructureTest extends TestCase
         ] as $url) {
             $this->get($url)->assertForbidden();
         }
+
+        $this->get('/reports')->assertNotFound();
+        $this->get('/reports/export/xlsx')->assertNotFound();
 
         $this->post('/users', [
             'name' => 'Nope',

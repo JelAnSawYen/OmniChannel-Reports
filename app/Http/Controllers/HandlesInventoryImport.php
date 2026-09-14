@@ -101,7 +101,9 @@ trait HandlesInventoryImport
         } catch (\Throwable $exception) {
             return response()->json([
                 'ok' => false,
-                'message' => PublicError::failed('Import', $exception),
+                'message' => $exception instanceof \RuntimeException
+                    ? $exception->getMessage()
+                    : PublicError::failed('Import', $exception),
             ], 422);
         }
 

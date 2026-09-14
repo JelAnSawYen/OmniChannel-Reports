@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Support\InventoryImportCatalog;
 use App\Support\PdcEndorseDate;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -353,12 +354,24 @@ class InventoryImportService
         $model = $config['model'];
         $count = 0;
 
-        DB::transaction(function () use ($payload, $model, &$count) {
-            foreach ($payload as $row) {
-                $model::query()->create($row);
-                $count++;
-            }
-        });
+        try {
+            DB::transaction(function () use ($payload, $model, &$count) {
+                $usesSortOrder = in_array('sort_order', (new $model)->getFillable(), true);
+                $sort = $usesSortOrder ? (int) $model::query()->max('sort_order') : 0;
+
+                foreach ($payload as $row) {
+                    unset($row['id']);
+                    if ($usesSortOrder) {
+                        $sort++;
+                        $row['sort_order'] = $sort;
+                    }
+                    $model::query()->create($row);
+                    $count++;
+                }
+            });
+        } catch (UniqueConstraintViolationException $exception) {
+            throw new RuntimeException('A duplicate record could not be imported. Check unique fields and try again.', 0, $exception);
+        }
 
         return $count;
     }
