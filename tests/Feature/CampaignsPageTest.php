@@ -66,7 +66,7 @@ class CampaignsPageTest extends TestCase
         $this->assertStringContainsString('.campaigns-name', $css);
         $this->assertMatchesRegularExpression('/\.campaigns-name\s*\{[^}]*color:\s*#0066FF/', $css);
         $this->assertMatchesRegularExpression('/\.campaigns-name\s*\{[^}]*font-weight:\s*700/', $css);
-        $this->assertMatchesRegularExpression('/\.campaigns-table\s*>\s*tbody\s*>\s*tr\s*>\s*td\s*\{[^}]*padding:\s*8px 10px/', $css);
+        $this->assertMatchesRegularExpression('/\.campaigns-table\s*>\s*tbody\s*>\s*tr\s*>\s*td\s*\{[^}]*padding:\s*10px 12.5px/', $css);
         $this->assertDoesNotMatchRegularExpression('/<th[^>]*>Last Updated<\/th>/', $html);
 
         $names = array_values(OperationCatalog::locations());

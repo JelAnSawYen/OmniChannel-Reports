@@ -50,7 +50,7 @@ class ChannelUtilizationPageTest extends TestCase
             ->assertDontSee('>Reports</', false);
 
         $css = file_get_contents(resource_path('css/app.css'));
-        $this->assertStringContainsString('.dash-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:16px;row-gap:16px;align-items:stretch}', $css);
+        $this->assertStringContainsString('.dash-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:20px;row-gap:20px;align-items:stretch}', $css);
         $this->assertStringContainsString('.dash-util-table th.num,.dash-util-table td.num{text-align:center}', $css);
         $this->assertStringContainsString('table[aria-label="Channel Utilization"] th.num-col', $css);
         $this->assertStringContainsString('table[aria-label="Channel Utilization"] td.num-col{text-align:center}', $css);

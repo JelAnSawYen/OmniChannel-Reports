@@ -6,7 +6,7 @@
             <input type="text" name="code" placeholder="Authentication code" autocomplete="one-time-code" required>
             <button type="submit" class="login-button">Verify</button>
         </form>
-        <form method="POST" action="{{ route('logout') }}" style="margin-top:10px">
+        <form method="POST" action="{{ route('logout') }}" style="margin-top:12.5px">
             @csrf
             <button type="submit" class="login-button">Logout</button>
         </form>

@@ -111,7 +111,7 @@ class ArchiveRecordingsPageTest extends TestCase
         $this->assertStringNotContainsString('ar-file-icon', $html);
         $css = file_get_contents(resource_path('css/app.css'));
         $this->assertStringContainsString('.ar-node-campaign > .ar-folder', $css);
-        $this->assertMatchesRegularExpression('/\.ar-node-campaign\s*>\s*\.ar-folder\s*\{[^}]*min-height:\s*36px/', $css);
+        $this->assertMatchesRegularExpression('/\.ar-node-campaign\s*>\s*\.ar-folder\s*\{[^}]*min-height:\s*45px/', $css);
         $this->assertMatchesRegularExpression('/\.ar-node-campaign\s*>\s*\.ar-folder\s*>\s*span\s*\{[^}]*font-weight:\s*700/', $css);
         $this->assertStringNotContainsString('ar-folder-icon', $html);
         $this->assertMatchesRegularExpression('/\.ar-files\s+\.ar-col-name[\s\S]*?width:\s*25%/', $css);

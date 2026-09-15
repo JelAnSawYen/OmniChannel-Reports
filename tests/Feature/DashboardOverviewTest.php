@@ -150,8 +150,8 @@ class DashboardOverviewTest extends TestCase
         $this->assertCount(30, $json->json('trend.labels'));
         $this->assertCount(30, $json->json('trend.total'));
         $css = file_get_contents(resource_path('css/app.css'));
-        $this->assertStringContainsString('.dash-bottom{display:grid;grid-template-columns:1.11fr 1fr;gap:11px;align-items:stretch;', $css);
-        $this->assertStringContainsString('.dash-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:16px;row-gap:16px;align-items:stretch}', $css);
+        $this->assertStringContainsString('.dash-bottom{display:grid;grid-template-columns:1.11fr 1fr;gap:13.75px;align-items:stretch;', $css);
+        $this->assertStringContainsString('.dash-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:20px;row-gap:20px;align-items:stretch}', $css);
 
         $payload = app(DashboardOverviewService::class)->payload();
         $this->assertSame($payload['fingerprint'], $json->json('fingerprint'));

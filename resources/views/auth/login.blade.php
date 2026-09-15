@@ -16,7 +16,7 @@
             </div>
             <button type="submit" class="login-button">Login</button>
         </form>
-        <p style="margin:14px 0 0"><a class="card-link" href="{{ route('password.request') }}">Forgot password?</a></p>
+        <p style="margin:17.5px 0 0"><a class="card-link" href="{{ route('password.request') }}">Forgot password?</a></p>
     <script>
         function syncPasswordToggle() {
             const password = document.getElementById('password');

@@ -50,58 +50,60 @@
             font-family: "Segoe UI", Inter, Arial, sans-serif;
         }
         .login-card {
-            width: 360px;
-            padding: 35px;
+            width: 450px;
+            padding: 43.75px;
             background: rgba(255, 255, 255, 0.90);
-            border-radius: 12px;
-            box-shadow: 0 10px 35px rgba(0, 0, 0, 0.15);
+            border-radius: 15px;
+            box-shadow: 0 12.5px 43.75px rgba(0, 0, 0, 0.15);
             text-align: center;
-            backdrop-filter: blur(3px);
+            backdrop-filter: blur(3.75px);
         }
-        .icon { font-size: 42px; margin-bottom: 12px; color: #334155; }
-        .login-logo { display: block; margin: 0 auto; width: 132px; max-width: 70%; height: auto; object-fit: contain; }
-        h1 { margin: 0 0 25px; font-size: 22px; font-weight: 500; color: #475569; }
-        p.hint { margin: -10px 0 18px; font-size: 13px; color: #64748b; text-align: left; }
+        .icon { font-size: 52.5px; margin-bottom: 15px; color: #334155; }
+        .login-logo { display: block; margin: 0 auto; width: 165px; max-width: 70%; height: auto; object-fit: contain; }
+        h1 { margin: 0 0 31.25px; font-size: 27.5px; font-weight: 500; color: #475569; }
+        p.hint { margin: -12.5px 0 22.5px; font-size: 16.25px; color: #64748b; text-align: left; }
         input {
             width: 100%;
-            padding: 12px;
-            margin-bottom: 15px;
-            border: 1px solid #cbd5e1;
-            border-radius: 7px;
-            font-size: 14px;
+            padding: 15px;
+            margin-bottom: 18.75px;
+            border: 1.25px solid #cbd5e1;
+            border-radius: 8.75px;
+            font-size: 17.5px;
+            line-height: normal;
             outline: none;
             background: rgba(255, 255, 255, 0.95);
         }
         input:focus { border-color: #64748b; }
         .password-wrapper { position: relative; }
-        .password-wrapper input { padding-right: 45px; }
+        .password-wrapper input { padding-right: 56.25px; }
         .toggle-password {
-            position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+            position: absolute; right: 15px; top: 50%; transform: translateY(-50%);
             width: auto; padding: 0; margin: 0; border: none; background: transparent;
-            color: #64748b; font-size: 13px; cursor: pointer;
+            color: #64748b; font-size: 16.25px; cursor: pointer;
         }
         .toggle-password:hover { background: transparent; color: #334155; }
         .login-button {
-            width: 100%; padding: 12px; border: none; border-radius: 7px;
-            background: #475569; color: white; font-size: 14px; font-weight: 600; cursor: pointer;
+            width: 100%; padding: 15px; border: none; border-radius: 8.75px;
+            background: #475569; color: white; font-size: 17.5px; font-weight: 600; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center; line-height: 1;
         }
         .login-button:hover { background: #334155; }
         .error-message {
-            margin-bottom: 15px; padding: 10px; border-radius: 7px;
-            background: #fee2e2; color: #b91c1c; font-size: 13px; text-align: left;
+            margin-bottom: 18.75px; padding: 12.5px; border-radius: 8.75px;
+            background: #fee2e2; color: #b91c1c; font-size: 16.25px; text-align: left;
         }
         .status-message {
-            margin-bottom: 15px; padding: 10px; border-radius: 7px;
-            background: #dcfce7; color: #166534; font-size: 13px; text-align: left;
+            margin-bottom: 18.75px; padding: 12.5px; border-radius: 8.75px;
+            background: #dcfce7; color: #166534; font-size: 16.25px; text-align: left;
         }
-        .footer { margin-top: 18px; font-size: 11px; color: #94a3b8; }
-        .footer a, .card-link { color: #475569; font-size: 13px; text-decoration: none; }
+        .footer { margin-top: 22.5px; font-size: 13.75px; color: #94a3b8; }
+        .footer a, .card-link { color: #475569; font-size: 16.25px; text-decoration: none; }
         .secret-box {
-            text-align: left; font-family: Consolas, monospace; font-size: 13px;
-            background: #fff; border: 1px solid #cbd5e1; border-radius: 7px;
-            padding: 10px; margin-bottom: 15px; word-break: break-all; color: #334155;
+            text-align: left; font-family: Consolas, monospace; font-size: 16.25px;
+            background: #fff; border: 1.25px solid #cbd5e1; border-radius: 8.75px;
+            padding: 12.5px; margin-bottom: 18.75px; word-break: break-all; color: #334155;
         }
-        .code-list { text-align: left; font-family: Consolas, monospace; font-size: 13px; color: #334155; margin: 0 0 15px; padding-left: 18px; }
+        .code-list { text-align: left; font-family: Consolas, monospace; font-size: 16.25px; color: #334155; margin: 0 0 18.75px; padding-left: 22.5px; }
         body.login-page {
             background-image:
                 linear-gradient(rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.10)),
@@ -110,8 +112,8 @@
             background-position: center;
             background-repeat: no-repeat;
         }
-        .login-page .icon { margin-bottom: 8px; }
-        .login-page .login-logo { width: 72px; max-width: 40%; }
+        .login-page .icon { margin-bottom: 10px; }
+        .login-page .login-logo { width: 90px; max-width: 40%; }
         .login-page h1 {
             font-family: Inter, "Segoe UI", Arial, sans-serif;
             font-weight: 600;
@@ -123,9 +125,9 @@
             font-weight: 600;
             color: #2563EB;
         }
-        .login-page .input-with-icon { position: relative; margin-bottom: 15px; }
-        .login-page .input-with-icon input { margin-bottom: 0; padding-left: 40px; }
-        .login-page .input-with-icon.password-wrapper input { padding-right: 42px; }
+        .login-page .input-with-icon { position: relative; margin-bottom: 18.75px; }
+        .login-page .input-with-icon input { margin-bottom: 0; padding-left: 50px; }
+        .login-page .input-with-icon.password-wrapper input { padding-right: 52.5px; }
         .login-page input[type="password"]::-ms-reveal,
         .login-page input[type="password"]::-ms-clear,
         .login-page input[type="text"]::-ms-reveal,
@@ -133,15 +135,15 @@
             display: none;
         }
         .login-page .field-icon {
-            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-            width: 18px; height: 18px; color: #475569; pointer-events: none; display: block;
+            position: absolute; left: 15px; top: 50%; transform: translateY(-50%);
+            width: 22.5px; height: 22.5px; color: #475569; pointer-events: none; display: block;
         }
         .login-page .toggle-password {
             display: none; align-items: center; justify-content: center;
-            color: #475569; width: 22px; height: 22px; z-index: 2;
+            color: #475569; width: 27.5px; height: 27.5px; z-index: 2;
         }
         .login-page .toggle-password.has-value { display: flex; }
-        .login-page .toggle-password svg { width: 18px; height: 18px; pointer-events: none; }
+        .login-page .toggle-password svg { width: 22.5px; height: 22.5px; pointer-events: none; }
         .login-page .toggle-password .icon-eye { display: none; }
         .login-page .toggle-password .icon-eye-off { display: block; }
         .login-page .toggle-password.is-visible .icon-eye { display: block; }

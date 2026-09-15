@@ -6,5 +6,5 @@
             <input type="email" name="email" placeholder="Email" value="{{ old('email') }}" autocomplete="email" required>
             <button type="submit" class="login-button">Send reset link</button>
         </form>
-        <p style="margin:14px 0 0"><a class="card-link" href="{{ route('login') }}">Back to login</a></p>
+        <p style="margin:17.5px 0 0"><a class="card-link" href="{{ route('login') }}">Back to login</a></p>
 @endsection
