@@ -129,7 +129,7 @@
                     <div class="form-group">
                         <label for="campaign_location">Location</label>
                         <select class="form-control" id="campaign_location" name="location" required>
-                            <option value="">Select Location</option>
+                            <option value="" selected hidden>Select Location</option>
                             @foreach($locations as $slug => $name)
                                 <option value="{{ $name }}">{{ $name }}</option>
                             @endforeach

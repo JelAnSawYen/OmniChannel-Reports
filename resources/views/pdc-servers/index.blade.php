@@ -60,6 +60,7 @@
     $dnsLines = array_values(array_filter($dnsLines, fn ($line) => $line !== ''));
     $groupValues = [
         'campaign_id' => $group->campaign_id,
+        'campaign' => $campaignName === '—' ? '' : $campaignName,
         'location' => $group->location,
         'date_endorse' => $group->date_endorse ? \App\Support\PdcEndorseDate::display($group->date_endorse->format('Y-m-d')) : '',
         'dns' => $group->dns,
@@ -275,17 +276,17 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="pdc_campaign_id">Campaign</label>
-                        <select class="form-control" name="campaign_id" id="pdc_campaign_id" required>
-                            <option value="">Select Campaign</option>
-                            @foreach($campaigns as $campaign)
-                                <option value="{{ $campaign->id }}">{{ $campaign->name }}</option>
-                            @endforeach
-                        </select>
+                        @include('partials.campaign-combo', [
+                            'inputId' => 'pdc_campaign_id',
+                            'inputName' => 'campaign',
+                            'menuId' => 'pdcCampaignMenu',
+                            'campaigns' => $campaigns,
+                        ])
                     </div>
                     <div class="form-group">
                         <label for="pdc_location">Location</label>
                         <select class="form-control" name="location" id="pdc_location">
-                            <option value="">Select Location</option>
+                            <option value="" selected hidden>Select Location</option>
                             @foreach($locations as $name)
                                 <option value="{{ $name }}">{{ $name }}</option>
                             @endforeach
@@ -694,7 +695,7 @@ document.addEventListener('DOMContentLoaded', () => {
         groupForm.action = groupBase + '/' + button.dataset.id;
         document.getElementById('pdcGroupModalTitle').textContent = 'Edit PDC Servers';
         document.getElementById('pdcGroupSubmit').textContent = 'Save';
-        document.getElementById('pdc_campaign_id').value = values.campaign_id ?? '';
+        document.getElementById('pdc_campaign_id').value = values.campaign ?? '';
         document.getElementById('pdc_location').value = values.location ?? '';
         document.getElementById('pdc_date_endorse').value = values.date_endorse ?? '';
         document.getElementById('pdc_dns').value = values.dns ?? '';

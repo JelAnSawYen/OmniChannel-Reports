@@ -65,6 +65,8 @@ class SipChannelsPageTest extends TestCase
             ->assertSee('class="sip-table"', false)
             ->assertSee('id="sipAddButton"', false)
             ->assertSee('id="sipSubmit">Save', false)
+            ->assertSee('pin-campaign-combo', false)
+            ->assertSee('Select or type a campaign...', false)
             ->assertDontSee('>Add</button>', false)
             ->assertDontSee('Save SIP')
             ->assertDontSee('Last Updated')
@@ -115,6 +117,16 @@ class SipChannelsPageTest extends TestCase
 
         $record = SipChannel::where('etpi_sip_name', 'ETPI_ALPHA')->firstOrFail();
         $this->assertSame('2026-07-09', $record->date_activation->format('Y-m-d'));
+
+        $this->post('/sip-channels', [
+            'campaign' => 'Typed SIP Campaign',
+            'etpi_sip_name' => 'ETPI_TYPED',
+            'channel_count' => 2,
+            'network' => 'ETPI',
+            'date_activation' => '8/2/2026',
+        ])->assertRedirect();
+        $this->assertDatabaseHas('channel_allocation_campaigns', ['name' => 'Typed SIP Campaign']);
+        $this->assertDatabaseHas('sip_channels', ['etpi_sip_name' => 'ETPI_TYPED']);
 
         $this->get('/sip-channels')
             ->assertOk()

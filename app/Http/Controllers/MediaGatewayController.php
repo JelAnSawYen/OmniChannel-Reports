@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreGsmSimAssignmentRequest;
 use App\Http\Requests\StoreMediaGatewayRequest;
 use App\Http\Requests\UpdateMediaGatewayRequest;
+use App\Models\GatewaySimAssignment;
 use App\Models\MediaGateway;
 use App\Services\AuditLogger;
 use App\Services\XlsxService;
+use App\Support\GsmGatewayWriter;
+use App\Support\GsmSimInventory;
 use App\Support\InventoryImportCatalog;
 use App\Support\PublicError;
 use Illuminate\Http\Request;
@@ -16,7 +20,7 @@ use Illuminate\Support\Facades\Route;
 class MediaGatewayController extends Controller
 {
     use HandlesInventoryImport;
-    private const SORTABLE_COLUMNS = ['id', 'ip_address', 'site_code', 'plan', 'port', 'network', 'device_function', 'site_name', 'username'];
+    private const SORTABLE_COLUMNS = ['id', 'hostname', 'ip_address', 'site_code', 'channel_count', 'plan', 'port', 'network', 'device_function', 'site_name', 'username'];
 
     public function index(Request $request)
     {
@@ -38,6 +42,7 @@ class MediaGatewayController extends Controller
         $data = compact('mediaGateways', 'search', 'sortBy', 'sortDir', 'perPage', 'resource');
         if ($this->isGsm()) {
             $data['locations'] = \App\Support\OperationCatalog::locations();
+            $data['simNetworks'] = GsmSimInventory::networks();
         }
 
         if ($request->expectsJson()) {
@@ -63,11 +68,12 @@ class MediaGatewayController extends Controller
     private function jsonRecord(MediaGateway $gateway): array
     {
         $canReveal = (bool) auth()->user()?->canExportGatewaySecrets();
-
-        return [
+        $record = [
             'id' => $gateway->id,
+            'hostname' => (string) ($gateway->hostname ?? ''),
             'ip_address' => $gateway->ip_address,
             'site_code' => $gateway->site_code,
+            'channel_count' => $gateway->channel_count,
             'plan' => $gateway->plan,
             'port' => $gateway->port,
             'network' => $gateway->network,
@@ -77,12 +83,48 @@ class MediaGatewayController extends Controller
             'password' => $canReveal ? (string) ($gateway->password ?? '') : '',
             'database' => $gateway->database,
         ];
+
+        if ($this->isGsm()) {
+            $record['assignments'] = $gateway->assignmentPayload();
+        }
+
+        return $record;
+    }
+
+    public function sims(Request $request)
+    {
+        abort_unless($this->isGsm(), 404);
+        abort_unless($request->user()?->hasPermission('media.view'), 403);
+
+        $network = (string) $request->query('network', '');
+        $records = GsmSimInventory::listForNetwork($network);
+        $gatewayId = (int) $request->query('gateway_id', 0);
+        $ignoreAssignmentId = (int) $request->query('assignment_id', 0);
+        if ($gatewayId > 0) {
+            $taken = \App\Models\GatewaySimAssignment::query()
+                ->when($ignoreAssignmentId, fn ($query) => $query->where('id', '!=', $ignoreAssignmentId))
+                ->get(['sim_type', 'sim_id'])
+                ->map(fn ($row) => $row->sim_type.':'.$row->sim_id)
+                ->all();
+            $records = array_values(array_filter(
+                $records,
+                fn (array $sim) => ! in_array(($sim['sim_type'] ?? '').':'.($sim['id'] ?? ''), $taken, true)
+            ));
+        }
+
+        return response()->json([
+            'records' => $records,
+        ]);
     }
 
     public function store(StoreMediaGatewayRequest $request)
     {
         $this->denyStandardMutation();
         $data = $request->validated();
+        $assignments = [];
+        if ($this->isGsm()) {
+            unset($data['assignments']);
+        }
 
         if (
             MediaGateway::query()
@@ -92,7 +134,7 @@ class MediaGatewayController extends Controller
                 })
                 ->exists()
         ) {
-            $message = 'A Media Gateway with the same Site Code or IP Address already exists.';
+            $message = 'A '.$this->resource()['entity'].' with the same Site Code or IP Address already exists.';
 
             if ($request->expectsJson()) {
                 return response()->json(['message' => $message], 409);
@@ -101,7 +143,9 @@ class MediaGatewayController extends Controller
             return back()->with('error', $message)->withInput();
         }
 
-        $gateway = MediaGateway::create($data);
+        $gateway = $this->isGsm()
+            ? GsmGatewayWriter::create($data, $assignments)
+            : MediaGateway::create($data);
 
         AuditLogger::log(
             'Added',
@@ -113,7 +157,7 @@ class MediaGatewayController extends Controller
 
         if ($request->expectsJson()) {
             return response()->json([
-                'message' => 'Media Gateway added successfully.',
+                'message' => $this->resource()['entity'].' added successfully.',
                 'record' => $this->jsonRecord($gateway),
             ], 201);
         }
@@ -126,6 +170,9 @@ class MediaGatewayController extends Controller
     {
         $this->denyStandardMutation();
         $data = $request->validated();
+        if ($this->isGsm()) {
+            unset($data['assignments']);
+        }
 
         $duplicate = MediaGateway::where(function ($query) use ($data) {
             $query->where('site_code', $data['site_code'])
@@ -136,11 +183,15 @@ class MediaGatewayController extends Controller
 
         if ($duplicate) {
             return response()->json([
-                'message' => 'Another Media Gateway already uses that Site Code or IP Address.',
+                'message' => 'Another '.$this->resource()['entity'].' already uses that Site Code or IP Address.',
             ], 409);
         }
 
-        $mediaGateway->update($data);
+        if ($this->isGsm()) {
+            $mediaGateway = GsmGatewayWriter::update($mediaGateway, $data);
+        } else {
+            $mediaGateway->update($data);
+        }
 
         AuditLogger::log(
             'Updated',
@@ -152,13 +203,89 @@ class MediaGatewayController extends Controller
 
         if ($request->expectsJson()) {
             return response()->json([
-                'message' => 'Media Gateway updated successfully.',
-                'record' => $this->jsonRecord($mediaGateway->fresh()),
+                'message' => $this->resource()['entity'].' updated successfully.',
+                'record' => $this->jsonRecord($mediaGateway->fresh(['assignments'])),
             ]);
         }
 
         return Redirect::route($this->indexRoute())
             ->with('success', $this->resource()['entity'].' updated successfully.');
+    }
+
+    public function storeAssignment(StoreGsmSimAssignmentRequest $request, MediaGateway $mediaGateway)
+    {
+        abort_unless($this->isGsm(), 404);
+        $this->denyStandardMutation();
+        $mediaGateway->loadMissing('assignments');
+        $assignment = GsmGatewayWriter::saveAssignment(
+            $mediaGateway,
+            (string) $request->validated('sim_type'),
+            (int) $request->validated('sim_id')
+        );
+
+        AuditLogger::log(
+            'Added',
+            'Media Gateways',
+            'Added SIM assignment to gateway '.$mediaGateway->site_code,
+            $mediaGateway->id,
+            $request
+        );
+
+        return response()->json([
+            'message' => 'SIM assignment added successfully.',
+            'record' => $this->jsonRecord($mediaGateway->fresh(['assignments'])),
+            'assignment_id' => $assignment->id,
+        ], 201);
+    }
+
+    public function updateAssignment(StoreGsmSimAssignmentRequest $request, MediaGateway $mediaGateway, GatewaySimAssignment $assignment)
+    {
+        abort_unless($this->isGsm(), 404);
+        $this->denyStandardMutation();
+        abort_unless((int) $assignment->media_gateway_id === (int) $mediaGateway->id, 404);
+        $mediaGateway->loadMissing('assignments');
+        GsmGatewayWriter::saveAssignment(
+            $mediaGateway,
+            (string) $request->validated('sim_type'),
+            (int) $request->validated('sim_id'),
+            $assignment
+        );
+
+        AuditLogger::log(
+            'Updated',
+            'Media Gateways',
+            'Updated SIM assignment on gateway '.$mediaGateway->site_code,
+            $mediaGateway->id,
+            $request
+        );
+
+        return response()->json([
+            'message' => 'SIM assignment updated successfully.',
+            'record' => $this->jsonRecord($mediaGateway->fresh(['assignments'])),
+        ]);
+    }
+
+    public function destroyAssignment(Request $request, MediaGateway $mediaGateway, GatewaySimAssignment $assignment)
+    {
+        abort_unless($this->isGsm(), 404);
+        abort_unless($request->user()?->hasPermission('media.delete'), 403, 'You do not have permission to perform this action.');
+        $this->denyStandardMutation();
+        abort_unless((int) $assignment->media_gateway_id === (int) $mediaGateway->id, 404);
+
+        $assignment->delete();
+
+        AuditLogger::log(
+            'Deleted',
+            'Media Gateways',
+            'Deleted SIM assignment from gateway '.$mediaGateway->site_code,
+            $mediaGateway->id,
+            $request
+        );
+
+        return response()->json([
+            'message' => 'SIM assignment deleted successfully.',
+            'record' => $this->jsonRecord($mediaGateway->fresh(['assignments'])),
+        ]);
     }
 
     public function destroy(Request $request, MediaGateway $mediaGateway)
@@ -195,40 +322,63 @@ class MediaGatewayController extends Controller
 
         try {
             $includeSecrets = $request->user()?->canExportGatewaySecrets() ?? false;
-            $headers = [
-                'Hostname IP',
-                'Serial Number',
-                'Plan',
-                'Port',
-                'Network',
-                'Function',
-                'Site',
-            ];
-            if ($includeSecrets) {
-                $headers[] = 'User';
-                $headers[] = 'Password';
-            }
-            $path = $xlsx->export(
-                $headers,
-                $query->cursor()->map(function ($gateway) use ($includeSecrets) {
-                    $row = [
-                        $gateway->ip_address,
-                        $gateway->site_code,
-                        $gateway->plan,
-                        $gateway->port,
-                        $gateway->network,
-                        $gateway->device_function,
-                        $gateway->site_name,
-                    ];
-                    if ($includeSecrets) {
-                        $row[] = $gateway->username;
-                        $row[] = $gateway->password;
-                    }
+            if ($this->isGsm()) {
+                $headers = [
+                    'Hostname',
+                    'IP',
+                    'Serial Number',
+                    'Channel Count',
+                    'Function',
+                    'Site',
+                ];
+                if ($includeSecrets) {
+                    $headers[] = 'User';
+                    $headers[] = 'Password';
+                }
+                $headers = array_merge($headers, ['Port', 'IMEI', 'Mobile Number', 'Network', 'Plan']);
+                $path = $xlsx->export(
+                    $headers,
+                    $query->with('assignments')->get()->flatMap(function ($gateway) use ($includeSecrets) {
+                        return $this->gsmExportRows($gateway, $includeSecrets);
+                    }),
+                    'gsm-gateways.xlsx'
+                );
+            } else {
+                $headers = [
+                    'Hostname IP',
+                    'Serial Number',
+                    'Plan',
+                    'Port',
+                    'Network',
+                    'Function',
+                    'Site',
+                ];
+                if ($includeSecrets) {
+                    $headers[] = 'User';
+                    $headers[] = 'Password';
+                }
+                $path = $xlsx->export(
+                    $headers,
+                    $query->cursor()->map(function ($gateway) use ($includeSecrets) {
+                        $row = [
+                            $gateway->ip_address,
+                            $gateway->site_code,
+                            $gateway->plan,
+                            $gateway->port,
+                            $gateway->network,
+                            $gateway->device_function,
+                            $gateway->site_name,
+                        ];
+                        if ($includeSecrets) {
+                            $row[] = $gateway->username;
+                            $row[] = $gateway->password;
+                        }
 
-                    return $row;
-                }),
-                $this->isGsm() ? 'gsm-gateways.xlsx' : 'media-gateways.xlsx'
-            );
+                        return $row;
+                    }),
+                    'media-gateways.xlsx'
+                );
+            }
         } catch (\Throwable $exception) {
             return back()->with('error', PublicError::failed('Export', $exception));
         }
@@ -300,17 +450,24 @@ class MediaGatewayController extends Controller
     {
         $search = trim((string) $request->query('search', ''));
         $query = MediaGateway::query();
+        if ($this->isGsm()) {
+            $query->with('assignments');
+        }
 
         if ($search !== '') {
             $query->where(function ($query) use ($search) {
                 $query->where('site_name', 'like', "%{$search}%")
                     ->orWhere('site_code', 'like', "%{$search}%")
                     ->orWhere('ip_address', 'like', "%{$search}%")
+                    ->orWhere('hostname', 'like', "%{$search}%")
                     ->orWhere('plan', 'like', "%{$search}%")
                     ->orWhere('port', 'like', "%{$search}%")
                     ->orWhere('network', 'like', "%{$search}%")
                     ->orWhere('device_function', 'like', "%{$search}%")
                     ->orWhere('username', 'like', "%{$search}%");
+                if (ctype_digit($search)) {
+                    $query->orWhere('channel_count', (int) $search);
+                }
             });
         }
 
@@ -322,6 +479,43 @@ class MediaGatewayController extends Controller
         $sort = $request->query('sort_by');
 
         return in_array($sort, self::SORTABLE_COLUMNS, true) ? $sort : 'id';
+    }
+
+    /**
+     * @return list<list<mixed>>
+     */
+    private function gsmExportRows(MediaGateway $gateway, bool $includeSecrets): array
+    {
+        $base = [
+            (string) ($gateway->hostname ?? ''),
+            (string) $gateway->ip_address,
+            (string) $gateway->site_code,
+            $gateway->channel_count === null ? '' : (string) $gateway->channel_count,
+            (string) ($gateway->device_function ?? ''),
+            (string) $gateway->site_name,
+        ];
+        if ($includeSecrets) {
+            $base[] = (string) $gateway->username;
+            $base[] = (string) ($gateway->password ?? '');
+        }
+
+        $assignments = $gateway->assignmentPayload();
+        if ($assignments === []) {
+            return [array_merge($base, ['', '', '', '', ''])];
+        }
+
+        $rows = [];
+        foreach ($assignments as $assignment) {
+            $rows[] = array_merge($base, [
+                (string) ($assignment['port'] ?? ''),
+                (string) ($assignment['imei'] ?? ''),
+                (string) ($assignment['mobile_number'] ?? ''),
+                (string) ($assignment['network'] ?? ''),
+                (string) ($assignment['plan'] ?? ''),
+            ]);
+        }
+
+        return $rows;
     }
 
     protected function inventoryImportConfig(Request $request): array

@@ -6,6 +6,7 @@ use App\Models\ChannelAllocation;
 use App\Models\ChannelAllocationCampaign;
 use App\Models\MediaGateway;
 use App\Models\PdcServer;
+use App\Support\GsmGatewayImportMapper;
 use App\Support\ProgramInboundImportMapper;
 
 class InventoryImportCatalog
@@ -20,6 +21,9 @@ class InventoryImportCatalog
         $config = $modules[$module];
         $extras = self::operationExtras($module);
         $fields = $config['table_columns'] ?? $config['columns'];
+        if (OperationCatalog::isSim($module)) {
+            $fields = OperationCatalog::simFormFields();
+        }
         if (! empty($extras['extra_fields']) && is_array($extras['extra_fields'])) {
             $fields = array_merge($fields, $extras['extra_fields']);
             unset($extras['extra_fields']);
@@ -39,28 +43,64 @@ class InventoryImportCatalog
      */
     public static function gateway(string $key = 'gsm-gateways'): array
     {
-        $title = $key === 'media-gateways' ? 'Media Gateways' : 'GSM Gateways';
+        if ($key === 'media-gateways') {
+            return [
+                'key' => $key,
+                'title' => 'Media Gateways',
+                'model' => MediaGateway::class,
+                'fields' => [
+                    'ip_address' => 'Hostname IP',
+                    'site_code' => 'Serial Number',
+                    'plan' => 'Plan',
+                    'port' => 'Port',
+                    'network' => 'Network',
+                    'device_function' => 'Function',
+                    'site_name' => 'Site',
+                    'username' => 'User',
+                    'password' => 'Password',
+                ],
+                'required' => ['ip_address', 'site_code', 'site_name', 'username'],
+                'ip_fields' => ['ip_address'],
+                'unique' => ['site_code'],
+                'include_id' => false,
+                'filename' => $key,
+            ];
+        }
 
         return [
             'key' => $key,
-            'title' => $title,
+            'title' => 'GSM Gateways',
             'model' => MediaGateway::class,
             'fields' => [
-                'ip_address' => 'Hostname IP',
+                'hostname' => 'Hostname',
+                'ip_address' => 'IP',
                 'site_code' => 'Serial Number',
-                'plan' => 'Plan',
-                'port' => 'Port',
-                'network' => 'Network',
+                'channel_count' => 'Channel Count',
                 'device_function' => 'Function',
                 'site_name' => 'Site',
                 'username' => 'User',
                 'password' => 'Password',
+                'assignment_port' => 'Port',
+                'imei' => 'IMEI',
+                'mobile_number' => 'Mobile Number',
+                'assignment_network' => 'Network',
+                'assignment_plan' => 'Plan',
             ],
-            'required' => ['ip_address', 'site_code', 'site_name', 'username'],
-            'ip_fields' => ['ip_address'],
-            'unique' => ['site_code'],
+            'required' => ['hostname', 'ip_address', 'site_code', 'channel_count', 'device_function', 'site_name', 'username'],
+            'ip_fields' => [],
+            'unique' => [],
+            'integer_fields' => ['channel_count', 'assignment_port'],
+            'options' => [
+                'site_name' => OperationCatalog::locationNames(),
+            ],
+            'no_carry' => ['assignment_port', 'imei', 'mobile_number', 'assignment_network', 'assignment_plan'],
+            'header_aliases' => [
+                'IP Address' => 'ip_address',
+            ],
             'include_id' => false,
             'filename' => $key,
+            'to_record' => [GsmGatewayImportMapper::class, 'map'],
+            'commit' => [GsmGatewayImportMapper::class, 'commit'],
         ];
     }
 
@@ -138,6 +178,20 @@ class InventoryImportCatalog
     }
 
     /**
+     * @return list<string>
+     */
+    public static function existingGsmGatewayIps(): array
+    {
+        return array_values(array_unique(array_filter(
+            MediaGateway::query()
+                ->whereNotNull('ip_address')
+                ->pluck('ip_address')
+                ->map(fn ($ip) => strtolower(trim((string) $ip)))
+                ->all()
+        )));
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private static function operationExtras(string $module): array
@@ -211,7 +265,7 @@ class InventoryImportCatalog
         return [
             'required' => ['imei', 'mobile_number'],
             'unique' => ['imei', 'mobile_number'],
-            'ip_fields' => ['ip_address'],
+            'gateway_ip_fields' => ['ip_address'],
             'mdy_date_fields' => ['contract_start', 'contract_end'],
             'include_id' => false,
         ];

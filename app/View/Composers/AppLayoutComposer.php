@@ -27,6 +27,7 @@ class AppLayoutComposer
             'network-prefix' => ['network-prefix', 'Network Prefix'],
             'pdc-servers' => ['pdc-servers', 'PDC Servers'],
             'sip-channels' => ['sip-channels', 'SIP Channels'],
+            'channel-range-list' => ['channel-range-list', 'Channel Range List'],
             'channel-allocation' => ['channel-allocation', 'Channel Allocation'],
             'campaigns' => ['campaigns', 'Campaigns'],
             'archive-recordings' => ['archive-recordings', 'Archive Recordings'],
@@ -45,7 +46,8 @@ class AppLayoutComposer
 
         if ($name === 'program-location.show') {
             $slug = (string) Route::current()->parameter('location');
-            $label = \App\Support\OperationCatalog::locations()[$slug] ?? 'Program Location';
+            $label = \App\Support\OperationCatalog::programLocationLabels()[$slug]
+                ?? (\App\Support\OperationCatalog::locationMapSites()[$slug]['name'] ?? 'Program Location');
             $pageKey = 'location-'.$slug;
             $pageTitle = $label;
         }

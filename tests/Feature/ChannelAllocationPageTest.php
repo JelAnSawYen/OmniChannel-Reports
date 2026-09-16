@@ -114,21 +114,24 @@ class ChannelAllocationPageTest extends TestCase
             ->assertDontSee('All Priorities')
             ->assertDontSee('Add Channel Allocation');
 
-        $this->assertTrue(str_contains($html, '>SIP Channels</span></a>') && str_contains($html, '>Channel Allocation</span></a>'));
-        $this->assertTrue(strpos($html, '>SIP Channels</span></a>') < strpos($html, '>Channel Allocation</span></a>'));
+        $this->assertTrue(str_contains($html, '>SIP Channels</span>') && str_contains($html, '>Channel Allocation</span></a>'));
+        $this->assertTrue(strpos($html, '>SIP Channels</span>') < strpos($html, '>Channel Allocation</span></a>'));
         $this->assertTrue(strpos($html, '>Channel Allocation</span></a>') < strpos($html, '>Archive Recordings</span></a>'));
         $this->assertStringContainsString('class="import-upload-error"', $html);
         $this->assertMatchesRegularExpression('/id="campaign_fte"[^>]*\breadonly\b/', $html);
         $this->assertDoesNotMatchRegularExpression('/id="campaign_fte"[^>]*\bname="fte"/', $html);
         $this->assertStringContainsString('id="campaign_id"', $html);
-        $this->assertStringContainsString('>Select Campaign</option>', $html);
+        $this->assertStringContainsString('Select or type a campaign...', $html);
         $this->assertStringContainsString('data-fte="5"', $html);
-        $this->assertStringContainsString('>Atome</option>', $html);
+        $this->assertStringContainsString('>Atome</button>', $html);
         $css = file_get_contents(resource_path('css/app.css'));
         $this->assertMatchesRegularExpression('/\.modal-backdrop\s*\{[^}]*visibility:\s*hidden/', $css);
+        $this->assertMatchesRegularExpression('/\.ca-menu-dropdown \{\s*position: absolute;\s*right: 0;\s*left: auto;\s*top: calc\(100% \+ 3\.75px\);/', $css);
+        $this->assertStringContainsString('body[data-page="channel-allocation"] .table-card', $css);
         $js = file_get_contents(resource_path('js/app.js'));
         $this->assertStringContainsString('omnichannel.expandedView', $js);
         $this->assertStringContainsString('initPreserveExpandedView', $js);
+        $this->assertStringNotContainsString('if(e.target===m)', $js);
         $this->assertDoesNotMatchRegularExpression('/id="importUploadError"[^>]*\bflash\b/', $html);
 
         $this->assertEquals(1, ChannelAllocationCampaign::where('name', 'Atome')->count());
@@ -186,6 +189,14 @@ class ChannelAllocationPageTest extends TestCase
             'campaign_id' => $beta->id,
             'media_gateway' => '10.0.0.2',
         ])->assertRedirect();
+        $this->post('/channel-allocation', [
+            'campaign' => 'Typed CA Campaign',
+            'caller_id' => '999',
+        ])->assertRedirect();
+        $this->assertDatabaseHas('channel_allocation_campaigns', [
+            'name' => 'Typed CA Campaign',
+            'caller_id' => '999',
+        ]);
         $this->post('/channel-allocation/'.$alpha->id.'/allocations', [
             'media_gateway' => 'PDC-MG1',
             'channel_allocation' => 'CH-A2',
@@ -316,7 +327,8 @@ class ChannelAllocationPageTest extends TestCase
             ->assertOk()
             ->assertSee('Showing 1 to 5 of 12 campaigns')
             ->assertSee('Camp 1</button>', false)
-            ->assertDontSee('Camp 12</button>', false);
+            ->assertSee('title="Expand Camp 1"', false)
+            ->assertDontSee('title="Expand Camp 12"', false);
 
         $this->get('/channel-allocation?per_page=5&page=3')
             ->assertOk()
@@ -379,7 +391,7 @@ class ChannelAllocationPageTest extends TestCase
     private function createGsmGateway(string $siteCode): MediaGateway
     {
         return MediaGateway::create([
-            'site_name' => 'PDC',
+            'site_name' => 'WFH',
             'site_code' => $siteCode,
             'ip_address' => '10.24.28.'.random_int(20, 250),
             'username' => 'root',

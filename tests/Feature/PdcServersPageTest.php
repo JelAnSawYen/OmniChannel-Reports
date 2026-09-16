@@ -57,8 +57,8 @@ class PdcServersPageTest extends TestCase
             ->assertSee('Atome')
             ->assertDontSee('Hardcoded Campaign');
 
-        $this->assertStringContainsString('>BPI Collection</option>', $html);
-        $this->assertStringContainsString('>Atome</option>', $html);
+        $this->assertStringContainsString('>BPI Collection</button>', $html);
+        $this->assertStringContainsString('>Atome</button>', $html);
         $this->assertStringNotContainsString('data-used', $html);
         $this->assertStringNotContainsString('filterCampaignOptions', $html);
 
@@ -67,7 +67,7 @@ class PdcServersPageTest extends TestCase
         }
         $this->assertStringNotContainsString('PDC – Taytay', $html);
         $this->assertSame(2, ChannelAllocationCampaign::count());
-        $this->assertSame(6, count(OperationCatalog::locations()));
+        $this->assertSame(7, count(OperationCatalog::locations()));
     }
 
     public function test_main_table_is_expandable_campaign_structure(): void
@@ -102,6 +102,8 @@ class PdcServersPageTest extends TestCase
         $html = $this->get('/pdc-servers')->assertOk()->getContent();
         $groupForm = \Illuminate\Support\Str::between($html, 'id="pdcGroupForm"', 'id="pdcServerForm"');
         $this->assertStringContainsString('id="pdc_campaign_id"', $groupForm);
+        $this->assertStringContainsString('pin-campaign-combo', $groupForm);
+        $this->assertStringContainsString('Select or type a campaign...', $groupForm);
         $this->assertStringContainsString('id="pdc_location"', $groupForm);
         $this->assertStringContainsString('id="pdc_date_endorse"', $groupForm);
         $this->assertStringContainsString('id="pdc_dns"', $groupForm);
@@ -123,12 +125,21 @@ class PdcServersPageTest extends TestCase
         ])->assertRedirect();
 
         $html = $this->get('/pdc-servers')->assertOk()->getContent();
-        $select = \Illuminate\Support\Str::between($html, 'id="pdc_campaign_id"', '</select>');
-        $this->assertStringContainsString('>BPI Collection</option>', $select);
-        $this->assertStringContainsString('>Atome</option>', $select);
-        $this->assertStringContainsString('>Mynt</option>', $select);
-        $this->assertStringNotContainsString('data-used', $select);
+        $menu = \Illuminate\Support\Str::between($html, 'id="pdcCampaignMenu"', '</div>');
+        $this->assertStringContainsString('>BPI Collection</button>', $menu);
+        $this->assertStringContainsString('>Atome</button>', $menu);
+        $this->assertStringContainsString('>Mynt</button>', $menu);
+        $this->assertStringNotContainsString('data-used', $html);
         $this->assertStringNotContainsString('filterCampaignOptions', $html);
+
+        $this->post('/pdc-servers', [
+            'campaign' => 'Typed PDC Campaign',
+            'location' => 'WFH',
+        ])->assertRedirect();
+        $this->assertDatabaseHas('channel_allocation_campaigns', ['name' => 'Typed PDC Campaign']);
+        $this->assertTrue(
+            PdcGroup::query()->whereHas('campaign', fn ($campaigns) => $campaigns->where('name', 'Typed PDC Campaign'))->exists()
+        );
     }
 
     public function test_date_endorse_accepts_valid_and_rejects_invalid_dates(): void

@@ -19,14 +19,23 @@ class OperationCatalog
 {
     public static function locations(): array
     {
-        $locations = [
+        $display = [
             'alcar' => 'Alcar',
             'ctn' => 'CTN',
             'estancia' => 'Estancia',
-            'pdc' => 'PDC',
-            'scs' => 'SCS',
+            'scs' => 'SC5',
             'skyrise' => 'Skyrise',
         ];
+
+        $locations = [];
+        foreach (self::locationMapSites() as $slug => $site) {
+            if ($slug === 'pdc' || strcasecmp((string) ($site['name'] ?? ''), 'PDC') === 0) {
+                $locations['wfh'] = 'WFH';
+                continue;
+            }
+
+            $locations[$slug] = $display[$slug] ?? $site['name'];
+        }
 
         uasort($locations, fn (string $left, string $right) => strnatcasecmp($left, $right));
 
@@ -71,7 +80,7 @@ class OperationCatalog
                 'assigned' => true,
             ],
             'scs' => [
-                'name' => 'SCS',
+                'name' => 'SC5',
                 'address' => '3F Silver City 5 (formerly Transcom Building), Eulogio Rodriguez Jr. Ave., Pasig City',
                 'lat' => 14.5872126,
                 'lng' => 121.0788446,
@@ -91,6 +100,24 @@ class OperationCatalog
                 'lng' => 121.0165333,
                 'assigned' => false,
             ],
+        ];
+    }
+
+    /**
+     * Display labels for Program Location pages. Keys match locationMapSites slugs.
+     *
+     * @return array<string, string>
+     */
+    public static function programLocationLabels(): array
+    {
+        return [
+            'alcar' => 'Alcar',
+            'cg3' => 'CG3',
+            'ctn' => 'CTN',
+            'estancia' => 'Estancia',
+            'scs' => 'SC5',
+            'skyrise' => 'Skyrise',
+            'pdc' => 'PDC',
         ];
     }
 
@@ -158,7 +185,7 @@ class OperationCatalog
             ],
             'sip-channels' => [
                 'title' => 'SIP Channels',
-                'description' => 'Manage SIP channel campaigns, ETPI names, ranges, and activation dates.',
+                'description' => 'Manage SIP channel campaigns, ranges, and activation dates.',
                 'model' => SipChannel::class,
                 'columns' => [
                     'etpi_sip_name' => 'ETPI SIP NAME',
@@ -188,22 +215,22 @@ class OperationCatalog
                 'title' => 'Globe SIM',
                 'description' => 'Manage Globe SIM inventory and assignments.',
                 'model' => GlobeSim::class,
-                'columns' => self::simColumns(),
-                'fields' => array_keys(self::simColumns()),
+                'columns' => self::simTableColumns(),
+                'fields' => array_keys(self::simFormFields()),
             ],
             'smart-sim' => [
                 'title' => 'Smart SIM',
                 'description' => 'Manage Smart SIM inventory and assignments.',
                 'model' => SmartSim::class,
-                'columns' => self::simColumns(),
-                'fields' => array_keys(self::simColumns()),
+                'columns' => self::simTableColumns(),
+                'fields' => array_keys(self::simFormFields()),
             ],
             'program-inbound-numbers' => [
                 'title' => 'Program Inbound Numbers',
                 'description' => 'Manage inbound numbers assigned to programs and locations.',
                 'model' => ProgramInboundNumber::class,
                 'columns' => ['number' => 'Number', 'program' => 'Program', 'location' => 'Location', 'assigned_channel' => 'Assigned Channel', 'status' => 'Status'],
-                'fields' => ['campaign', 'mobile_numbers', 'landline_numbers', 'media_gateway_id', 'port', 'network', 'remarks'],
+                'fields' => ['campaign', 'network', 'mobile_numbers', 'landline_numbers', 'remarks'],
                 'table_columns' => [
                     'campaign' => 'Campaign',
                     'mobile' => 'Mobile',
@@ -254,16 +281,44 @@ class OperationCatalog
     }
 
     /**
+     * Globe / Smart SIM table columns.
+     *
+     * @return array<string, string>
+     */
+    public static function simTableColumns(): array
+    {
+        return [
+            'imei' => 'IMEI',
+            'mobile_number' => 'Mobile Number',
+            'plan' => 'Plan',
+            'ip_address' => 'IP',
+            'port' => 'Port',
+            'account_number' => 'Account Number',
+            'contract_start' => 'Contract Start',
+            'contract_end' => 'Contract End',
+        ];
+    }
+
+    /**
      * Shared Globe / Smart SIM field map. Keys are database columns; values are UI labels.
      *
      * @return array<string, string>
      */
     public static function simColumns(): array
     {
+        return self::simTableColumns();
+    }
+
+    /**
+     * Globe / Smart SIM add/edit and Data Transfer fields. Port comes from GSM Gateway assignments.
+     *
+     * @return array<string, string>
+     */
+    public static function simFormFields(): array
+    {
         return [
             'imei' => 'IMEI',
             'mobile_number' => 'Mobile Number',
-            'network' => 'Network',
             'plan' => 'Plan',
             'ip_address' => 'IP',
             'account_number' => 'Account Number',
@@ -299,6 +354,6 @@ class OperationCatalog
      */
     public static function simTransferColumns(): array
     {
-        return self::simColumns();
+        return self::simFormFields();
     }
 }

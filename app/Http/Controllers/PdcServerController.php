@@ -311,17 +311,35 @@ class PdcServerController extends Controller
      */
     private function validateGroup(Request $request, ?int $id = null): array
     {
-        $data = $request->validate([
-            'campaign_id' => [
-                'required',
-                'integer',
-                Rule::exists('channel_allocation_campaigns', 'id'),
-                Rule::unique('pdc_groups', 'campaign_id')->ignore($id),
-            ],
+        $request->validate([
+            'campaign' => ['required_without:campaign_id', 'nullable', 'string', 'max:255'],
+            'campaign_id' => ['required_without:campaign', 'nullable', 'integer'],
             'location' => ['nullable', 'string', Rule::in(array_values(OperationCatalog::locations()))],
             'date_endorse' => ['nullable', 'string'],
             'dns' => ['nullable', 'string', 'max:2000'],
         ]);
+
+        $campaign = ChannelAllocationCampaign::fromFormValue(
+            $request->input('campaign'),
+            $request->input('campaign_id')
+        );
+        if ($campaign === null) {
+            throw ValidationException::withMessages([
+                'campaign' => 'Please select or type a campaign.',
+            ]);
+        }
+
+        validator(
+            ['campaign_id' => $campaign->id],
+            ['campaign_id' => [Rule::unique('pdc_groups', 'campaign_id')->ignore($id)]]
+        )->validate();
+
+        $data = [
+            'campaign_id' => $campaign->id,
+            'location' => $request->input('location'),
+            'date_endorse' => $request->input('date_endorse'),
+            'dns' => $request->input('dns'),
+        ];
 
         $parsed = PdcEndorseDate::parse($data['date_endorse'] ?? '');
         if (! $parsed['valid']) {

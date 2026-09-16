@@ -129,12 +129,12 @@
             <div class="form-grid">
                 <div class="form-group full">
                     <label for="arAddCampaign">Campaign</label>
-                    <select class="form-control" id="arAddCampaign" required>
-                        <option value="" selected disabled hidden>Select Campaign</option>
-                        @foreach($campaigns as $campaign)
-                            <option value="{{ $campaign->id }}">{{ $campaign->name }}</option>
-                        @endforeach
-                    </select>
+                    @include('partials.campaign-combo', [
+                        'inputId' => 'arAddCampaign',
+                        'inputName' => 'campaign',
+                        'menuId' => 'arCampaignMenu',
+                        'campaigns' => $campaigns,
+                    ])
                 </div>
                 <div class="form-group">
                     <label for="arAddYear">Year</label>
@@ -449,7 +449,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const formData = new FormData();
-        formData.append('campaign_id', addCampaign.value);
+        formData.append('campaign', addCampaign.value);
         formData.append('year', addYear.value);
         formData.append('month', addMonth.value);
         formData.append('location', document.getElementById('arAddLocation')?.value || '');

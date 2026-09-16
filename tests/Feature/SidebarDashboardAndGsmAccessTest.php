@@ -49,9 +49,27 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             ->assertSee('class="nav-item nav-parent-row" id="networkToggle"', false)
             ->assertSee('id="networkCaret"', false)
             ->assertSee('class="nav-caret" id="networkCaret"', false)
+            ->assertSee('id="sipChannelsGroup"', false)
+            ->assertSee('id="sipChannelsToggle"', false)
+            ->assertSee('href="'.url('/sip-channels').'"', false)
+            ->assertSee('id="sipChannelsCaret"', false)
+            ->assertSee('id="sipChannelsSub"', false)
+            ->assertSee('>Channel Range List</span></a>', false)
             ->assertDontSee('<button type="button" class="nav-caret"', false)
             ->assertDontSee('>⌃</span>', false)
             ->assertDontSee('>⌄</span>', false);
+
+        $html = $this->get('/dashboard')->getContent();
+        $sipSub = \Illuminate\Support\Str::betweenFirst($html, 'id="sipChannelsSub"', '</div>');
+        $this->assertStringContainsString('Channel Range List', $sipSub);
+        $this->assertStringNotContainsString('SIP Channels', $sipSub);
+        $this->assertStringContainsString('id="networkToggle"', $html);
+        $this->assertStringContainsString('<button type="button" class="nav-item nav-parent-row" id="networkToggle"', $html);
+        $this->assertStringContainsString('href="'.url('/sip-channels').'"', $html);
+        $this->get('/channel-range-list')
+            ->assertOk()
+            ->assertSee('class="nav-group open" id="sipChannelsGroup"', false)
+            ->assertSee('>Channel Range List</span></a>', false);
     }
 
     public function test_sidebar_operations_and_locations_are_reachable(): void
@@ -71,6 +89,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             '/campaigns' => 'Campaigns',
             '/pdc-servers' => 'PDC Servers',
             '/sip-channels' => 'SIP Channels',
+            '/channel-range-list' => 'Channel Range List',
             '/channel-allocation' => 'Channel Allocation',
             '/archive-recordings' => 'Archive Recordings',
             '/gsm-gateways' => 'GSM Gateway Server List',
@@ -82,7 +101,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             '/program-location' => 'Program Location',
             '/program-location/alcar' => 'Alcar',
             '/program-location/ctn' => 'CTN',
-            '/program-location/scs' => 'SCS',
+            '/program-location/scs' => 'SC5',
             '/program-location/pdc' => 'PDC',
             '/program-location/estancia' => 'Estancia',
             '/program-location/skyrise' => 'Skyrise',
@@ -116,15 +135,14 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             ->assertSee('class="plus-btn"', false)
             ->assertSee('class="table-card table-wrap"', false)
             ->assertSee('class="table-footer"', false)
-            ->assertSee('Hostname IP')
+            ->assertSee('Hostname')
             ->assertSee('Serial Number')
-            ->assertSee('>Plan<', false)
-            ->assertSee('>Port<', false)
-            ->assertSee('>Network<', false)
+            ->assertSee('Channel Count')
             ->assertSee('>Function<', false)
             ->assertSee('>Site<', false)
             ->assertSee('>User<', false)
             ->assertSee('>Password<', false)
+            ->assertDontSee('Hostname IP')
             ->assertSee('pdc-secret-toggle', false)
             ->assertDontSee('>Id</span>', false)
             ->assertDontSee('>Media Gateways</span>', false)
@@ -142,6 +160,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             '/campaigns' => 'Campaigns',
             '/pdc-servers' => 'PDC Servers',
             '/sip-channels' => 'SIP Channels',
+            '/channel-range-list' => 'Channel Range List',
             '/channel-allocation' => 'Channel Allocation',
             '/archive-recordings' => 'Archive Recordings',
             '/gsm-gateways' => 'GSM Gateway',
@@ -256,9 +275,13 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         $this->get('/user-types')->assertNotFound();
 
         $this->postJson('/gsm-gateways', [
+            'hostname' => 'gsm-admin-'.$this->adminType->id,
             'site_name' => 'Alcar',
             'site_code' => 'ALC-'.$this->adminType->id,
             'ip_address' => '10.9.9.'.$this->adminType->id,
+            'channel_count' => 8,
+            'device_function' => 'Outbound',
+            'network' => 'Globe SIM',
             'username' => 'root',
             'database' => 'asteriskcdrdb',
         ])->assertCreated();
@@ -290,12 +313,18 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             ->assertSee('data-can-edit="0"', false)
             ->assertSee('data-can-delete="0"', false)
             ->assertDontSee('action-btn edit', false)
-            ->assertDontSee('action-btn delete', false);
+            ->assertDontSee('action-btn delete', false)
+            ->assertDontSee('ca-menu-item edit', false)
+            ->assertDontSee('ca-menu-item delete', false);
 
         $this->putJson('/gsm-gateways/'.$gateway->id, [
+            'hostname' => 'hacked-host',
             'site_name' => 'Hacked',
             'site_code' => 'STD-GSM',
             'ip_address' => '10.8.8.8',
+            'channel_count' => 8,
+            'device_function' => 'Inbound',
+            'network' => 'Globe SIM',
             'username' => 'root',
             'database' => 'asteriskcdrdb',
         ])->assertForbidden();
@@ -351,6 +380,85 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         foreach ($rows as $row) {
             $this->assertNotContains($secret, $row);
         }
+    }
+
+    public function test_gsm_sim_assignments_use_existing_inventory_and_gateway_ip(): void
+    {
+        $this->actingAs($this->user($this->adminType));
+
+        $globe = \App\Models\GlobeSim::create([
+            'imei' => '123456789012345',
+            'mobile_number' => '09171234567',
+            'plan' => 'Corporate',
+            'network' => 'Globe',
+            'status' => 'Active',
+        ]);
+        $smart = \App\Models\SmartSim::create([
+            'imei' => '987654321098765',
+            'mobile_number' => '09181234567',
+            'plan' => 'Unli Data',
+            'network' => 'Smart',
+            'status' => 'Active',
+        ]);
+
+        $create = $this->postJson('/gsm-gateways', [
+            'hostname' => 'gsm_smart_mn201',
+            'site_name' => 'Alcar',
+            'site_code' => 'SN654321',
+            'ip_address' => '10.5.20.201',
+            'channel_count' => 2,
+            'device_function' => 'Inbound',
+            'username' => 'root',
+        ])->assertCreated();
+
+        $gatewayId = $create->json('record.id');
+        $this->assertNotEmpty($gatewayId);
+        $this->assertSame([], $create->json('record.assignments'));
+
+        $this->getJson('/gsm-gateways/sims?network=Globe SIM')
+            ->assertOk()
+            ->assertJsonFragment(['imei' => '123456789012345', 'sim_type' => 'globe']);
+
+        $first = $this->postJson('/gsm-gateways/'.$gatewayId.'/assignments', [
+            'network' => 'Globe SIM',
+            'sim_id' => $globe->id,
+        ])->assertCreated();
+
+        $this->assertSame(1, $first->json('record.assignments.0.port'));
+        $this->assertSame('10.5.20.201', $first->json('record.assignments.0.ip_address'));
+        $this->assertSame('123456789012345', $first->json('record.assignments.0.imei'));
+        $this->assertSame('Corporate', $first->json('record.assignments.0.plan'));
+
+        $second = $this->postJson('/gsm-gateways/'.$gatewayId.'/assignments', [
+            'network' => 'Smart SIM',
+            'sim_id' => $smart->id,
+        ])->assertCreated();
+        $this->assertSame(2, $second->json('record.assignments.1.port'));
+        $this->assertSame('10.5.20.201', $second->json('record.assignments.1.ip_address'));
+
+        $this->postJson('/gsm-gateways/'.$gatewayId.'/assignments', [
+            'network' => 'Globe SIM',
+            'sim_id' => $globe->id,
+        ])->assertUnprocessable();
+
+        $this->assertSame(1, \App\Models\GlobeSim::count());
+        $this->assertSame(1, \App\Models\SmartSim::count());
+        $this->assertSame(2, \App\Models\GatewaySimAssignment::count());
+
+        $page = $this->get('/gsm-gateways')->assertOk();
+        $page->assertSee('123456789012345')
+            ->assertSee('09181234567')
+            ->assertSee('class="action-btn edit"', false)
+            ->assertSee('class="action-btn delete"', false)
+            ->assertSee('data-gsm-sim-add="'.$gatewayId.'"', false)
+            ->assertDontSee('SIM Assignments (', false)
+            ->assertDontSee('type="radio"', false);
+
+        $this->actingAs($this->user($this->standardType));
+        $this->postJson('/gsm-gateways/'.$gatewayId.'/assignments', [
+            'network' => 'Globe SIM',
+            'sim_id' => $globe->id,
+        ])->assertForbidden();
     }
 
     public function test_sim_inventory_card_opens_a_selection_modal_for_globe_and_smart(): void

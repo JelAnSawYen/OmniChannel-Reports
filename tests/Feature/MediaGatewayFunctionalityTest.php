@@ -40,7 +40,7 @@ class MediaGatewayFunctionalityTest extends TestCase
         ]);
 
         MediaGateway::create([
-            'site_name' => 'PDC',
+            'site_name' => 'WFH',
             'site_code' => 'PDC-MG1',
             'ip_address' => '10.24.28.54',
             'username' => 'root',
@@ -106,7 +106,7 @@ class MediaGatewayFunctionalityTest extends TestCase
         $this->actingAsAdministrator();
 
         MediaGateway::create([
-            'site_name' => 'PDC',
+            'site_name' => 'WFH',
             'site_code' => 'PDC-MG1',
             'ip_address' => '10.24.28.54',
             'username' => 'root',

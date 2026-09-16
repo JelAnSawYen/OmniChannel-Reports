@@ -16,10 +16,10 @@ class StoreMediaGatewayRequest extends FormRequest
 
     public function rules(): array
     {
-        return [
+        $rules = [
             'site_name' => $this->siteNameRules(),
             'site_code' => ['required', 'string', 'max:255', 'unique:media_gateways,site_code'],
-            'ip_address' => ['required', 'ip', 'unique:media_gateways,ip_address'],
+            'ip_address' => ['required', $this->isGsm() ? 'ipv4' : 'ip', 'unique:media_gateways,ip_address'],
             'plan' => ['nullable', 'string', 'max:255'],
             'port' => ['nullable', 'string', 'max:50'],
             'network' => ['nullable', 'string', 'max:255'],
@@ -27,6 +27,14 @@ class StoreMediaGatewayRequest extends FormRequest
             'username' => ['required', 'string', 'max:255'],
             'password' => ['nullable', 'string', 'max:255'],
         ];
+
+        if ($this->isGsm()) {
+            $rules['hostname'] = ['required', 'string', 'max:255'];
+            $rules['channel_count'] = ['required', 'integer', 'min:1', 'max:512'];
+            $rules['device_function'] = ['required', 'string', 'max:255'];
+        }
+
+        return $rules;
     }
 
     protected function passedValidation(): void
@@ -34,12 +42,17 @@ class StoreMediaGatewayRequest extends FormRequest
         $this->canonicalizeGsmSite();
     }
 
+    private function isGsm(): bool
+    {
+        return str_starts_with((string) $this->route()?->getName(), 'gsm-gateways');
+    }
+
     /**
      * @return list<string|\Illuminate\Validation\Rules\In>
      */
     private function siteNameRules(): array
     {
-        if (! str_starts_with((string) $this->route()?->getName(), 'gsm-gateways')) {
+        if (! $this->isGsm()) {
             return ['required', 'string', 'max:255'];
         }
 
@@ -48,7 +61,7 @@ class StoreMediaGatewayRequest extends FormRequest
 
     private function canonicalizeGsmSite(): void
     {
-        if (! str_starts_with((string) $this->route()?->getName(), 'gsm-gateways')) {
+        if (! $this->isGsm()) {
             return;
         }
 

@@ -118,6 +118,7 @@ class ProgramLocationAndDataTransferTest extends TestCase
             ->assertSee('PDC')
             ->assertSee('SKYRISE')
             ->assertSee('CG3')
+            ->assertSee('SC5')
             ->assertDontSee('With GSM Gateway')
             ->assertDontSee('Without GSM Gateway')
             ->assertDontSee('unpkg.com')
@@ -131,7 +132,7 @@ class ProgramLocationAndDataTransferTest extends TestCase
 
         $sites = $this->mapSitesFromHtml($index->getContent());
         $this->assertSame(
-            ['ALCAR', 'CG3', 'CTN', 'ESTANCIA', 'SCS', 'SKYRISE', 'PDC'],
+            ['ALCAR', 'CG3', 'CTN', 'ESTANCIA', 'SC5', 'SKYRISE', 'PDC'],
             array_column($sites, 'name')
         );
         $byName = collect($sites)->keyBy('name');
@@ -139,7 +140,7 @@ class ProgramLocationAndDataTransferTest extends TestCase
         $this->assertTrue($byName['CG3']['available']);
         $this->assertTrue($byName['CTN']['available']);
         $this->assertTrue($byName['ESTANCIA']['available']);
-        $this->assertTrue($byName['SCS']['available']);
+        $this->assertTrue($byName['SC5']['available']);
         $this->assertTrue($byName['SKYRISE']['available']);
         $this->assertFalse($byName['PDC']['available']);
         $this->assertSame('6819 Ayala Avenue, Makati City, RCBC Plaza', $byName['PDC']['address']);

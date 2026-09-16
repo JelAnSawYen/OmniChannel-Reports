@@ -62,7 +62,7 @@ class LocationController extends Controller
         return view('locations.show', [
             'locationSlug' => $location,
             'locationName' => $name,
-            'locations' => OperationCatalog::locations(),
+            'locations' => OperationCatalog::programLocationLabels(),
             'columns' => self::COLUMNS,
             'records' => $records,
             'search' => $search,
@@ -196,10 +196,15 @@ class LocationController extends Controller
 
     private function locationName(string $location): string
     {
-        $names = OperationCatalog::locations();
-        abort_unless(isset($names[$location]), 404);
+        $names = OperationCatalog::programLocationLabels();
+        if (isset($names[$location])) {
+            return $names[$location];
+        }
 
-        return $names[$location];
+        $sites = OperationCatalog::locationMapSites();
+        abort_unless(isset($sites[$location]), 404);
+
+        return $sites[$location]['name'];
     }
 
     private function gatewayInLocation(string $locationName, int $id): MediaGateway
@@ -239,7 +244,7 @@ class LocationController extends Controller
     private function rules(?int $id = null): array
     {
         return [
-            'site_name' => ['required', 'string', 'max:255', Rule::in(array_values(OperationCatalog::locations()))],
+            'site_name' => ['required', 'string', 'max:255', Rule::in(array_values(OperationCatalog::programLocationLabels()))],
             'site_code' => ['required', 'string', 'max:255', Rule::unique('media_gateways', 'site_code')->ignore($id)],
             'ip_address' => ['required', 'ip', Rule::unique('media_gateways', 'ip_address')->ignore($id)],
             'username' => ['required', 'string', 'max:255'],

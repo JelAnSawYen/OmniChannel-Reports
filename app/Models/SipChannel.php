@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SipChannel extends Model
 {
@@ -28,5 +29,10 @@ class SipChannel extends Model
     public function campaign(): BelongsTo
     {
         return $this->belongsTo(ChannelAllocationCampaign::class, 'campaign_id');
+    }
+
+    public function channelNumbers(): HasMany
+    {
+        return $this->hasMany(SipChannelNumber::class)->orderBy('channel_number');
     }
 }

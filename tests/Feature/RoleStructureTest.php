@@ -175,6 +175,7 @@ class RoleStructureTest extends TestCase
             '/users/create',
             '/pdc-servers',
             '/sip-channels',
+            '/channel-range-list',
             '/archive-recordings',
             '/program-inbound-numbers',
             '/signal-boosters',

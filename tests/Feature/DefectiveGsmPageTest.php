@@ -82,7 +82,7 @@ class DefectiveGsmPageTest extends TestCase
 
         $this->post('/defective-gsm', [
             'asset_code' => 'GSM-201',
-            'location' => 'SCS',
+            'location' => 'SC5',
             'issue' => 'Dead',
             'reported_on' => '12/31/1999',
             'status' => 'Open',

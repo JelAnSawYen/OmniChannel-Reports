@@ -63,6 +63,7 @@ class InventoryImportService
         }
 
         $existingIps = InventoryImportCatalog::existingIpv4Addresses();
+        $gatewayIps = InventoryImportCatalog::existingGsmGatewayIps();
         $fileIps = [];
         $uniqueTracker = [];
         $carry = [];
@@ -70,6 +71,7 @@ class InventoryImportService
         $payload = [];
         $model = $config['model'];
         $ipFields = $config['ip_fields'] ?? [];
+        $gatewayIpFields = $config['gateway_ip_fields'] ?? [];
         $required = $config['required'] ?? [];
         $unique = $config['unique'] ?? [];
         $compositeUnique = $config['composite_unique'] ?? [];
@@ -135,6 +137,20 @@ class InventoryImportService
                     $errors[] = ($config['fields'][$field] ?? 'IP Address').' already exists';
                 } else {
                     $fileIps[$normalized] = $excelRow;
+                }
+            }
+
+            foreach ($gatewayIpFields as $field) {
+                $ip = trim((string) ($values[$field] ?? ''));
+                if ($ip === '') {
+                    continue;
+                }
+                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+                    $errors[] = ($config['fields'][$field] ?? 'IP Address').' must be a valid IPv4 address';
+                    continue;
+                }
+                if (! in_array(strtolower($ip), $gatewayIps, true)) {
+                    $errors[] = ($config['fields'][$field] ?? 'IP').' must match an existing GSM Gateway IP';
                 }
             }
 
@@ -355,6 +371,10 @@ class InventoryImportService
         $count = 0;
 
         try {
+            if (isset($config['commit']) && is_callable($config['commit'])) {
+                return (int) ($config['commit'])($payload, $config);
+            }
+
             DB::transaction(function () use ($payload, $model, &$count) {
                 $usesSortOrder = in_array('sort_order', (new $model)->getFillable(), true);
                 $sort = $usesSortOrder ? (int) $model::query()->max('sort_order') : 0;
@@ -425,6 +445,9 @@ class InventoryImportService
         foreach ($config['fields'] as $field => $label) {
             $aliases[strtolower($label)] = $field;
             $aliases[strtolower(str_replace('_', ' ', $field))] = $field;
+        }
+        foreach ($config['header_aliases'] ?? [] as $alias => $field) {
+            $aliases[strtolower((string) $alias)] = $field;
         }
 
         $map = [];

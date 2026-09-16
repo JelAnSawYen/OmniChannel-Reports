@@ -11,12 +11,14 @@ class ProgramInboundNumberValidator
     public const NEED_NUMBER = 'Enter at least one Mobile or Landline number.';
     public const GSM_REQUIRED = 'Please select a GSM Gateway.';
     public const GSM_REQUIRED_WITH_MOBILE = 'GSM Gateway is required when Mobile numbers are entered.';
-    public const GSM_MUST_EXIST = 'GSM Gateway must match an existing Hostname IP.';
-    public const PORT_MUST_MATCH = 'Port must match the selected GSM Gateway.';
-    public const NETWORK_MUST_MATCH = 'Network must match the selected GSM Gateway.';
+    public const GSM_MUST_EXIST = 'GSM Gateway must match the Mobile Number assignment.';
+    public const PORT_MUST_MATCH = 'Port must match the Mobile Number assignment.';
+    public const NETWORK_REQUIRED = 'Network is required when Mobile numbers are entered.';
+    public const NETWORK_MUST_MATCH = 'Network must match Globe SIM or Smart SIM.';
     public const GSM_LANDLINE_ONLY = 'GSM Gateway, Port, and Network are only used when Mobile numbers are entered.';
     public const MOBILE_DIGITS = 'Mobile must contain only digits.';
     public const LANDLINE_DIGITS = 'Landline must contain only digits.';
+    public const LANDLINE_MUST_EXIST = 'Landline must match an existing Channel Number.';
     public const NUMBER_DUPLICATED = 'Number is duplicated.';
     public const NUMBER_DUPLICATED_IN_FILE = 'Number is duplicated in the file';
     public const NUMBER_EXISTS = 'Number already exists';
@@ -67,6 +69,21 @@ class ProgramInboundNumberValidator
         }
 
         return $errors;
+    }
+
+    /**
+     * @param  list<string>  $landlines
+     * @return list<string>
+     */
+    public static function landlineSourceErrors(array $landlines): array
+    {
+        foreach ($landlines as $number) {
+            if (self::isValidFormat($number) && ! ProgramInboundSimLookup::isChannelNumber($number)) {
+                return [self::LANDLINE_MUST_EXIST];
+            }
+        }
+
+        return [];
     }
 
     /**

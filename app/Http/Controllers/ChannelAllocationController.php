@@ -70,11 +70,16 @@ class ChannelAllocationController extends Controller
     {
         $data = $request->validate($this->campaignRules(true));
         $allocation = $this->optionalAllocation($request);
+        $campaignRecord = ChannelAllocationCampaign::fromFormValue($data['campaign'] ?? null, $data['campaign_id'] ?? null);
+        if ($campaignRecord === null) {
+            return back()->withErrors(['campaign' => 'Please select or type a campaign.'])->withInput();
+        }
+        unset($data['campaign'], $data['campaign_id']);
 
         try {
-            $campaign = DB::transaction(function () use ($data, $allocation) {
+            $campaign = DB::transaction(function () use ($data, $allocation, $campaignRecord) {
                 $campaign = ChannelAllocationCampaign::query()
-                    ->whereKey((int) $data['campaign_id'])
+                    ->whereKey($campaignRecord->id)
                     ->lockForUpdate()
                     ->firstOrFail();
 
@@ -432,7 +437,8 @@ class ChannelAllocationController extends Controller
             'remarks' => 'nullable|string|max:2000',
         ];
         if ($creating) {
-            $rules['campaign_id'] = ['required', 'integer', Rule::exists('channel_allocation_campaigns', 'id')];
+            $rules['campaign'] = ['required_without:campaign_id', 'nullable', 'string', 'max:255'];
+            $rules['campaign_id'] = ['required_without:campaign', 'nullable', 'integer'];
         }
 
         return $rules;

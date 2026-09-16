@@ -240,11 +240,8 @@ class SipChannelController extends Controller
     private function validateRecord(Request $request, ?int $id = null): array
     {
         $data = $request->validate([
-            'campaign_id' => [
-                'required',
-                'integer',
-                Rule::exists('channel_allocation_campaigns', 'id'),
-            ],
+            'campaign' => ['required_without:campaign_id', 'nullable', 'string', 'max:255'],
+            'campaign_id' => ['required_without:campaign', 'nullable', 'integer'],
             'etpi_sip_name' => ['required', 'string', 'max:255', Rule::unique('sip_channels', 'etpi_sip_name')->ignore($id)],
             'pilot_number' => ['nullable', 'string', 'max:255'],
             'channel_count' => ['nullable', 'integer', 'min:0'],
@@ -252,6 +249,15 @@ class SipChannelController extends Controller
             'network' => ['nullable', 'string', 'max:255'],
             'date_activation' => ['nullable', 'string'],
         ]);
+
+        $campaign = ChannelAllocationCampaign::fromFormValue($data['campaign'] ?? null, $data['campaign_id'] ?? null);
+        if ($campaign === null) {
+            throw ValidationException::withMessages([
+                'campaign' => 'Please select or type a campaign.',
+            ]);
+        }
+        $data['campaign_id'] = $campaign->id;
+        unset($data['campaign']);
 
         $parsed = PdcEndorseDate::parse($data['date_activation'] ?? '');
         if (! $parsed['valid']) {

@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\GatewaySimAssignment;
 use App\Models\GlobeSim;
+use App\Models\MediaGateway;
 use App\Models\SmartSim;
 use App\Models\User;
 use App\Models\UserType;
@@ -45,6 +47,14 @@ class SimInventoryFieldsTest extends TestCase
     {
         $this->actingAs($this->admin);
 
+        MediaGateway::create([
+            'site_name' => 'Alcar',
+            'site_code' => 'SIM-GW-'.$module,
+            'ip_address' => '10.73.1.1',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+        ]);
+
         $page = $this->get('/'.$module)->assertOk();
         $html = $page->getContent();
         $this->assertStringContainsString('<table class="sim-table"', $html);
@@ -53,19 +63,21 @@ class SimInventoryFieldsTest extends TestCase
         $page->assertSeeInOrder([
             'IMEI',
             'Mobile Number',
-            'Network',
             'Plan',
             'IP',
+            'Port',
             'Account Number',
             'Contract Start',
             'Contract End',
             'Actions',
         ]);
+        $this->assertStringNotContainsString('<th>Network</th>', $html);
         $page->assertSee('field_imei', false)
             ->assertSee('field_mobile_number', false)
-            ->assertSee('field_network', false)
             ->assertSee('field_plan', false)
             ->assertSee('field_ip_address', false)
+            ->assertSee('<select class="form-control" name="ip_address" id="field_ip_address" required>', false)
+            ->assertSee('<option value="10.73.1.1">10.73.1.1</option>', false)
             ->assertSee('field_account_number', false)
             ->assertSee('field_contract_start', false)
             ->assertSee('field_contract_end', false)
@@ -114,6 +126,11 @@ class SimInventoryFieldsTest extends TestCase
         $this->assertStringContainsString('9\/3\/2026', $showHtml);
         $this->assertStringContainsString('data-id="'.$record->id.'"', $showHtml);
         $this->assertStringNotContainsString('<th>Last Updated</th>', $showHtml);
+        $this->assertStringNotContainsString('<th>Network</th>', $showHtml);
+        $tableHtml = \Illuminate\Support\Str::betweenFirst($showHtml, 'class="sim-table"', '</table>');
+        $this->assertStringContainsString('>Port</th>', $tableHtml);
+        $this->assertStringNotContainsString('>Network</th>', $tableHtml);
+        $this->assertTrue(strpos($tableHtml, '>IP</th>') < strpos($tableHtml, '>Port</th>'));
 
         $updated = $payload;
         $updated['account_number'] = 'ACC-3001-EDIT';
@@ -133,27 +150,50 @@ class SimInventoryFieldsTest extends TestCase
     {
         $this->actingAs($this->admin);
 
+        MediaGateway::create([
+            'site_name' => 'Alcar',
+            'site_code' => 'SIM-VAL-'.$module,
+            'ip_address' => '10.73.2.1',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+        ]);
+
         $this->from('/'.$module)->post('/'.$module, [
             'imei' => '',
             'mobile_number' => '09173330009',
-            'network' => $network,
+            'plan' => 'Plan A',
+            'ip_address' => '10.73.2.1',
+            'account_number' => 'ACC-VAL-1',
+            'contract_start' => '3/1/2026',
+            'contract_end' => '9/3/2026',
         ])->assertSessionHasErrors(['imei']);
 
         $this->from('/'.$module)->post('/'.$module, [
             'imei' => '356938035644009',
             'mobile_number' => '',
-            'network' => $network,
+            'plan' => 'Plan A',
+            'ip_address' => '10.73.2.1',
+            'account_number' => 'ACC-VAL-1',
+            'contract_start' => '3/1/2026',
+            'contract_end' => '9/3/2026',
         ])->assertSessionHasErrors(['mobile_number']);
 
         $this->from('/'.$module)->post('/'.$module, [
             'imei' => '356938035644010',
             'mobile_number' => '09173330010',
+            'plan' => 'Plan A',
             'ip_address' => 'not-an-ip',
+            'account_number' => 'ACC-VAL-1',
+            'contract_start' => '3/1/2026',
+            'contract_end' => '9/3/2026',
         ])->assertSessionHasErrors(['ip_address']);
 
         $this->from('/'.$module)->post('/'.$module, [
             'imei' => '356938035644011',
             'mobile_number' => '09173330011',
+            'plan' => 'Plan A',
+            'ip_address' => '10.73.2.1',
+            'account_number' => 'ACC-VAL-1',
             'contract_start' => '12/1/2026',
             'contract_end' => '1/1/2026',
         ])->assertSessionHas('error', 'Contract end date must be on or after the contract start date.');
@@ -162,14 +202,20 @@ class SimInventoryFieldsTest extends TestCase
             $this->from('/'.$module)->post('/'.$module, [
                 'imei' => '356938035644012',
                 'mobile_number' => '09173330012',
+                'plan' => 'Plan A',
+                'ip_address' => '10.73.2.1',
+                'account_number' => 'ACC-VAL-1',
                 'contract_start' => $invalid,
+                'contract_end' => '9/3/2026',
             ])->assertSessionHasErrors(['contract_start']);
         }
 
         $this->post('/'.$module, [
             'imei' => '356938035644013',
             'mobile_number' => '09173330013',
-            'network' => $network,
+            'plan' => 'Plan A',
+            'ip_address' => '10.73.2.1',
+            'account_number' => 'ACC-VAL-1',
             'contract_start' => '2026-03-01',
             'contract_end' => '2026-09-03',
         ])->assertRedirect();
@@ -186,13 +232,12 @@ class SimInventoryFieldsTest extends TestCase
             OperationCatalog::modules()['smart-sim']['columns']
         );
         $this->assertSame(
-            array_keys(OperationCatalog::simColumns()),
+            array_keys(OperationCatalog::simFormFields()),
             OperationCatalog::modules()['globe-sim']['fields']
         );
         $this->assertSame([
             'imei',
             'mobile_number',
-            'network',
             'plan',
             'ip_address',
             'account_number',
@@ -202,7 +247,16 @@ class SimInventoryFieldsTest extends TestCase
         $this->assertSame([
             'IMEI',
             'Mobile Number',
-            'Network',
+            'Plan',
+            'IP',
+            'Port',
+            'Account Number',
+            'Contract Start',
+            'Contract End',
+        ], array_values(OperationCatalog::simTableColumns()));
+        $this->assertSame([
+            'IMEI',
+            'Mobile Number',
             'Plan',
             'IP',
             'Account Number',
@@ -216,6 +270,47 @@ class SimInventoryFieldsTest extends TestCase
         $this->assertFalse(InventoryImportCatalog::operation('globe-sim')['include_id']);
         $this->assertArrayNotHasKey('skip_save', InventoryImportCatalog::operation('globe-sim'));
         $this->assertArrayNotHasKey('updated_at', InventoryImportCatalog::operation('globe-sim')['fields']);
+    }
+
+    #[DataProvider('simModules')]
+    public function test_table_shows_gsm_gateway_port_beside_ip(string $module, string $model, string $table, string $network): void
+    {
+        $this->actingAs($this->admin);
+
+        $gateway = MediaGateway::create([
+            'site_name' => 'Alcar',
+            'site_code' => 'SIM-PORT-'.$module,
+            'ip_address' => '10.73.9.9',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'channel_count' => 8,
+        ]);
+        $sim = $model::query()->create([
+            'imei' => $module === 'globe-sim' ? '356938035647001' : '356938035647101',
+            'mobile_number' => $module === 'globe-sim' ? '09176660001' : '09286660001',
+            'network' => $network,
+            'plan' => 'Unli Surf',
+            'ip_address' => '10.73.9.9',
+            'account_number' => 'ACC-PORT',
+            'contract_start' => '2026-03-01',
+            'contract_end' => '2026-09-03',
+        ]);
+        GatewaySimAssignment::create([
+            'media_gateway_id' => $gateway->id,
+            'sim_type' => $module === 'globe-sim' ? 'globe' : 'smart',
+            'sim_id' => $sim->id,
+            'port' => 4,
+        ]);
+
+        $page = $this->get('/'.$module)->assertOk();
+        $tableHtml = \Illuminate\Support\Str::betweenFirst($page->getContent(), 'class="sim-table"', '</table>');
+        $this->assertStringContainsString('>IP</th>', $tableHtml);
+        $this->assertStringContainsString('>Port</th>', $tableHtml);
+        $this->assertTrue(strpos($tableHtml, '>IP</th>') < strpos($tableHtml, '>Port</th>'));
+        $this->assertStringNotContainsString('>Network</th>', $tableHtml);
+        $this->assertStringContainsString('10.73.9.9', $tableHtml);
+        $this->assertMatchesRegularExpression('/>\s*4\s*</', $tableHtml);
+        $this->assertDoesNotMatchRegularExpression('/>\s*'.preg_quote($network, '/').'\s*</', $tableHtml);
     }
 
     public function test_legacy_sim_columns_are_preserved_and_existing_values_can_still_be_stored(): void
@@ -261,7 +356,6 @@ class SimInventoryFieldsTest extends TestCase
         $this->assertSame([
             'IMEI',
             'Mobile Number',
-            'Network',
             'Plan',
             'IP',
             'Account Number',

@@ -3,7 +3,6 @@
 namespace App\Support;
 
 use App\Models\ChannelAllocationCampaign;
-use App\Models\MediaGateway;
 
 class ProgramInboundImportMapper
 {
@@ -13,11 +12,12 @@ class ProgramInboundImportMapper
      */
     public static function map(array $values, object $context): array
     {
+        if (empty($context->pinLookupReady)) {
+            ProgramInboundSimLookup::flush();
+            $context->pinLookupReady = true;
+        }
         $errors = [];
         $campaigns = $context->campaigns ??= ChannelAllocationCampaign::keyedByName();
-        $gateways = $context->gateways ??= MediaGateway::query()
-            ->get(['id', 'ip_address', 'port', 'network'])
-            ->keyBy(fn (MediaGateway $gateway) => mb_strtolower(trim((string) $gateway->ip_address)));
         $seen = $context->numbers ?? [];
 
         $campaignName = trim((string) ($values['campaign'] ?? ''));
@@ -33,44 +33,77 @@ class ProgramInboundImportMapper
         }
 
         $errors = array_merge($errors, ProgramInboundNumberValidator::formatErrors($mobiles, $landlines));
+        $errors = array_merge($errors, ProgramInboundNumberValidator::landlineSourceErrors($landlines));
         $errors = array_merge(
             $errors,
             ProgramInboundNumberValidator::uniquenessErrors($mobiles, $landlines, $seen, null, true)
         );
         $context->numbers = $seen;
 
-        $gatewayIp = trim((string) ($values['gsm_gateway'] ?? ''));
-        $port = trim((string) ($values['port'] ?? ''));
-        $network = trim((string) ($values['network'] ?? ''));
-        $gateway = $gatewayIp !== '' ? $gateways->get(mb_strtolower($gatewayIp)) : null;
+        $postedGateway = trim((string) ($values['gsm_gateway'] ?? ''));
+        $postedPorts = ProgramInboundNumberValidator::normalize($values['port'] ?? '');
+        $postedNetwork = trim((string) ($values['network'] ?? ''));
+        $network = GsmSimInventory::canonicalNetwork($postedNetwork);
 
-        $mediaGatewayId = null;
-        $savedPort = null;
-        $savedNetwork = null;
+        if ($mobiles === []) {
+            if ($postedGateway !== '' || $postedPorts !== [] || $postedNetwork !== '') {
+                $errors[] = ProgramInboundNumberValidator::GSM_LANDLINE_ONLY;
+            }
+        } else {
+            if ($postedNetwork !== '' && $network === null) {
+                $errors[] = ProgramInboundNumberValidator::NETWORK_MUST_MATCH;
+            }
 
-        if ($mobiles !== []) {
-            if ($gatewayIp === '') {
-                $errors[] = ProgramInboundNumberValidator::GSM_REQUIRED_WITH_MOBILE;
-            } elseif (! $gateway) {
-                $errors[] = ProgramInboundNumberValidator::GSM_MUST_EXIST;
-            } else {
-                $mediaGatewayId = $gateway->id;
-                $savedPort = trim((string) $gateway->port);
-                $savedNetwork = trim((string) $gateway->network);
-                if ($port !== '' && strcasecmp($port, $savedPort) !== 0) {
-                    $errors[] = ProgramInboundNumberValidator::PORT_MUST_MATCH;
-                }
-                if ($network !== '' && strcasecmp($network, $savedNetwork) !== 0) {
-                    $errors[] = ProgramInboundNumberValidator::NETWORK_MUST_MATCH;
+            if ($network === null) {
+                foreach ($mobiles as $mobile) {
+                    foreach (GsmSimInventory::networks() as $candidate) {
+                        $resolved = ProgramInboundSimLookup::resolve($candidate, $mobile);
+                        if ($resolved['media_gateway_id'] || $resolved['hostname'] !== '' || self::mobileExistsOnNetwork($candidate, $mobile)) {
+                            if ($network !== null && $network !== $candidate) {
+                                $errors[] = ProgramInboundNumberValidator::NETWORK_MUST_MATCH;
+                                $network = null;
+                                break 2;
+                            }
+                            $network = $candidate;
+                        }
+                    }
                 }
             }
-        } elseif ($gatewayIp !== '' || $port !== '' || $network !== '') {
-            $errors[] = ProgramInboundNumberValidator::GSM_LANDLINE_ONLY;
+
+            if ($network === null) {
+                $errors[] = ProgramInboundNumberValidator::NETWORK_REQUIRED;
+            }
+
+            $assignments = $network ? ProgramInboundSimLookup::resolveMany($network, $mobiles) : [];
+            $providedGateway = $postedGateway !== '' ? ProgramInboundSimLookup::findGateway($postedGateway) : null;
+            if ($postedGateway !== '' && ! $providedGateway) {
+                $errors[] = ProgramInboundNumberValidator::GSM_MUST_EXIST;
+            }
+
+            foreach ($assignments as $index => $row) {
+                if ($providedGateway && $row['media_gateway_id'] && (int) $row['media_gateway_id'] !== (int) $providedGateway->id) {
+                    $errors[] = ProgramInboundNumberValidator::GSM_MUST_EXIST;
+                }
+                if ($providedGateway && ! $row['media_gateway_id']) {
+                    $errors[] = ProgramInboundNumberValidator::GSM_MUST_EXIST;
+                }
+                $postedPort = $postedPorts[$index] ?? ($postedPorts[0] ?? '');
+                if ($postedPort !== '' && $row['port'] !== '' && strcasecmp($postedPort, $row['port']) !== 0) {
+                    $errors[] = ProgramInboundNumberValidator::PORT_MUST_MATCH;
+                }
+                if ($postedPort !== '' && $row['port'] === '') {
+                    $errors[] = ProgramInboundNumberValidator::PORT_MUST_MATCH;
+                }
+            }
         }
 
+        $errors = array_values(array_unique($errors));
         if ($errors !== [] || ! $campaign) {
-            return ['errors' => array_values(array_unique($errors)), 'record' => null];
+            return ['errors' => $errors, 'record' => null];
         }
+
+        $assignments = $mobiles === [] ? [] : ProgramInboundSimLookup::resolveMany($network, $mobiles);
+        $linked = collect($assignments)->first(static fn (array $row) => ! empty($row['media_gateway_id']));
 
         return [
             'errors' => [],
@@ -79,13 +112,25 @@ class ProgramInboundImportMapper
                 'program' => $campaign->name,
                 'number' => $mobiles[0] ?? $landlines[0] ?? '',
                 'mobile_numbers' => $mobiles === [] ? null : $mobiles,
+                'mobile_assignments' => $assignments === [] ? null : $assignments,
                 'landline_numbers' => $landlines === [] ? null : $landlines,
-                'media_gateway_id' => $mediaGatewayId,
-                'port' => $savedPort !== '' ? $savedPort : null,
-                'network' => $savedNetwork !== '' ? $savedNetwork : null,
+                'media_gateway_id' => $linked['media_gateway_id'] ?? null,
+                'port' => $linked['port'] ?? null,
+                'network' => $mobiles === [] ? null : $network,
                 'remarks' => trim((string) ($values['remarks'] ?? '')) ?: null,
                 'status' => 'Active',
             ],
         ];
+    }
+
+    private static function mobileExistsOnNetwork(string $network, string $mobile): bool
+    {
+        foreach (ProgramInboundSimLookup::payload()[$network] ?? [] as $row) {
+            if (($row['mobile'] ?? '') === $mobile) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

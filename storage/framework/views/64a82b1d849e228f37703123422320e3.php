@@ -2,7 +2,7 @@
 <div class="page-head">
     <div>
         <h1 class="page-title">SIP Channels</h1>
-        <p class="page-subtitle">Manage SIP channel campaigns, ETPI names, ranges, and activation dates.</p>
+        <p class="page-subtitle">Manage SIP channel campaigns, ranges, and activation dates.</p>
     </div>
     <div class="toolbar">
         <form class="search-box media-search-form" id="sipSearchForm" method="GET" action="<?php echo e(route('sip-channels')); ?>">
@@ -37,7 +37,7 @@
 <thead>
 <tr>
     <th>Campaign</th>
-    <th>ETPI SIP NAME</th>
+    <th>SIP NAME</th>
     <th>Pilot Number</th>
     <th>Channel Count</th>
     <th>Channel Range</th>
@@ -52,7 +52,7 @@
     $campaignName = $record->campaign?->name ?: '—';
     $dateDisplay = $record->date_activation ? \App\Support\PdcEndorseDate::display($record->date_activation->format('Y-m-d')) : '—';
     $editValues = [
-        'campaign_id' => $record->campaign_id,
+        'campaign' => $campaignName === '—' ? '' : $campaignName,
         'etpi_sip_name' => $record->etpi_sip_name,
         'pilot_number' => $record->pilot_number,
         'channel_count' => $record->channel_count,
@@ -131,12 +131,12 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="sip_campaign_id">Campaign</label>
-                        <select class="form-control" name="campaign_id" id="sip_campaign_id" required>
-                            <option value="">Select Campaign</option>
-                            <?php $__currentLoopData = $campaigns; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $campaign): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                                <option value="<?php echo e($campaign->id); ?>"><?php echo e($campaign->name); ?></option>
-                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                        </select>
+                        <?php echo $__env->make('partials.campaign-combo', [
+                            'inputId' => 'sip_campaign_id',
+                            'inputName' => 'campaign',
+                            'menuId' => 'sipCampaignMenu',
+                            'campaigns' => $campaigns,
+                        ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
                     </div>
                     <div class="form-group">
                         <label for="sip_etpi_sip_name">ETPI SIP NAME</label>
@@ -446,7 +446,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('sipSubmit').textContent = 'Save';
         method.value = 'PUT';
         form.action = baseUrl + '/' + recordId;
-        ['campaign_id', 'etpi_sip_name', 'pilot_number', 'channel_count', 'channel_range', 'network', 'date_activation'].forEach((key) => {
+        document.getElementById('sip_campaign_id').value = values.campaign ?? '';
+        ['etpi_sip_name', 'pilot_number', 'channel_count', 'channel_range', 'network', 'date_activation'].forEach((key) => {
             const field = document.getElementById('sip_' + key);
             if (field) field.value = values[key] ?? '';
         });

@@ -11,7 +11,7 @@ class OperationsInventorySeeder extends Seeder
     public function run(): void
     {
         MediaGateway::query()
-            ->where('site_name', 'PDC')
+            ->where('site_name', 'WFH')
             ->get()
             ->each(function (MediaGateway $gateway) {
                 PdcServer::query()->updateOrCreate(

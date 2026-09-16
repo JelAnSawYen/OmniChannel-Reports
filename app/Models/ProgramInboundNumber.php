@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\GsmSimInventory;
+use App\Support\ProgramInboundSimLookup;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -15,6 +17,7 @@ class ProgramInboundNumber extends Model
         'status',
         'campaign_id',
         'mobile_numbers',
+        'mobile_assignments',
         'landline_numbers',
         'media_gateway_id',
         'port',
@@ -26,6 +29,7 @@ class ProgramInboundNumber extends Model
     {
         return [
             'mobile_numbers' => 'array',
+            'mobile_assignments' => 'array',
             'landline_numbers' => 'array',
         ];
     }
@@ -71,19 +75,39 @@ class ProgramInboundNumber extends Model
         return $this->numberList($this->landline_numbers);
     }
 
+    /**
+     * @return list<array{mobile: string, hostname: string, port: string, media_gateway_id: int|null}>
+     */
+    public function mobileDisplayRows(): array
+    {
+        return ProgramInboundSimLookup::resolveMany($this->network, $this->mobileList());
+    }
+
     public function gatewayLabel(): string
     {
-        return $this->displayValue($this->mediaGateway?->ip_address);
+        $rows = $this->mobileDisplayRows();
+        if ($rows === []) {
+            return '—';
+        }
+
+        return $this->displayValue($rows[0]['hostname'] ?? '');
     }
 
     public function portLabel(): string
     {
-        return $this->displayValue($this->port ?: $this->mediaGateway?->port);
+        $rows = $this->mobileDisplayRows();
+        if ($rows === []) {
+            return '—';
+        }
+
+        return $this->displayValue($rows[0]['port'] ?? '');
     }
 
     public function networkLabel(): string
     {
-        return $this->displayValue($this->network ?: $this->mediaGateway?->network);
+        $canonical = GsmSimInventory::canonicalNetwork($this->network);
+
+        return $this->displayValue($canonical ?: $this->network);
     }
 
     public function remarksLabel(): string

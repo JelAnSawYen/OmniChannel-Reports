@@ -51,7 +51,7 @@ class ArchiveRecordingsPageTest extends TestCase
             ->assertSee('Add Archive Records')
             ->assertSee('>Save</button>', false)
             ->assertDontSee('>Add Records</button>', false)
-            ->assertSee('Select Campaign')
+            ->assertSee('Select or type a campaign...', false)
             ->assertSee('Select Year')
             ->assertSee('Select Month')
             ->assertSee('id="arAddLocation"', false)
@@ -66,14 +66,15 @@ class ArchiveRecordingsPageTest extends TestCase
             ->assertSee('>CG3</button>', false)
             ->assertSee('data-value="CTN"', false)
             ->assertSee('>CTN</button>', false)
-            ->assertSee('data-value="SCS"', false)
-            ->assertSee('>SCS</button>', false)
-            ->assertSee('data-value="PDC"', false)
-            ->assertSee('>PDC</button>', false)
+            ->assertSee('data-value="SC5"', false)
+            ->assertSee('>SC5</button>', false)
+            ->assertSee('data-value="WFH"', false)
+            ->assertSee('>WFH</button>', false)
             ->assertDontSee('>ALCAR</button>', false)
             ->assertDontSee('>ESTANCIA</button>', false)
             ->assertDontSee('>SKYRISE</button>', false)
-            ->assertSee('selected disabled hidden>Select Campaign</option>', false)
+            ->assertSee('id="arAddCampaign"', false)
+            ->assertSee('pin-campaign-combo', false)
             ->assertSee('selected disabled hidden>Select Year</option>', false)
             ->assertSee('selected disabled hidden>Select Month</option>', false)
             ->assertDontSee('data-value="">Select Month</button>', false)
@@ -286,6 +287,29 @@ class ArchiveRecordingsPageTest extends TestCase
         $this->assertStringContainsString('campaign='.$campaign->id, (string) $response->json('redirect'));
         $this->assertStringContainsString('year=2026', (string) $response->json('redirect'));
         $this->assertStringContainsString('month=9', (string) $response->json('redirect'));
+
+        foreach (ArchiveRecording::query()->get() as $imported) {
+            @unlink(storage_path('app/private/'.$imported->storage_path));
+        }
+    }
+
+    public function test_audio_import_accepts_typed_campaign_name(): void
+    {
+        $this->actingAs($this->admin);
+        $file = UploadedFile::fake()->create('typed_20260901_102345.wav', 20, 'audio/wav');
+
+        $this->postJson('/archive-recordings/import/audio', [
+            'campaign' => 'Typed AR Campaign',
+            'year' => 2026,
+            'month' => 9,
+            'files' => [$file],
+        ])->assertOk()->assertJson(['ok' => true, 'records' => 1]);
+
+        $this->assertDatabaseHas('channel_allocation_campaigns', ['name' => 'Typed AR Campaign']);
+        $campaign = ChannelAllocationCampaign::query()->where('name', 'Typed AR Campaign')->first();
+        $this->assertTrue(
+            ArchiveRecording::query()->where('campaign_id', $campaign->id)->where('file_name', 'typed_20260901_102345.wav')->exists()
+        );
 
         foreach (ArchiveRecording::query()->get() as $imported) {
             @unlink(storage_path('app/private/'.$imported->storage_path));

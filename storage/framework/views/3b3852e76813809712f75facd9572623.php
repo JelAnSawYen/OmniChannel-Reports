@@ -128,7 +128,7 @@
                     <div class="form-group">
                         <label for="campaign_location">Location</label>
                         <select class="form-control" id="campaign_location" name="location" required>
-                            <option value="">Select Location</option>
+                            <option value="" selected hidden>Select Location</option>
                             <?php $__currentLoopData = $locations; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $slug => $name): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                 <option value="<?php echo e($name); ?>"><?php echo e($name); ?></option>
                             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>

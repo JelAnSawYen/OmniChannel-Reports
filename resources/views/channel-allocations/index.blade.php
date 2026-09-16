@@ -236,12 +236,12 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="campaign_id">Campaign</label>
-                        <select class="form-control" name="campaign_id" id="campaign_id" required>
-                            <option value="">Select Campaign</option>
-                            @foreach($masterCampaigns as $master)
-                                <option value="{{ $master->id }}" data-fte="{{ $master->fte ?? '' }}">{{ $master->name }}</option>
-                            @endforeach
-                        </select>
+                        @include('partials.campaign-combo', [
+                            'inputId' => 'campaign_id',
+                            'inputName' => 'campaign',
+                            'menuId' => 'caCampaignMenu',
+                            'campaigns' => $masterCampaigns,
+                        ])
                     </div>
                     <div class="form-group" data-campaign-media-gateway><label for="campaign_media_gateway">Media Gateway</label><input class="form-control" name="media_gateway" id="campaign_media_gateway"></div>
                     <div class="form-group" data-campaign-total-channels><label for="campaign_total_channels_allocated">Total Channels Allocated</label><input class="form-control" type="number" min="0" name="total_channels_allocated" id="campaign_total_channels_allocated"></div>
@@ -252,7 +252,7 @@
                     <div class="form-group" data-first-allocation>
                         <label for="campaign_channel_allocation">SIP Channel</label>
                         <select class="form-control" name="channel_allocation" id="campaign_channel_allocation">
-                            <option value="">Select SIP Channel</option>
+                            <option value="" selected hidden>Select SIP Channel</option>
                             @foreach($sipChannels as $sip)
                                 <option value="{{ $sip->etpi_sip_name }}" data-network="{{ $sip->network }}" data-channel-count="{{ $sip->channel_count }}">{{ $sip->etpi_sip_name }}</option>
                             @endforeach
@@ -261,7 +261,7 @@
                     <div class="form-group" data-first-allocation>
                         <label for="campaign_alloc_media_gateway">GSM Gateway</label>
                         <select class="form-control" name="media_gateway" id="campaign_alloc_media_gateway">
-                            <option value="">Select GSM Gateway</option>
+                            <option value="" selected hidden>Select GSM Gateway</option>
                             @foreach($gsmGateways as $gateway)
                                 @php $gatewayLabel = $gateway->site_code ?: $gateway->site_name; @endphp
                                 @if($gatewayLabel)
@@ -306,7 +306,7 @@
                     <div class="form-group">
                         <label for="alloc_channel_allocation">SIP Channel</label>
                         <select class="form-control" name="channel_allocation" id="alloc_channel_allocation" required>
-                            <option value="">Select SIP Channel</option>
+                            <option value="" selected hidden>Select SIP Channel</option>
                             @foreach($sipChannels as $sip)
                                 <option value="{{ $sip->etpi_sip_name }}" data-network="{{ $sip->network }}" data-channel-count="{{ $sip->channel_count }}">{{ $sip->etpi_sip_name }}</option>
                             @endforeach
@@ -315,7 +315,7 @@
                     <div class="form-group">
                         <label for="alloc_media_gateway">GSM Gateway</label>
                         <select class="form-control" name="media_gateway" id="alloc_media_gateway">
-                            <option value="">Select GSM Gateway</option>
+                            <option value="" selected hidden>Select GSM Gateway</option>
                             @foreach($gsmGateways as $gateway)
                                 @php $gatewayLabel = $gateway->site_code ?: $gateway->site_name; @endphp
                                 @if($gatewayLabel)
@@ -538,12 +538,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const campaignSelect = document.getElementById('campaign_id');
     const campaignFteField = document.getElementById('campaign_fte');
 
-    function fillMasterFte() {
-        const option = campaignSelect?.selectedOptions?.[0];
-        if (campaignFteField) campaignFteField.value = option?.getAttribute('data-fte') || '';
+    function fillMasterFte(option) {
+        if (!campaignFteField) return;
+        if (option) {
+            campaignFteField.value = option.getAttribute('data-fte') || '';
+            return;
+        }
+        const query = String(campaignSelect?.value || '').trim().toLowerCase();
+        const exact = [...document.querySelectorAll('#caCampaignMenu .pin-campaign-option')].find((item) => (item.dataset.name || '').toLowerCase() === query);
+        campaignFteField.value = exact?.getAttribute('data-fte') || '';
     }
 
-    campaignSelect?.addEventListener('change', fillMasterFte);
+    campaignSelect?.addEventListener('campaign-combo-change', (event) => fillMasterFte(event.detail?.option || null));
+    campaignSelect?.addEventListener('input', () => fillMasterFte());
 
     const campaignSipSelect = document.getElementById('campaign_channel_allocation');
     const campaignNetworkField = document.getElementById('campaign_network');
@@ -619,7 +626,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setCampaignMediaGatewayVisible(true);
         if (campaignSelect) {
             campaignSelect.disabled = true;
-            campaignSelect.value = values.id ?? '';
+            campaignSelect.value = values.name ?? '';
         }
         fillMasterFte();
         ['media_gateway','total_channels_allocated','caller_id','prefix','remarks'].forEach((key) => {

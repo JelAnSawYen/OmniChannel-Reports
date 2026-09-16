@@ -70,21 +70,23 @@ class CampaignsPageTest extends TestCase
         $this->assertDoesNotMatchRegularExpression('/<th[^>]*>Last Updated<\/th>/', $html);
 
         $names = array_values(OperationCatalog::locations());
-        $this->assertSame(['Alcar', 'CTN', 'Estancia', 'PDC', 'SCS', 'Skyrise'], $names);
+        $this->assertSame(['Alcar', 'CG3', 'CTN', 'Estancia', 'SC5', 'Skyrise', 'WFH'], $names);
         foreach ($names as $name) {
             $this->assertStringContainsString('>'.$name.'</option>', $html);
         }
+        $this->assertStringNotContainsString('>PDC</option>', $html);
+        $this->assertStringNotContainsString('>SCS</option>', $html);
 
         $this->post('/campaigns', [
             'name' => 'Atome',
             'fte' => 12,
-            'location' => 'PDC',
+            'location' => 'WFH',
         ])->assertRedirect();
 
         $this->assertDatabaseHas('channel_allocation_campaigns', [
             'name' => 'Atome',
             'fte' => 12,
-            'location' => 'PDC',
+            'location' => 'WFH',
         ]);
 
         $campaign = ChannelAllocationCampaign::where('name', 'Atome')->firstOrFail();
@@ -93,7 +95,7 @@ class CampaignsPageTest extends TestCase
             ->assertOk()
             ->assertSee('class="campaigns-name"', false)
             ->assertSee('Atome')
-            ->assertSee('PDC')
+            ->assertSee('WFH')
             ->assertSee('>12<', false);
 
         $this->put('/campaigns/'.$campaign->id, [
@@ -125,11 +127,11 @@ class CampaignsPageTest extends TestCase
         $this->post('/campaigns', [
             'name' => 'Master Camp',
             'fte' => 9,
-            'location' => 'PDC',
+            'location' => 'WFH',
         ])->assertRedirect();
 
         $campaign = ChannelAllocationCampaign::where('name', 'Master Camp')->firstOrFail();
-        $option = '>Master Camp</option>';
+        $option = '>Master Camp</button>';
 
         $this->get('/sip-channels')->assertOk()->assertSee($option, false);
         $this->get('/pdc-servers')->assertOk()->assertSee($option, false);
@@ -183,13 +185,13 @@ class CampaignsPageTest extends TestCase
         $this->post('/campaigns', [
             'name' => 'Hacked',
             'fte' => 1,
-            'location' => 'PDC',
+            'location' => 'WFH',
         ])->assertForbidden();
 
         $this->put('/campaigns/'.$campaign->id, [
             'name' => 'Hacked',
             'fte' => 1,
-            'location' => 'PDC',
+            'location' => 'WFH',
         ])->assertForbidden();
 
         $this->delete('/campaigns/'.$campaign->id)->assertForbidden();
@@ -219,7 +221,7 @@ class CampaignsPageTest extends TestCase
 
         $validPath = $this->spreadsheet([
             ['Campaigns', 'FTE', 'Location'],
-            ['Mynt', '10', 'PDC'],
+            ['Mynt', '10', 'WFH'],
             ['Chinabank', '4', 'alcar'],
         ]);
         $valid = $this->postJson('/campaigns/import/preview', [
@@ -230,7 +232,7 @@ class CampaignsPageTest extends TestCase
         $this->postJson('/campaigns/import/confirm', ['token' => $valid['token']])->assertOk();
 
         $this->assertSame(2, ChannelAllocationCampaign::count());
-        $this->assertDatabaseHas('channel_allocation_campaigns', ['name' => 'Mynt', 'fte' => 10, 'location' => 'PDC']);
+        $this->assertDatabaseHas('channel_allocation_campaigns', ['name' => 'Mynt', 'fte' => 10, 'location' => 'WFH']);
         $this->assertDatabaseHas('channel_allocation_campaigns', ['name' => 'Chinabank', 'fte' => 4, 'location' => 'Alcar']);
 
         $export = $this->get('/campaigns/export')->assertOk()->assertDownload('campaigns.xlsx');

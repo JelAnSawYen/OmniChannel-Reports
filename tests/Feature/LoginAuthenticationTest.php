@@ -37,7 +37,9 @@ class LoginAuthenticationTest extends TestCase
         $this->get('/login')
             ->assertOk()
             ->assertSee('Login')
-            ->assertSee('<title>OmniChannel Inventory</title>', false);
+            ->assertSee('<title>OmniChannel Inventory</title>', false)
+            ->assertSee('d="M21 3L3 21"', false)
+            ->assertDontSee('d="M3 3l18 18"', false);
     }
 
     public function test_untrusted_forwarded_host_does_not_rewrite_login_urls(): void

@@ -104,7 +104,7 @@ class SignalBoostersPageTest extends TestCase
             ['Id', 'Model', 'Specifications', 'Serial Number', 'Location', 'Status'],
             [
                 ['1', 'SB-A', $specs, 'SB-A-1', 'Alcar', 'Active'],
-                ['2', 'SB-B', '', 'SB-B-1', 'SCS', 'Inactive'],
+                ['2', 'SB-B', '', 'SB-B-1', 'SC5', 'Inactive'],
             ],
             'signal-boosters-import.xlsx'
         );

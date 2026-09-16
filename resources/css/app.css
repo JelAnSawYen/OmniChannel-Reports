@@ -523,6 +523,7 @@ body[data-page="users"] .filter-row .plus-btn { margin-left: auto; order: 1; }
 .nav-parent-row{display:flex;align-items:center;gap:3.75px}
 .nav-parent-row .nav-item{flex:1;min-width:0}
 button.nav-item.nav-parent-row{width:100%}
+a.nav-item.nav-parent-row{width:100%}
 button.nav-item.nav-parent-row .nav-caret{margin-left:auto;pointer-events:none}
 #networkToggle{align-items:center;gap:12.5px}
 #networkToggle .nav-icon{display:inline-flex;align-items:center;justify-content:center;align-self:center}
@@ -530,6 +531,12 @@ button.nav-item.nav-parent-row .nav-caret{margin-left:auto;pointer-events:none}
 #networkToggle .nav-caret{display:inline-flex;align-items:center;justify-content:center;align-self:center;width:26.25px;height:18.75px;min-height:18.75px;max-height:18.75px;padding:0;line-height:0}
 #networkToggle .nav-caret svg{width:15px;height:15px;display:block;flex:none;transform-origin:50% 50%;transition:transform .18s ease}
 .nav-group.open #networkToggle .nav-caret svg{transform:rotate(180deg)}
+#sipChannelsToggle{align-items:center;gap:12.5px}
+#sipChannelsToggle .nav-icon{display:inline-flex;align-items:center;justify-content:center;align-self:center}
+#sipChannelsToggle > span:not(.nav-icon):not(.nav-caret){display:flex;align-items:center;line-height:1.25}
+#sipChannelsToggle .nav-caret{display:inline-flex;align-items:center;justify-content:center;align-self:center;width:26.25px;height:18.75px;min-height:18.75px;max-height:18.75px;padding:0;line-height:0;margin-left:auto;pointer-events:auto;cursor:pointer}
+#sipChannelsToggle .nav-caret svg{width:15px;height:15px;display:block;flex:none;transform-origin:50% 50%;transition:transform .18s ease}
+.nav-group.open #sipChannelsToggle .nav-caret svg{transform:rotate(180deg)}
 button.nav-item{width:100%;border:0;background:transparent;cursor:pointer;color:inherit;text-align:left}
 .nav-item{white-space:nowrap}
 .nav-icon{width:17.5px;height:17.5px;flex:0 0 17.5px}
@@ -555,6 +562,7 @@ button.nav-item{width:100%;border:0;background:transparent;cursor:pointer;color:
 .filter-row .search-box { flex:0 1 371.25px; }
 .sidebar-collapsed .nav-caret,.sidebar-collapsed .nav-sub{display:none}
 .sidebar-collapsed #networkToggle > span:not(.nav-icon){display:none}
+.sidebar-collapsed #sipChannelsToggle > span:not(.nav-icon){display:none}
 .welcome-banner{background:#fff;border:1.25px solid var(--border);border-radius:10px;padding:18.75px 21.25px;box-shadow:var(--shadow);margin-bottom:17.5px}
 .section-title{margin:0;font-size:17.5px}
 .admin-cards{display:grid;grid-template-columns:1fr 1fr;gap:13.75px}
@@ -1002,6 +1010,7 @@ table[aria-label="Channel Utilization"] td.num-col{text-align:center}
 .ca-menu-dropdown {
     position: absolute;
     right: 0;
+    left: auto;
     top: calc(100% + 3.75px);
     width: max-content;
     padding: 6.25px;
@@ -1329,6 +1338,136 @@ table[aria-label="Channel Utilization"] td.num-col{text-align:center}
     flex-wrap: wrap;
 }
 
+body[data-page="channel-range-list"] .crl-table,
+body[data-page="channel-range-list"] .crl-nested {
+    table-layout: fixed;
+    width: 100%;
+}
+body[data-page="channel-range-list"] .crl-table > colgroup > .crl-col-toggle,
+body[data-page="channel-range-list"] .crl-nested > colgroup > .crl-col-toggle,
+body[data-page="channel-range-list"] .crl-table .crl-toggle-col,
+body[data-page="channel-range-list"] .crl-nested .crl-toggle-col {
+    width: 42px;
+    max-width: 42px;
+    min-width: 42px;
+}
+body[data-page="channel-range-list"] .crl-table > colgroup > .crl-col-campaign,
+body[data-page="channel-range-list"] .crl-nested > colgroup > .crl-col-campaign,
+body[data-page="channel-range-list"] .crl-table .crl-campaign-col,
+body[data-page="channel-range-list"] .crl-nested .crl-campaign-col {
+    width: 23%;
+}
+body[data-page="channel-range-list"] .crl-table > colgroup > .crl-col-channel,
+body[data-page="channel-range-list"] .crl-nested > colgroup > .crl-col-channel,
+body[data-page="channel-range-list"] .crl-table .crl-channel-col,
+body[data-page="channel-range-list"] .crl-nested .crl-channel-col {
+    width: 24%;
+}
+body[data-page="channel-range-list"] .crl-table > colgroup > .crl-col-sip,
+body[data-page="channel-range-list"] .crl-nested > colgroup > .crl-col-sip,
+body[data-page="channel-range-list"] .crl-table .crl-sip-col,
+body[data-page="channel-range-list"] .crl-nested .crl-sip-col {
+    width: 23%;
+}
+body[data-page="channel-range-list"] .crl-table > colgroup > .crl-col-actions,
+body[data-page="channel-range-list"] .crl-nested > colgroup > .crl-col-actions,
+body[data-page="channel-range-list"] .crl-table .crl-actions-col,
+body[data-page="channel-range-list"] .crl-nested .crl-actions-col {
+    width: 24%;
+}
+body[data-page="channel-range-list"] .crl-table > thead > tr > th.crl-toggle-col,
+body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td.crl-toggle-col,
+body[data-page="channel-range-list"] .crl-nested .crl-toggle-col {
+    padding-left: 8px;
+    padding-right: 0;
+    overflow: visible;
+    white-space: nowrap;
+}
+body[data-page="channel-range-list"] .crl-table > thead > tr > th.crl-campaign-col,
+body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td.crl-campaign-col,
+body[data-page="channel-range-list"] .crl-table > thead > tr > th.crl-sip-col,
+body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td.crl-sip-col {
+    text-align: left;
+    white-space: nowrap;
+    padding-left: 16px;
+    padding-right: 16px;
+}
+body[data-page="channel-range-list"] .crl-table > thead > tr > th.crl-channel-col,
+body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td.crl-channel-col,
+body[data-page="channel-range-list"] .crl-table > thead > tr > th.crl-actions-col,
+body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td.crl-actions-col {
+    padding-left: 16px;
+    padding-right: 16px;
+}
+body[data-page="channel-range-list"] .crl-table .ca-nested-row > td {
+    padding: 0;
+    background: #fff;
+}
+body[data-page="channel-range-list"] .crl-table .ca-nested {
+    border: 0;
+    border-radius: 0;
+    margin-top: 0;
+    background: transparent;
+    overflow: visible;
+}
+body[data-page="channel-range-list"] .crl-table .ca-toggle {
+    margin-right: 0;
+}
+body[data-page="channel-range-list"] .crl-sip-name {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26.25px;
+}
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th,
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td {
+    max-width: none;
+    padding: 10px 16px;
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th.crl-toggle-col,
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td.crl-toggle-col {
+    width: 42px;
+    padding-left: 8px;
+    padding-right: 0;
+}
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th.crl-campaign-col,
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td.crl-campaign-col,
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th.crl-sip-col,
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td.crl-sip-col {
+    width: 23%;
+    text-align: left;
+}
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th.crl-channel-col,
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td.crl-channel-col {
+    width: 24%;
+    text-align: center;
+}
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th.crl-actions-col,
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td.crl-actions-col,
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th:last-child,
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td:last-child,
+body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested .actions-column {
+    width: 24%;
+    text-align: right;
+    white-space: nowrap;
+}
+body[data-page="channel-range-list"] .crl-nested .row-actions {
+    display: inline-flex;
+    justify-content: flex-end;
+    width: auto;
+    margin: 0 0 0 auto;
+}
+body[data-page="channel-range-list"] .crl-channel-number {
+    display: inline-block;
+}
+#crl_sip_name[readonly],
+#crl_sip_name:disabled {
+    background: #f8fafc;
+    color: #334155;
+    cursor: not-allowed;
+}
+
 .sip-table > thead > tr > th,
 .sip-table > tbody > tr > td {
     text-align: center;
@@ -1352,11 +1491,11 @@ table[aria-label="Channel Utilization"] td.num-col{text-align:center}
 .sim-table thead th:nth-child(2),
 .sim-table tbody td:nth-child(2) { width: 13%; }
 .sim-table thead th:nth-child(3),
-.sim-table tbody td:nth-child(3) { width: 8%; }
+.sim-table tbody td:nth-child(3) { width: 10%; }
 .sim-table thead th:nth-child(4),
-.sim-table tbody td:nth-child(4) { width: 8%; }
+.sim-table tbody td:nth-child(4) { width: 12%; }
 .sim-table thead th:nth-child(5),
-.sim-table tbody td:nth-child(5) { width: 12%; }
+.sim-table tbody td:nth-child(5) { width: 8%; }
 .sim-table thead th:nth-child(6),
 .sim-table tbody td:nth-child(6) { width: 13%; }
 .sim-table thead th:nth-child(7),
@@ -1578,6 +1717,40 @@ textarea.form-control.dg-issue-field {
     gap: 7.5px;
     min-height: 0;
     margin-top: 7.5px;
+}
+.pin-selected {
+    margin-top: 2.5px;
+}
+.pin-selected-title {
+    display: block;
+    width: 100%;
+    text-align: center;
+}
+.pin-selected-table {
+    width: 100%;
+    table-layout: fixed;
+    border: 1.25px solid var(--border);
+    border-radius: 10px;
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: hidden;
+}
+.pin-selected-table th,
+.pin-selected-table td {
+    text-align: center;
+    vertical-align: middle;
+    padding: 8.75px 10px;
+}
+.pin-selected-table th {
+    font-weight: 700;
+    background: #f8fafc;
+}
+.pin-selected-table td .row-actions,
+.pin-selected-table td .action-btn {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0 auto;
 }
 .pin-chip {
     display: inline-flex;
@@ -3336,4 +3509,137 @@ body[data-page="defective-gsm"] #moduleModal .modal-body {
 }
 body[data-page="defective-gsm"] #moduleModal .pdc-date-field {
     position: relative;
+}
+
+body[data-page="channel-allocation"] .table-card,
+body[data-page="channel-allocation"] .table-wrap,
+body[data-page="pdc-servers"] .table-card,
+body[data-page="pdc-servers"] .table-wrap,
+body[data-page="gsm-gateways"] .table-card,
+body[data-page="gsm-gateways"] .table-wrap {
+    overflow: visible;
+}
+body[data-page="gsm-gateways"] .gsm-table .sortable-button {
+    width: 100%;
+    justify-content: center;
+}
+body[data-page="gsm-gateways"] .gsm-table > thead > tr > th:first-child,
+body[data-page="gsm-gateways"] .gsm-table > tbody > tr.gsm-gateway-row > td:first-child {
+    text-align: left;
+}
+body[data-page="gsm-gateways"] .gsm-table > thead > tr > th:first-child .sortable-button {
+    justify-content: flex-start;
+    width: auto;
+}
+body[data-page="gsm-gateways"] .gsm-table > thead > tr > th:first-child .ca-toggle {
+    visibility: hidden;
+    pointer-events: none;
+    height: 0;
+    overflow: hidden;
+}
+body[data-page="gsm-gateways"] .gsm-table .ca-menu {
+    display: inline-flex;
+    justify-content: center;
+}
+select.form-control option[value=""] {
+    display: none;
+}
+body[data-page="gsm-gateways"] .gsm-table > tbody > tr.ca-nested-row > td {
+    padding: 0 15px 15px;
+    text-align: left;
+    white-space: normal;
+    background: #f8fafc;
+}
+body[data-page="gsm-gateways"] .gsm-table tr.gsm-gateway-row {
+    cursor: pointer;
+}
+body[data-page="gsm-gateways"] .gsm-table tr.gsm-gateway-row.open td {
+    background: #eff6ff;
+}
+body[data-page="gsm-gateways"] .gsm-gateway-row.open .ca-toggle svg {
+    transform: rotate(90deg);
+}
+.gsm-host-cell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 100%;
+}
+body[data-page="gsm-gateways"] .gsm-host-cell {
+    display: flex;
+    justify-content: flex-start;
+    width: 100%;
+}
+body[data-page="gsm-gateways"] .gsm-host-cell > span {
+    font-weight: 700;
+}
+body[data-page="gsm-gateways"] .gsm-sim-nested {
+    width: 100%;
+    table-layout: fixed;
+    margin: 0;
+}
+body[data-page="gsm-gateways"] .gsm-sim-nested thead th,
+body[data-page="gsm-gateways"] .gsm-sim-nested tbody td {
+    text-align: center;
+    vertical-align: middle;
+}
+body[data-page="gsm-gateways"] .gsm-sim-nested .ca-actions-head,
+body[data-page="gsm-gateways"] .gsm-sim-nested .row-actions {
+    justify-content: center;
+}
+.req {
+    color: #ef4444;
+    font-weight: 700;
+}
+.gsm-sim-block {
+    width: 100%;
+    margin-top: 18.75px;
+}
+.gsm-sim-block > label {
+    display: block;
+    text-align: left;
+    margin-bottom: 7.5px;
+    font-size: 11.25px;
+    font-weight: 700;
+    color: #475569;
+}
+.gsm-sim-block > .form-control {
+    width: 100%;
+}
+.gsm-sim-list {
+    width: 100%;
+    margin-top: 10px;
+    max-height: 237.5px;
+    overflow: auto;
+    border: 1.25px solid var(--border);
+    border-radius: 7.5px;
+}
+.gsm-sim-list table {
+    width: 100%;
+    table-layout: fixed;
+    margin: 0;
+}
+.gsm-sim-list thead th,
+.gsm-sim-list tbody td {
+    text-align: center;
+    vertical-align: middle;
+    padding: 8.75px 10px;
+    font-size: 12.5px;
+}
+.gsm-sim-list thead th {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    border-bottom: 1.25px solid var(--border);
+    font-weight: 700;
+}
+.gsm-sim-row {
+    cursor: pointer;
+}
+.gsm-sim-row:hover {
+    background: #eff6ff;
+}
+.gsm-sim-row.is-selected,
+.gsm-sim-row.is-selected:hover {
+    background: #dbeafe;
 }

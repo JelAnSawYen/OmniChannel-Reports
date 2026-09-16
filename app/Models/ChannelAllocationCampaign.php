@@ -53,6 +53,21 @@ class ChannelAllocationCampaign extends Model
             ->keyBy(fn (self $campaign) => mb_strtolower((string) $campaign->name));
     }
 
+    public static function fromFormValue(?string $name, mixed $id = null): ?self
+    {
+        $name = trim((string) $name);
+        if ($name !== '') {
+            return static::findOrCreateByName($name);
+        }
+
+        $id = (int) $id;
+        if ($id < 1) {
+            return null;
+        }
+
+        return static::query()->find($id);
+    }
+
     public static function findOrCreateByName(string $name): self
     {
         $name = trim($name);

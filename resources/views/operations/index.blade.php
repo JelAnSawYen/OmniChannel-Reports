@@ -95,6 +95,10 @@
             $editValues['landline_numbers'] = $record->landlineList();
             continue;
         }
+        if ($isInbound && $field === 'network') {
+            $editValues['network'] = \App\Support\GsmSimInventory::canonicalNetwork($record->network) ?: ($record->network ?: '');
+            continue;
+        }
         $value = $record->{$field};
         if ($value instanceof \DateTimeInterface) {
             $value = $useMdyDate
@@ -102,6 +106,9 @@
                 : $value->format('Y-m-d');
         }
         $editValues[$field] = $value;
+    }
+    if ($isInbound) {
+        $editValues['mobile_assignments'] = $record->mobileDisplayRows();
     }
 @endphp
 <tr>
@@ -115,8 +122,8 @@
                 —
             @else
                 <span class="pin-stack">
-                    @foreach($record->mobileList() as $mobile)
-                        <span>{{ $mobile }}</span>
+                    @foreach($record->mobileDisplayRows() as $mobileRow)
+                        <span>{{ $mobileRow['mobile'] }}</span>
                     @endforeach
                 </span>
             @endif
@@ -132,8 +139,28 @@
                 </span>
             @endif
         </td>
-        <td>{{ $record->gatewayLabel() }}</td>
-        <td>{{ $record->portLabel() }}</td>
+        <td>
+            @if($record->mobileList() === [])
+                —
+            @else
+                <span class="pin-stack">
+                    @foreach($record->mobileDisplayRows() as $mobileRow)
+                        <span>{{ $mobileRow['hostname'] !== '' ? $mobileRow['hostname'] : '—' }}</span>
+                    @endforeach
+                </span>
+            @endif
+        </td>
+        <td>
+            @if($record->mobileList() === [])
+                —
+            @else
+                <span class="pin-stack">
+                    @foreach($record->mobileDisplayRows() as $mobileRow)
+                        <span>{{ $mobileRow['port'] !== '' ? $mobileRow['port'] : '—' }}</span>
+                    @endforeach
+                </span>
+            @endif
+        </td>
         <td>{{ $record->networkLabel() }}</td>
         <td class="pin-remarks-col">{{ $record->remarksLabel() }}</td>
     @else
@@ -142,6 +169,10 @@
         <td @class(['num-col' => $isNumericCol, 'sb-specs-col' => $isBooster && $field === 'specs', 'dg-issue-col' => $isDefective && $field === 'issue'])>
             @if($field==='monthly_cost')
                 <span class="num-align" data-label="{{ $label }}">₱{{ number_format((float) $record->$field, 2) }}</span>
+            @elseif($isSim && $field === 'port')
+                {{ $record->displayPort() }}
+            @elseif($isSim && $field === 'ip_address')
+                {{ $record->displayIp() }}
             @elseif($field==='status')
                 <span class="status-pill {{ in_array($record->$field, ['Active', 'Available']) ? 'online' : (in_array($record->$field, ['In Use', 'Expiring']) ? 'unknown' : 'offline') }}">{{ $record->$field }}</span>
             @elseif(in_array($field, ['contract_start', 'contract_end', 'reported_on'], true))
@@ -241,35 +272,44 @@
                             </div>
                         </div>
                         <div class="form-group">
-                            <label for="pinMobileInput">Mobile Number(s)</label>
-                            <input class="form-control" id="pinMobileInput" autocomplete="off">
-                            <small class="muted pin-number-hint">You can enter multiple mobile numbers.</small>
-                            <div class="pin-chips" id="pinMobileChips" data-pin-chips="mobile"></div>
-                            <div id="pinMobileHidden"></div>
-                        </div>
-                        <div class="form-group">
-                            <label for="pinLandlineInput">Landline Number(s)</label>
-                            <input class="form-control" id="pinLandlineInput" autocomplete="off">
-                            <small class="muted pin-number-hint">You can enter multiple landline numbers.</small>
-                            <div class="pin-chips" id="pinLandlineChips" data-pin-chips="landline"></div>
-                            <div id="pinLandlineHidden"></div>
-                        </div>
-                        <div class="form-group pin-gsm-wrap" id="pinGsmWrap">
-                            <label for="field_media_gateway_id">GSM Gateway</label>
-                            <select class="form-control" name="media_gateway_id" id="field_media_gateway_id" disabled>
-                                <option value="">Select GSM Gateway</option>
-                                @foreach($gsmGateways as $gateway)
-                                    <option value="{{ $gateway->id }}" data-port="{{ $gateway->port }}" data-network="{{ $gateway->network }}">{{ $gateway->ip_address }}</option>
+                            <label for="field_network">Network</label>
+                            <select class="form-control" name="network" id="field_network">
+                                <option value="" selected hidden>Select Network</option>
+                                @foreach(($pinNetworks ?? []) as $pinNetwork)
+                                    <option value="{{ $pinNetwork }}">{{ $pinNetwork }}</option>
                                 @endforeach
                             </select>
                         </div>
-                        <div class="form-group pin-gsm-wrap">
-                            <label for="field_port">Port</label>
-                            <input class="form-control" name="port" id="field_port" readonly tabindex="-1" disabled>
+                        <div class="form-group">
+                            <label for="pinMobileInput">Mobile Number</label>
+                            <div class="pin-campaign-combo pin-search-combo">
+                                <input class="form-control" id="pinMobileInput" placeholder="Search or type a mobile number..." autocomplete="off" disabled>
+                                <div class="pin-campaign-menu" id="pinMobileMenu" hidden role="listbox"></div>
+                            </div>
+                            <div id="pinMobileHidden"></div>
                         </div>
-                        <div class="form-group pin-gsm-wrap">
-                            <label for="field_network">Network</label>
-                            <input class="form-control" name="network" id="field_network" readonly tabindex="-1" disabled>
+                        <div class="form-group full pin-selected">
+                            <label class="pin-selected-title" for="pinSelectedTable">Selected Mobile Numbers</label>
+                            <table class="pin-selected-table" id="pinSelectedTable">
+                                <thead>
+                                    <tr>
+                                        <th>Mobile Number</th>
+                                        <th>GSM Gateway</th>
+                                        <th>Port</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pinSelectedBody"></tbody>
+                            </table>
+                        </div>
+                        <div class="form-group">
+                            <label for="pinLandlineInput">Landline</label>
+                            <div class="pin-campaign-combo pin-search-combo">
+                                <input class="form-control" id="pinLandlineInput" placeholder="Search landline..." autocomplete="off">
+                                <div class="pin-campaign-menu" id="pinLandlineMenu" hidden role="listbox"></div>
+                            </div>
+                            <div class="pin-chips" id="pinLandlineChips" data-pin-chips="landline"></div>
+                            <div id="pinLandlineHidden"></div>
                         </div>
                         <div class="form-group full">
                             <label for="field_remarks">Remarks</label>
@@ -287,9 +327,25 @@
                             </select>
                         @elseif($field==='gateway')
                             <select class="form-control" name="{{ $field }}" id="field_{{ $field }}">
-                                <option value="">Select Media Gateway</option>
+                                <option value="" selected hidden>Select Media Gateway</option>
                                 @foreach($gateways as $gateway)
                                     <option value="{{ $gateway->site_code }}">{{ $gateway->site_code }} — {{ $gateway->site_name }}</option>
+                                @endforeach
+                            </select>
+                        @elseif($field==='location')
+                            <select class="form-control" name="{{ $field }}" id="field_{{ $field }}">
+                                <option value="" selected hidden></option>
+                                @foreach(($locations ?? []) as $locationName)
+                                    <option value="{{ $locationName }}">{{ $locationName }}</option>
+                                @endforeach
+                            </select>
+                        @elseif($isSim && $field === 'ip_address')
+                            <select class="form-control" name="{{ $field }}" id="field_{{ $field }}" required>
+                                <option value="" selected hidden></option>
+                                @foreach($gsmGateways->unique('ip_address') as $gateway)
+                                    @if($gateway->ip_address)
+                                        <option value="{{ $gateway->ip_address }}">{{ $gateway->ip_address }}</option>
+                                    @endif
                                 @endforeach
                             </select>
                         @elseif($field==='description')
@@ -350,7 +406,15 @@ document.addEventListener('DOMContentLoaded', () => {
         Object.keys(values).forEach((key) => {
             if (Array.isArray(values[key])) return;
             const field = document.getElementById('field_' + key);
-            if (field) field.value = values[key] ?? '';
+            if (!field) return;
+            const value = values[key] ?? '';
+            if (field.tagName === 'SELECT' && value && ![...field.options].some((option) => option.value === String(value))) {
+                const option = document.createElement('option');
+                option.value = value;
+                option.textContent = value;
+                field.appendChild(option);
+            }
+            field.value = value;
         });
         modal?.classList.add('visible');
     });
@@ -361,14 +425,25 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('DOMContentLoaded', () => {
     const input = document.getElementById('field_campaign');
     const menu = document.getElementById('pinCampaignMenu');
-    const gateway = document.getElementById('field_media_gateway_id');
-    const port = document.getElementById('field_port');
     const network = document.getElementById('field_network');
+    const mobileInput = document.getElementById('pinMobileInput');
+    const mobileMenu = document.getElementById('pinMobileMenu');
+    const landlineInput = document.getElementById('pinLandlineInput');
+    const landlineMenu = document.getElementById('pinLandlineMenu');
     const inboundForm = document.getElementById('moduleForm');
-    const lists = {
-        mobile: [],
-        landline: [],
-    };
+    const simDirectory = @json($pinSimDirectory ?? []);
+    const channelNumbers = @json($pinChannelNumbers ?? []);
+    const trashIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="m6 7 1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>';
+    const selected = [];
+    const lists = { landline: [] };
+
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    }[char]));
 
     const options = () => [...(menu?.querySelectorAll('.pin-campaign-option') || [])];
     const filterMenu = () => {
@@ -400,143 +475,268 @@ document.addEventListener('DOMContentLoaded', () => {
         input.value = option.dataset.name || '';
         closeMenu();
     });
-    document.addEventListener('click', (event) => {
-        if (!(event.target instanceof Element) || !event.target.closest('.pin-campaign-combo')) {
-            closeMenu();
-        }
-    });
 
-    const fillGatewayDetails = () => {
-        const selected = gateway?.selectedOptions?.[0];
-        if (port) port.value = selected?.dataset.port || '';
-        if (network) network.value = selected?.dataset.network || '';
-    };
-    const toggleGsm = () => {
-        const hasMobile = lists.mobile.length > 0;
-        if (gateway) {
-            gateway.disabled = !hasMobile;
-            gateway.required = hasMobile;
-            gateway.setCustomValidity('');
-        }
-        if (port) port.disabled = !hasMobile;
-        if (network) network.disabled = !hasMobile;
-        if (!hasMobile) {
-            if (gateway) gateway.value = '';
-            if (port) port.value = '';
-            if (network) network.value = '';
+    const currentNetwork = () => String(network?.value || '').trim();
+    const networkMobiles = () => simDirectory[currentNetwork()] || [];
+    const lookupMobile = (value) => networkMobiles().find((row) => row.mobile === value) || null;
+    const dash = (value) => String(value || '').trim() || '—';
+
+    const setMobileEnabled = () => {
+        if (!mobileInput) return;
+        mobileInput.disabled = currentNetwork() === '';
+        if (mobileInput.disabled) {
+            mobileInput.value = '';
+            if (mobileMenu) mobileMenu.hidden = true;
         }
     };
-    const renderChips = (kind) => {
-        const chips = document.getElementById(kind === 'mobile' ? 'pinMobileChips' : 'pinLandlineChips');
-        const hidden = document.getElementById(kind === 'mobile' ? 'pinMobileHidden' : 'pinLandlineHidden');
-        const name = kind === 'mobile' ? 'mobile_numbers[]' : 'landline_numbers[]';
-        if (!chips || !hidden) return;
-        chips.innerHTML = lists[kind].map((value, index) => (
-            '<span class="pin-chip">' + value.replace(/</g, '') +
-            '<button type="button" class="pin-chip-remove" data-pin-remove="' + kind + '" data-index="' + index + '" aria-label="Remove ' + value + '">×</button></span>'
-        )).join('');
-        hidden.innerHTML = lists[kind].map((value) => (
-            '<input type="hidden" name="' + name + '" value="' + String(value).replace(/"/g, '&quot;') + '">'
-        )).join('');
-        if (kind === 'mobile') toggleGsm();
+
+    const renderSearchMenu = (list, query, menuEl, emptyText) => {
+        if (!menuEl) return;
+        const needle = String(query || '').trim().toLowerCase();
+        const matches = list.filter((item) => !needle || item.toLowerCase().includes(needle));
+        menuEl.innerHTML = matches.length
+            ? matches.map((item) => '<button class="pin-campaign-option" type="button" role="option" data-value="' + escapeHtml(item) + '">' + escapeHtml(item) + '</button>').join('')
+            : '<div class="pin-campaign-empty">' + escapeHtml(emptyText) + '</div>';
+        menuEl.hidden = false;
     };
-    const addNumber = (kind, raw) => {
-        const field = document.getElementById(kind === 'mobile' ? 'pinMobileInput' : 'pinLandlineInput');
+
+    const renderSelected = () => {
+        const body = document.getElementById('pinSelectedBody');
+        const hidden = document.getElementById('pinMobileHidden');
+        if (body) {
+            body.innerHTML = selected.map((row, index) => (
+                '<tr>' +
+                '<td>' + escapeHtml(row.mobile) + '</td>' +
+                '<td>' + escapeHtml(dash(row.hostname)) + '</td>' +
+                '<td>' + escapeHtml(dash(row.port)) + '</td>' +
+                '<td><div class="row-actions"><button class="action-btn delete" type="button" data-pin-remove-mobile="' + index + '" title="Delete" aria-label="Delete">' + trashIcon + '</button></div></td>' +
+                '</tr>'
+            )).join('');
+        }
+        if (hidden) {
+            hidden.innerHTML = selected.map((row) => (
+                '<input type="hidden" name="mobile_numbers[]" value="' + escapeHtml(row.mobile) + '">'
+            )).join('');
+        }
+    };
+
+    const renderLandlineChips = () => {
+        const chips = document.getElementById('pinLandlineChips');
+        const hidden = document.getElementById('pinLandlineHidden');
+        if (chips) {
+            chips.innerHTML = lists.landline.map((value, index) => (
+                '<span class="pin-chip">' + escapeHtml(value) +
+                '<button type="button" class="pin-chip-remove" data-pin-remove="landline" data-index="' + index + '" aria-label="Delete">×</button></span>'
+            )).join('');
+        }
+        if (hidden) {
+            hidden.innerHTML = lists.landline.map((value) => (
+                '<input type="hidden" name="landline_numbers[]" value="' + escapeHtml(value) + '">'
+            )).join('');
+        }
+    };
+
+    const refreshAssignments = () => {
+        selected.forEach((row) => {
+            const hit = lookupMobile(row.mobile);
+            row.hostname = hit?.hostname || '';
+            row.port = hit?.port || '';
+        });
+        renderSelected();
+    };
+
+    const addMobile = (raw) => {
+        const value = String(raw || '').trim();
+        if (!value) return;
+        if (currentNetwork() === '') {
+            network?.setCustomValidity('Network is required when Mobile numbers are entered.');
+            network?.reportValidity();
+            return;
+        }
+        network?.setCustomValidity('');
+        if (!/^[0-9]{1,50}$/.test(value)) {
+            mobileInput?.setCustomValidity('Mobile must contain only digits.');
+            mobileInput?.reportValidity();
+            return;
+        }
+        if (selected.some((row) => row.mobile === value) || lists.landline.includes(value)) {
+            mobileInput?.setCustomValidity('Number is duplicated.');
+            mobileInput?.reportValidity();
+            return;
+        }
+        mobileInput?.setCustomValidity('');
+        const hit = lookupMobile(value);
+        selected.push({
+            mobile: value,
+            hostname: hit?.hostname || '',
+            port: hit?.port || '',
+        });
+        renderSelected();
+    };
+
+    const addLandline = (raw) => {
         const value = String(raw || '').trim();
         if (!value) return;
         if (!/^[0-9]{1,50}$/.test(value)) {
-            field?.setCustomValidity((kind === 'mobile' ? 'Mobile' : 'Landline') + ' must contain only digits.');
-            field?.reportValidity();
+            landlineInput?.setCustomValidity('Landline must contain only digits.');
+            landlineInput?.reportValidity();
             return;
         }
-        const other = kind === 'mobile' ? lists.landline : lists.mobile;
-        if (lists[kind].includes(value) || other.includes(value)) {
-            field?.setCustomValidity('Number is duplicated.');
-            field?.reportValidity();
+        if (!channelNumbers.includes(value)) {
+            landlineInput?.setCustomValidity('Landline must match an existing Channel Number.');
+            landlineInput?.reportValidity();
             return;
         }
-        field?.setCustomValidity('');
-        lists[kind].push(value);
-        renderChips(kind);
+        if (lists.landline.includes(value) || selected.some((row) => row.mobile === value)) {
+            landlineInput?.setCustomValidity('Number is duplicated.');
+            landlineInput?.reportValidity();
+            return;
+        }
+        landlineInput?.setCustomValidity('');
+        lists.landline.push(value);
+        renderLandlineChips();
     };
-    const bindChipInput = (kind, fieldId) => {
-        const field = document.getElementById(fieldId);
-        field?.addEventListener('input', () => field.setCustomValidity(''));
-        field?.addEventListener('keydown', (event) => {
-            if (event.key !== 'Enter') return;
-            event.preventDefault();
-            addNumber(kind, field.value);
-            if (field.validity.valid) field.value = '';
-        });
-    };
-    bindChipInput('mobile', 'pinMobileInput');
-    bindChipInput('landline', 'pinLandlineInput');
-    document.addEventListener('click', (event) => {
-        const button = event.target.closest('[data-pin-remove]');
-        if (!button) return;
-        const kind = button.getAttribute('data-pin-remove');
-        const index = Number(button.getAttribute('data-index'));
-        if (!lists[kind] || Number.isNaN(index)) return;
-        lists[kind].splice(index, 1);
-        renderChips(kind);
+
+    mobileInput?.addEventListener('focus', () => {
+        if (mobileInput.disabled) return;
+        renderSearchMenu(networkMobiles().map((row) => row.mobile), mobileInput.value, mobileMenu, 'No mobile numbers found.');
     });
-    gateway?.addEventListener('change', fillGatewayDetails);
+    mobileInput?.addEventListener('input', () => {
+        mobileInput.setCustomValidity('');
+        if (mobileInput.disabled) return;
+        renderSearchMenu(networkMobiles().map((row) => row.mobile), mobileInput.value, mobileMenu, 'No mobile numbers found.');
+    });
+    mobileInput?.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        addMobile(mobileInput.value);
+        if (mobileInput.validity.valid) {
+            mobileInput.value = '';
+            if (mobileMenu) mobileMenu.hidden = true;
+        }
+    });
+    mobileMenu?.addEventListener('click', (event) => {
+        const option = event.target.closest('.pin-campaign-option');
+        if (!option) return;
+        addMobile(option.dataset.value || '');
+        if (mobileInput) mobileInput.value = '';
+        mobileMenu.hidden = true;
+    });
+
+    landlineInput?.addEventListener('focus', () => {
+        renderSearchMenu(channelNumbers, landlineInput.value, landlineMenu, 'No channel numbers found.');
+    });
+    landlineInput?.addEventListener('input', () => {
+        landlineInput.setCustomValidity('');
+        renderSearchMenu(channelNumbers, landlineInput.value, landlineMenu, 'No channel numbers found.');
+    });
+    landlineInput?.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        addLandline(landlineInput.value);
+        if (landlineInput.validity.valid) {
+            landlineInput.value = '';
+            if (landlineMenu) landlineMenu.hidden = true;
+        }
+    });
+    landlineMenu?.addEventListener('click', (event) => {
+        const option = event.target.closest('.pin-campaign-option');
+        if (!option) return;
+        addLandline(option.dataset.value || '');
+        if (landlineInput) landlineInput.value = '';
+        landlineMenu.hidden = true;
+    });
+
+    network?.addEventListener('change', () => {
+        network.setCustomValidity('');
+        setMobileEnabled();
+        refreshAssignments();
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!(event.target instanceof Element)) return;
+        if (!event.target.closest('.pin-campaign-combo')) {
+            closeMenu();
+            if (mobileMenu) mobileMenu.hidden = true;
+            if (landlineMenu) landlineMenu.hidden = true;
+        }
+        const mobileTrash = event.target.closest('[data-pin-remove-mobile]');
+        if (mobileTrash) {
+            const index = Number(mobileTrash.getAttribute('data-pin-remove-mobile'));
+            if (!Number.isNaN(index)) selected.splice(index, 1);
+            renderSelected();
+            return;
+        }
+        const chipTrash = event.target.closest('[data-pin-remove]');
+        if (!chipTrash) return;
+        const index = Number(chipTrash.getAttribute('data-index'));
+        if (Number.isNaN(index)) return;
+        lists.landline.splice(index, 1);
+        renderLandlineChips();
+    });
+
     inboundForm?.addEventListener('submit', (event) => {
-        const mobileField = document.getElementById('pinMobileInput');
-        const landlineField = document.getElementById('pinLandlineInput');
-        mobileField?.setCustomValidity('');
-        landlineField?.setCustomValidity('');
-        if (mobileField?.value.trim()) addNumber('mobile', mobileField.value);
-        if (landlineField?.value.trim()) addNumber('landline', landlineField.value);
-        if (mobileField && mobileField.validity.valid) mobileField.value = '';
-        if (landlineField && landlineField.validity.valid) landlineField.value = '';
-        if ((mobileField && !mobileField.validity.valid) || (landlineField && !landlineField.validity.valid)) {
+        mobileInput?.setCustomValidity('');
+        landlineInput?.setCustomValidity('');
+        network?.setCustomValidity('');
+        if (mobileInput?.value.trim()) addMobile(mobileInput.value);
+        if (landlineInput?.value.trim()) addLandline(landlineInput.value);
+        if (mobileInput && mobileInput.validity.valid) mobileInput.value = '';
+        if (landlineInput && landlineInput.validity.valid) landlineInput.value = '';
+        if ((mobileInput && !mobileInput.validity.valid) || (landlineInput && !landlineInput.validity.valid) || (network && !network.validity.valid)) {
             event.preventDefault();
             return;
         }
-        toggleGsm();
-        if (lists.mobile.length === 0 && lists.landline.length === 0) {
+        if (selected.length === 0 && lists.landline.length === 0) {
             event.preventDefault();
-            const target = landlineField || mobileField;
+            const target = landlineInput || mobileInput;
             target?.setCustomValidity('Enter at least one Mobile or Landline number.');
             target?.reportValidity();
             return;
         }
-        mobileField?.setCustomValidity('');
-        landlineField?.setCustomValidity('');
-        if (lists.mobile.length > 0 && gateway && !String(gateway.value || '').trim()) {
+        if (selected.length > 0 && currentNetwork() === '') {
             event.preventDefault();
-            gateway.setCustomValidity('Please select a GSM Gateway.');
-            gateway.reportValidity();
-            return;
+            network?.setCustomValidity('Network is required when Mobile numbers are entered.');
+            network?.reportValidity();
         }
-        gateway?.setCustomValidity('');
     });
 
     const resetNumbers = () => {
-        lists.mobile = [];
+        selected.splice(0, selected.length);
         lists.landline = [];
-        renderChips('mobile');
-        renderChips('landline');
-        const mobileInput = document.getElementById('pinMobileInput');
-        const landlineInput = document.getElementById('pinLandlineInput');
+        renderSelected();
+        renderLandlineChips();
         if (mobileInput) mobileInput.value = '';
         if (landlineInput) landlineInput.value = '';
-        toggleGsm();
+        network?.setCustomValidity('');
+        setMobileEnabled();
     };
     document.getElementById('operationAddButton')?.addEventListener('click', resetNumbers);
     document.addEventListener('click', (event) => {
         const button = event.target.closest('[data-operation-edit]');
         if (!button) return;
         const values = JSON.parse(button.dataset.values || '{}');
-        lists.mobile = Array.isArray(values.mobile_numbers) ? values.mobile_numbers.map(String) : [];
+        selected.splice(0, selected.length);
+        const assignments = Array.isArray(values.mobile_assignments) ? values.mobile_assignments : [];
+        const mobiles = Array.isArray(values.mobile_numbers) ? values.mobile_numbers.map(String) : [];
+        (assignments.length ? assignments : mobiles.map((mobile) => ({ mobile, hostname: '', port: '' }))).forEach((row) => {
+            const mobile = String(row.mobile || row);
+            const hit = lookupMobile(mobile);
+            selected.push({
+                mobile,
+                hostname: hit?.hostname || row.hostname || '',
+                port: hit?.port || row.port || '',
+            });
+        });
         lists.landline = Array.isArray(values.landline_numbers) ? values.landline_numbers.map(String) : [];
-        renderChips('mobile');
-        renderChips('landline');
-        if (gateway) gateway.value = values.media_gateway_id ?? '';
-        fillGatewayDetails();
-        toggleGsm();
+        renderSelected();
+        renderLandlineChips();
+        setMobileEnabled();
+        refreshAssignments();
     });
+    setMobileEnabled();
+    renderSelected();
+    renderLandlineChips();
 });
 </script>
 @endif

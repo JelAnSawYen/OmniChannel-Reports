@@ -6,6 +6,8 @@ use App\Models\ChannelAllocationCampaign;
 use App\Models\MediaGateway;
 use App\Models\PdcGroup;
 use App\Models\PdcServer;
+use App\Models\SipChannel;
+use App\Models\SipChannelNumber;
 use App\Models\User;
 use App\Models\UserType;
 use App\Support\OperationCatalog;
@@ -70,9 +72,9 @@ class OperationsCrudSearchTest extends TestCase
                 'hidden' => 'SB-BETA-1',
             ]],
             'defective-gsm' => ['defective-gsm', [
-                'create' => ['asset_code' => 'DG-ALPHA', 'location' => 'SCS', 'issue' => 'No signal', 'reported_on' => '2026-08-01', 'status' => 'Open'],
+                'create' => ['asset_code' => 'DG-ALPHA', 'location' => 'SC5', 'issue' => 'No signal', 'reported_on' => '2026-08-01', 'status' => 'Open'],
                 'other' => ['asset_code' => 'DG-BETA', 'location' => 'Alcar', 'issue' => 'Broken antenna', 'reported_on' => '2026-08-02', 'status' => 'Open'],
-                'update' => ['asset_code' => 'DG-ALPHA', 'location' => 'SCS', 'issue' => 'Repaired radio', 'reported_on' => '2026-08-01', 'status' => 'Closed'],
+                'update' => ['asset_code' => 'DG-ALPHA', 'location' => 'SC5', 'issue' => 'Repaired radio', 'reported_on' => '2026-08-01', 'status' => 'Closed'],
                 'updated' => ['issue' => 'Repaired radio', 'status' => 'Closed'],
                 'kept' => ['asset_code' => 'DG-BETA'],
                 'search' => 'Repaired radio',
@@ -88,6 +90,37 @@ class OperationsCrudSearchTest extends TestCase
 
         $config = OperationCatalog::modules()[$module];
         $table = (new $config['model'])->getTable();
+
+        if (in_array($module, ['globe-sim', 'smart-sim'], true)) {
+            MediaGateway::create([
+                'site_name' => 'Alcar',
+                'site_code' => 'SIM-IP-A-'.$module,
+                'ip_address' => $case['create']['ip_address'],
+                'username' => 'root',
+                'database' => 'asteriskcdrdb',
+            ]);
+            MediaGateway::create([
+                'site_name' => 'Alcar',
+                'site_code' => 'SIM-IP-B-'.$module,
+                'ip_address' => $case['other']['ip_address'],
+                'username' => 'root',
+                'database' => 'asteriskcdrdb',
+            ]);
+        }
+
+        if ($module === 'program-inbound-numbers') {
+            $campaign = ChannelAllocationCampaign::create(['name' => 'PIN Search']);
+            $sip = SipChannel::create([
+                'campaign_id' => $campaign->id,
+                'etpi_sip_name' => 'SIP_PIN_SEARCH',
+            ]);
+            foreach (['0325000001', '0325000002'] as $number) {
+                SipChannelNumber::create([
+                    'sip_channel_id' => $sip->id,
+                    'channel_number' => $number,
+                ]);
+            }
+        }
 
         $this->post('/'.$module, $case['create'])->assertRedirect();
         $this->post('/'.$module, $case['other'])->assertRedirect();
@@ -205,15 +238,47 @@ class OperationsCrudSearchTest extends TestCase
             ->assertSee('data-delete-id="'.$target->id.'"', false)
             ->assertSee('id="site_name"', false)
             ->assertSee('<select class="form-control" id="site_name" name="site_name" required>', false)
-            ->assertDontSee('<input class="form-control" id="site_name" name="site_name" required>', false);
+            ->assertDontSee('<input class="form-control" id="site_name" name="site_name" required>', false)
+            ->assertSee('data-ca-toggle="'.$target->id.'"', false)
+            ->assertSee('Add SIM Assignment', false)
+            ->assertSee('id="gsmSimNetwork"', false)
+            ->assertSee('Search SIM (IMEI or Mobile Number)...', false)
+            ->assertSee('data-gsm-sim-add="'.$target->id.'"', false)
+            ->assertDontSee('<select class="form-control" id="network" name="network" required>', false)
+            ->assertDontSee('SIM Assignments (', false)
+            ->assertSee('<option value="" selected hidden>Select Function</option>', false)
+            ->assertSee('<option value="" selected hidden>Select Site</option>', false)
+            ->assertSee('<option value="" selected hidden>Select Network</option>', false)
+            ->assertSee('<option value="Inbound">Inbound</option>', false)
+            ->assertSee('<option value="Outbound">Outbound</option>', false)
+            ->assertDontSee('placeholder="Enter hostname"', false)
+            ->assertDontSee('placeholder="Enter IP address (e.g. 10.5.20.108)"', false)
+            ->assertDontSee('placeholder="Enter serial number"', false)
+            ->assertDontSee('placeholder="Enter username"', false)
+            ->assertDontSee('placeholder="Enter channel count"', false)
+            ->assertDontSee('placeholder="Enter password"', false)
+            ->assertSee('Hostname <span class="req">*</span>', false)
+            ->assertSee('IP Address <span class="req">*</span>', false);
+
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertStringContainsString('body[data-page="gsm-gateways"] .gsm-host-cell > span', $css);
+        $this->assertMatchesRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-host-cell > span \{\s*font-weight: 700;/', $css);
+        $this->assertMatchesRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-host-cell \{\s*display: flex;\s*justify-content: flex-start;/', $css);
+        $this->assertMatchesRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-table > tbody > tr\.gsm-gateway-row > td:first-child \{\s*text-align: left;/', $css);
+        $this->assertMatchesRegularExpression('/\.ca-menu-dropdown \{\s*position: absolute;\s*right: 0;\s*left: auto;\s*top: calc\(100% \+ 3\.75px\);/', $css);
+        $this->assertDoesNotMatchRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-table \.ca-menu \{\s*display: inline-flex;\s*justify-content: center;\s*width: 100%;/', $css);
         foreach (array_values(OperationCatalog::locations()) as $name) {
             $page->assertSee('>'.$name.'</option>', false);
         }
 
         $this->putJson('/gsm-gateways/'.$target->id, [
+            'hostname' => 'gsm-tgt-001',
             'site_name' => 'CTN',
             'site_code' => 'TGT001',
             'ip_address' => '10.2.2.3',
+            'channel_count' => 8,
+            'device_function' => 'Inbound',
+            'network' => 'Globe SIM',
             'username' => 'root',
             'database' => 'asteriskcdrdb',
         ])->assertOk();
@@ -232,9 +297,13 @@ class OperationsCrudSearchTest extends TestCase
         $this->assertDatabaseHas('media_gateways', ['id' => $keep->id]);
 
         $this->postJson('/gsm-gateways', [
+            'hostname' => 'bad-host',
             'site_name' => 'Not A Location',
             'site_code' => 'BAD001',
             'ip_address' => '10.2.2.9',
+            'channel_count' => 8,
+            'device_function' => 'Inbound',
+            'network' => 'Globe SIM',
             'username' => 'root',
         ])->assertUnprocessable()->assertJsonValidationErrors('site_name');
     }
@@ -278,8 +347,13 @@ class OperationsCrudSearchTest extends TestCase
 
         $this->actingAs($this->admin)->get('/gsm-gateways')
             ->assertOk()
-            ->assertSee('class="action-btn edit"', false)
-            ->assertSee('class="action-btn delete"', false);
+            ->assertSee('class="ca-menu-btn"', false)
+            ->assertSee('class="ca-menu-item edit"', false)
+            ->assertSee('class="ca-menu-item delete"', false)
+            ->assertDontSee('class="action-btn edit"', false)
+            ->assertDontSee('class="action-btn delete"', false)
+            ->assertSee('gsm-sim-nested', false)
+            ->assertSee('ca-actions-head', false);
 
         $this->actingAs($this->admin)->get('/program-location/estancia')
             ->assertOk()

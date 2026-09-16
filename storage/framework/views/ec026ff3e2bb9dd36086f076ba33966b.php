@@ -235,12 +235,12 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="campaign_id">Campaign</label>
-                        <select class="form-control" name="campaign_id" id="campaign_id" required>
-                            <option value="">Select Campaign</option>
-                            <?php $__currentLoopData = $masterCampaigns; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $master): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                                <option value="<?php echo e($master->id); ?>" data-fte="<?php echo e($master->fte ?? ''); ?>"><?php echo e($master->name); ?></option>
-                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                        </select>
+                        <?php echo $__env->make('partials.campaign-combo', [
+                            'inputId' => 'campaign_id',
+                            'inputName' => 'campaign',
+                            'menuId' => 'caCampaignMenu',
+                            'campaigns' => $masterCampaigns,
+                        ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
                     </div>
                     <div class="form-group" data-campaign-media-gateway><label for="campaign_media_gateway">Media Gateway</label><input class="form-control" name="media_gateway" id="campaign_media_gateway"></div>
                     <div class="form-group" data-campaign-total-channels><label for="campaign_total_channels_allocated">Total Channels Allocated</label><input class="form-control" type="number" min="0" name="total_channels_allocated" id="campaign_total_channels_allocated"></div>
@@ -251,7 +251,7 @@
                     <div class="form-group" data-first-allocation>
                         <label for="campaign_channel_allocation">SIP Channel</label>
                         <select class="form-control" name="channel_allocation" id="campaign_channel_allocation">
-                            <option value="">Select SIP Channel</option>
+                            <option value="" selected hidden>Select SIP Channel</option>
                             <?php $__currentLoopData = $sipChannels; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $sip): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                 <option value="<?php echo e($sip->etpi_sip_name); ?>" data-network="<?php echo e($sip->network); ?>" data-channel-count="<?php echo e($sip->channel_count); ?>"><?php echo e($sip->etpi_sip_name); ?></option>
                             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
@@ -260,7 +260,7 @@
                     <div class="form-group" data-first-allocation>
                         <label for="campaign_alloc_media_gateway">GSM Gateway</label>
                         <select class="form-control" name="media_gateway" id="campaign_alloc_media_gateway">
-                            <option value="">Select GSM Gateway</option>
+                            <option value="" selected hidden>Select GSM Gateway</option>
                             <?php $__currentLoopData = $gsmGateways; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $gateway): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                 <?php $gatewayLabel = $gateway->site_code ?: $gateway->site_name; ?>
                                 <?php if($gatewayLabel): ?>
@@ -305,7 +305,7 @@
                     <div class="form-group">
                         <label for="alloc_channel_allocation">SIP Channel</label>
                         <select class="form-control" name="channel_allocation" id="alloc_channel_allocation" required>
-                            <option value="">Select SIP Channel</option>
+                            <option value="" selected hidden>Select SIP Channel</option>
                             <?php $__currentLoopData = $sipChannels; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $sip): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                 <option value="<?php echo e($sip->etpi_sip_name); ?>" data-network="<?php echo e($sip->network); ?>" data-channel-count="<?php echo e($sip->channel_count); ?>"><?php echo e($sip->etpi_sip_name); ?></option>
                             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
@@ -314,7 +314,7 @@
                     <div class="form-group">
                         <label for="alloc_media_gateway">GSM Gateway</label>
                         <select class="form-control" name="media_gateway" id="alloc_media_gateway">
-                            <option value="">Select GSM Gateway</option>
+                            <option value="" selected hidden>Select GSM Gateway</option>
                             <?php $__currentLoopData = $gsmGateways; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $gateway): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                 <?php $gatewayLabel = $gateway->site_code ?: $gateway->site_name; ?>
                                 <?php if($gatewayLabel): ?>
@@ -537,12 +537,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const campaignSelect = document.getElementById('campaign_id');
     const campaignFteField = document.getElementById('campaign_fte');
 
-    function fillMasterFte() {
-        const option = campaignSelect?.selectedOptions?.[0];
-        if (campaignFteField) campaignFteField.value = option?.getAttribute('data-fte') || '';
+    function fillMasterFte(option) {
+        if (!campaignFteField) return;
+        if (option) {
+            campaignFteField.value = option.getAttribute('data-fte') || '';
+            return;
+        }
+        const query = String(campaignSelect?.value || '').trim().toLowerCase();
+        const exact = [...document.querySelectorAll('#caCampaignMenu .pin-campaign-option')].find((item) => (item.dataset.name || '').toLowerCase() === query);
+        campaignFteField.value = exact?.getAttribute('data-fte') || '';
     }
 
-    campaignSelect?.addEventListener('change', fillMasterFte);
+    campaignSelect?.addEventListener('campaign-combo-change', (event) => fillMasterFte(event.detail?.option || null));
+    campaignSelect?.addEventListener('input', () => fillMasterFte());
 
     const campaignSipSelect = document.getElementById('campaign_channel_allocation');
     const campaignNetworkField = document.getElementById('campaign_network');
@@ -618,7 +625,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setCampaignMediaGatewayVisible(true);
         if (campaignSelect) {
             campaignSelect.disabled = true;
-            campaignSelect.value = values.id ?? '';
+            campaignSelect.value = values.name ?? '';
         }
         fillMasterFte();
         ['media_gateway','total_channels_allocated','caller_id','prefix','remarks'].forEach((key) => {

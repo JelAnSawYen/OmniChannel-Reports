@@ -114,10 +114,17 @@ class ArchiveRecordingController extends Controller
             'monthNames' => self::MONTH_NAMES,
             'yearOptions' => self::ARCHIVE_YEARS,
             'locationOptions' => collect(OperationCatalog::locationMapSites())
-                ->map(fn (array $site, string $slug) => [
-                    'value' => $site['name'],
-                    'label' => OperationCatalog::locations()[$slug] ?? $site['name'],
-                ])
+                ->map(function (array $site, string $slug) {
+                    $isPdc = $slug === 'pdc' || strcasecmp($site['name'], 'PDC') === 0;
+                    if ($isPdc) {
+                        return ['value' => 'WFH', 'label' => 'WFH'];
+                    }
+
+                    return [
+                        'value' => $site['name'],
+                        'label' => OperationCatalog::locations()[$slug] ?? $site['name'],
+                    ];
+                })
                 ->values(),
         ]);
     }
@@ -339,15 +346,16 @@ class ArchiveRecordingController extends Controller
     public function importAudio(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'campaign_id' => ['required', 'integer', 'exists:channel_allocation_campaigns,id'],
+            'campaign' => ['required_without:campaign_id', 'nullable', 'string', 'max:255'],
+            'campaign_id' => ['required_without:campaign', 'nullable', 'integer'],
             'year' => ['required', 'integer', Rule::in(self::ARCHIVE_YEARS)],
             'month' => ['required', 'integer', 'between:1,12'],
             'location' => ['nullable', 'string', 'max:255'],
             'files' => ['required', 'array', 'min:1'],
             'files.*' => ['file', 'max:102400'],
         ], [
-            'campaign_id.required' => 'Please select a campaign.',
-            'campaign_id.exists' => 'Please select a valid Channel Allocation campaign.',
+            'campaign.required_without' => 'Please select a campaign.',
+            'campaign_id.required_without' => 'Please select a campaign.',
             'year.required' => 'Please select a year.',
             'year.in' => 'Please select a year from 2026 to 2018.',
             'month.required' => 'Please select a month.',
@@ -406,7 +414,18 @@ class ArchiveRecordingController extends Controller
             ], 422);
         }
 
-        $campaignId = (int) $request->input('campaign_id');
+        $campaign = ChannelAllocationCampaign::fromFormValue(
+            $request->input('campaign'),
+            $request->input('campaign_id')
+        );
+        if ($campaign === null) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Please select a campaign.',
+            ], 422);
+        }
+
+        $campaignId = (int) $campaign->id;
         $year = (int) $request->input('year');
         $month = (int) $request->input('month');
         $location = trim((string) $request->input('location', ''));

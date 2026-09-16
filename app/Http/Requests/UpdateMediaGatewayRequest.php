@@ -19,10 +19,10 @@ class UpdateMediaGatewayRequest extends FormRequest
         $gateway = $this->route('mediaGateway');
         $id = is_object($gateway) ? $gateway->id : $gateway;
 
-        return [
+        $rules = [
             'site_name' => $this->siteNameRules($gateway),
             'site_code' => ['required', 'string', 'max:255', Rule::unique('media_gateways', 'site_code')->ignore($id)],
-            'ip_address' => ['required', 'ip', Rule::unique('media_gateways', 'ip_address')->ignore($id)],
+            'ip_address' => ['required', $this->isGsm() ? 'ipv4' : 'ip', Rule::unique('media_gateways', 'ip_address')->ignore($id)],
             'plan' => ['nullable', 'string', 'max:255'],
             'port' => ['nullable', 'string', 'max:50'],
             'network' => ['nullable', 'string', 'max:255'],
@@ -30,11 +30,19 @@ class UpdateMediaGatewayRequest extends FormRequest
             'username' => ['required', 'string', 'max:255'],
             'password' => ['nullable', 'string', 'max:255'],
         ];
+
+        if ($this->isGsm()) {
+            $rules['hostname'] = ['required', 'string', 'max:255'];
+            $rules['channel_count'] = ['required', 'integer', 'min:1', 'max:512'];
+            $rules['device_function'] = ['required', 'string', 'max:255'];
+        }
+
+        return $rules;
     }
 
     protected function passedValidation(): void
     {
-        if (! str_starts_with((string) $this->route()?->getName(), 'gsm-gateways')) {
+        if (! $this->isGsm()) {
             return;
         }
 
@@ -44,12 +52,17 @@ class UpdateMediaGatewayRequest extends FormRequest
         }
     }
 
+    private function isGsm(): bool
+    {
+        return str_starts_with((string) $this->route()?->getName(), 'gsm-gateways');
+    }
+
     /**
      * @return list<string|\Illuminate\Validation\Rules\In>
      */
     private function siteNameRules(mixed $gateway): array
     {
-        if (! str_starts_with((string) $this->route()?->getName(), 'gsm-gateways')) {
+        if (! $this->isGsm()) {
             return ['required', 'string', 'max:255'];
         }
 

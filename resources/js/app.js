@@ -19,6 +19,57 @@ function pinPageScroll(pos){
 const showModal=(id)=>qs('#'+id)?.classList.add('visible');
 const hideModal=(id)=>qs('#'+id)?.classList.remove('visible');
 
+function bindCampaignCombo(root){
+    if(!root||root.dataset.campaignComboBound==='1')return;
+    root.dataset.campaignComboBound='1';
+    const input=root.querySelector('input.form-control');
+    const menu=root.querySelector('.pin-campaign-menu');
+    if(!input||!menu)return;
+    const options=()=>[...menu.querySelectorAll('.pin-campaign-option')];
+    const filterMenu=()=>{
+        const query=input.value.trim().toLowerCase();
+        let visible=0;
+        options().forEach(option=>{
+            const match=!query||(option.dataset.name||'').toLowerCase().includes(query);
+            option.hidden=!match;
+            if(match)visible+=1;
+        });
+        const empty=menu.querySelector('.pin-campaign-empty');
+        if(empty&&options().length)empty.hidden=visible>0;
+        const matched=options().find(option=>(option.dataset.name||'').toLowerCase()===query);
+        input.dispatchEvent(new CustomEvent('campaign-combo-change',{bubbles:true,detail:{option:matched||null}}));
+    };
+    const openMenu=()=>{
+        filterMenu();
+        menu.hidden=false;
+        input.setAttribute('aria-expanded','true');
+    };
+    const closeMenu=()=>{
+        menu.hidden=true;
+        input.setAttribute('aria-expanded','false');
+    };
+    input.addEventListener('focus',openMenu);
+    input.addEventListener('input',openMenu);
+    menu.addEventListener('click',event=>{
+        const option=event.target.closest('.pin-campaign-option');
+        if(!option)return;
+        input.value=option.dataset.name||'';
+        closeMenu();
+        input.dispatchEvent(new CustomEvent('campaign-combo-change',{bubbles:true,detail:{option}}));
+    });
+    root._closeCampaignCombo=closeMenu;
+}
+
+function initCampaignCombos(){
+    qsa('[data-campaign-combo]').forEach(bindCampaignCombo);
+    document.addEventListener('click',event=>{
+        if(!(event.target instanceof Element))return;
+        qsa('[data-campaign-combo]').forEach(root=>{
+            if(!root.contains(event.target))root._closeCampaignCombo?.();
+        });
+    });
+}
+
 function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
 
 function isSystemFlash(el){
@@ -52,6 +103,7 @@ function initGlobal(){
     if(document.body.dataset.uiBound==='1')return;
     document.body.dataset.uiBound='1';
     const body=document.body;
+    initCampaignCombos();
 
     qsa('.flash').forEach(el=>{
         if(!isSystemFlash(el))return;
@@ -120,6 +172,31 @@ function initGlobal(){
     networkToggle?.addEventListener('click',toggleNetwork);
     syncNetworkOpen();
 
+    const sipChannelsGroup=qs('#sipChannelsGroup');
+    const sipChannelsToggle=qs('#sipChannelsToggle');
+    const sipChannelsCaret=qs('#sipChannelsCaret');
+    const syncSipChannelsOpen=()=>{
+        const open=sipChannelsGroup?.classList.contains('open');
+        sipChannelsToggle?.setAttribute('aria-expanded',open?'true':'false');
+    };
+    const toggleSipChannels=e=>{
+        e.preventDefault();
+        e.stopPropagation();
+        sipChannelsGroup?.classList.toggle('open');
+        syncSipChannelsOpen();
+    };
+    sipChannelsCaret?.addEventListener('click',toggleSipChannels);
+    sipChannelsToggle?.addEventListener('click',e=>{
+        if(e.target.closest('#sipChannelsCaret, .nav-caret')){
+            toggleSipChannels(e);
+            return;
+        }
+        if(document.body?.dataset?.page==='sip-channels'){
+            toggleSipChannels(e);
+        }
+    });
+    syncSipChannelsOpen();
+
     qs('#logoutButton')?.addEventListener('click',()=>{
         qs('#accountMenu')?.classList.remove('open');
         showModal('logoutModal');
@@ -129,12 +206,6 @@ function initGlobal(){
     qsa('[data-open]').forEach(el=>el.addEventListener('click',e=>{
         e.preventDefault();
         showModal(el.dataset.open);
-    }));
-    qsa('.modal-backdrop').forEach(m=>m.addEventListener('click',e=>{
-        if(e.target===m){
-            if(m.id)hideModal(m.id);
-            else m.classList.remove('visible');
-        }
     }));
 
     function liveSearchUrl(form, searchValue){
@@ -367,11 +438,12 @@ function initConfirm(){
 
 async function initMedia(){
     if(!['media-gateways','gsm-gateways'].includes(document.body.dataset.page) && !qs('#mediaGatewayForm'))return;
-    if(qs('#mediaGatewayForm')?.dataset.bound==='1')return;
-    if(qs('#mediaGatewayForm'))qs('#mediaGatewayForm').dataset.bound='1';
+    if(document.body.dataset.mediaJsBound==='1')return;
+    document.body.dataset.mediaJsBound='1';
 
     const base=window.location.origin+(document.body.dataset.resourceBase||'/media-gateways');
-    const entity=document.body.dataset.page==='gsm-gateways'?'GSM Gateway':'Media Gateway';
+    const isGsm=document.body.dataset.page==='gsm-gateways';
+    const entity=isGsm?'GSM Gateway':'Media Gateway';
     const initial=new URLSearchParams(location.search);
     let state={
         search:initial.get('search')||'',
@@ -381,6 +453,9 @@ async function initMedia(){
         perPage:Number(initial.get('per_page')||10)
     };
     let deleteId=null;
+    let simDelete=null;
+    const expandedIds=new Set();
+    const canCreate=!!qs('[data-open-modal="add-media-gateway"]');
 
     const transfer=qs('#transferButton');
 
@@ -421,14 +496,228 @@ async function initMedia(){
         exportLink.href=url.pathname+url.search;
     }
 
+    const editIcon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>';
+    const deleteIcon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="m6 7 1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>';
+    const dotsIcon='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>';
+    let simCatalog=[];
+    let simPicked=null;
+    let simFilter='';
+    let simPickedPort='';
+
+    function passwordCell(g,canReveal){
+        return `<span class="pdc-secret">
+            <span class="pdc-secret-mask">••••••</span>
+            ${canReveal && g.password ? `<span class="pdc-secret-value" hidden>${escapeHtml(g.password)}</span>
+            <button type="button" class="pdc-secret-toggle" title="Show password" aria-label="Show password">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>` : ''}
+        </span>`;
+    }
+
+    function editAttrs(g,canReveal){
+        return `data-edit-id="${escapeHtml(g.id)}" data-edit-hostname="${escapeHtml(g.hostname||'')}" data-edit-site_name="${escapeHtml(g.site_name)}" data-edit-site_code="${escapeHtml(g.site_code)}" data-edit-ip_address="${escapeHtml(g.ip_address)}" data-edit-channel_count="${escapeHtml(g.channel_count||'')}" data-edit-plan="${escapeHtml(g.plan||'')}" data-edit-port="${escapeHtml(g.port||'')}" data-edit-network="${escapeHtml(g.network||'')}" data-edit-device_function="${escapeHtml(g.device_function||'')}" data-edit-username="${escapeHtml(g.username)}"${canReveal?` data-edit-password="${escapeHtml(g.password||'')}"`:''}`;
+    }
+
+    function actionsCell(g,canEdit,canDelete,canReveal){
+        if(isGsm){
+            if(!canEdit && !canDelete)return '';
+            return `<div class="ca-menu">
+                <button class="ca-menu-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="${entity} actions" title="${entity} actions">${dotsIcon}</button>
+                <div class="ca-menu-dropdown" role="menu" hidden>
+                    ${canEdit?`<button class="ca-menu-item edit" type="button" role="menuitem" ${editAttrs(g,canReveal)} title="Edit ${entity}" aria-label="Edit ${entity}">${editIcon} Edit</button>`:''}
+                    ${canDelete?`<button class="ca-menu-item delete" type="button" role="menuitem" data-delete-id="${escapeHtml(g.id)}" title="Delete ${entity}" aria-label="Delete ${entity}">${deleteIcon} Delete</button>`:''}
+                </div>
+            </div>`;
+        }
+        return `<div class="row-actions">
+            ${canEdit?`<button type="button" class="action-btn edit" ${editAttrs(g,canReveal)} title="Edit ${entity}" aria-label="Edit ${entity}">${editIcon}</button>`:''}
+            ${canDelete?`<button type="button" class="action-btn delete" data-delete-id="${escapeHtml(g.id)}" title="Delete ${entity}" aria-label="Delete ${entity}">${deleteIcon}</button>`:''}
+        </div>`;
+    }
+
+    function simKey(item){
+        return `${item.sim_type}:${item.id}`;
+    }
+
+    function renderSimList(){
+        const body=qs('#gsmSimRows');
+        if(!body)return;
+        const needle=simFilter.trim().toLowerCase();
+        const rows=(simCatalog||[]).filter(sim=>{
+            if(!needle)return true;
+            return String(sim.imei||'').toLowerCase().includes(needle) || String(sim.mobile_number||'').toLowerCase().includes(needle);
+        });
+        if(!qs('#gsmSimNetwork')?.value){
+            body.innerHTML='<tr><td colspan="4">Select a network to load SIM records.</td></tr>';
+            return;
+        }
+        if(!rows.length){
+            body.innerHTML='<tr><td colspan="4">No SIM records found.</td></tr>';
+            return;
+        }
+        body.innerHTML=rows.map(sim=>{
+            const selected=simPicked && simKey(simPicked)===simKey(sim);
+            return `<tr class="gsm-sim-row${selected?' is-selected':''}" data-sim-type="${escapeHtml(sim.sim_type)}" data-sim-id="${escapeHtml(sim.id)}">
+                <td>${escapeHtml(sim.imei||'—')}</td>
+                <td>${escapeHtml(sim.mobile_number||'—')}</td>
+                <td>${escapeHtml(sim.plan||'—')}</td>
+                <td>${selected && simPickedPort?escapeHtml(simPickedPort):'—'}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function pickSim(sim){
+        simPicked=sim;
+        renderSimList();
+    }
+
+    async function loadSims(network){
+        const body=qs('#gsmSimRows');
+        if(!body)return;
+        if(!network){
+            simCatalog=[];
+            renderSimList();
+            return;
+        }
+        body.innerHTML='<tr><td colspan="4">Loading SIM records...</td></tr>';
+        const params=new URLSearchParams({network});
+        const gatewayId=qs('#gsmSimGatewayId')?.value||'';
+        const assignmentId=qs('#gsmSimAssignmentId')?.value||'';
+        if(gatewayId)params.set('gateway_id',gatewayId);
+        if(assignmentId)params.set('assignment_id',assignmentId);
+        try{
+            const response=await fetch(base+'/sims?'+params.toString(),{
+                headers:{Accept:'application/json','X-Requested-With':'XMLHttpRequest'}
+            });
+            const data=await response.json().catch(()=>({}));
+            if(!response.ok)throw new Error(data.message||'Unable to load SIM records.');
+            simCatalog=data.records||[];
+            renderSimList();
+        }catch(error){
+            body.innerHTML=`<tr><td colspan="4">${escapeHtml(error.message||'Unable to load SIM records.')}</td></tr>`;
+        }
+    }
+
+    function resetSims(){
+        simCatalog=[];
+        simPicked=null;
+        simPickedPort='';
+        simFilter='';
+        const search=qs('#gsmSimSearch');
+        if(search)search.value='';
+        const network=qs('#gsmSimNetwork');
+        if(network)network.value='';
+        renderSimList();
+    }
+
+    function closeGsmMenus(except){
+        qsa('#mediaGatewayRows .ca-menu.open').forEach(menu=>{
+            if(menu===except)return;
+            menu.classList.remove('open');
+            menu.querySelector('.ca-menu-dropdown')?.setAttribute('hidden','');
+            menu.querySelector('.ca-menu-btn')?.setAttribute('aria-expanded','false');
+        });
+    }
+
+    function gsmChevron(id, hostname){
+        return `<span class="gsm-host-cell">
+            <button type="button" class="ca-toggle" data-ca-toggle="${escapeHtml(id)}" aria-expanded="false" aria-controls="gsm-panel-${escapeHtml(id)}" title="Expand ${escapeHtml(hostname||'gateway')}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"></path></svg>
+            </button>
+            <span>${escapeHtml(hostname||'—')}</span>
+        </span>`;
+    }
+
+    function nestedSimTable(g,canEdit,canDelete){
+        const assignments=g.assignments||[];
+        const rows=assignments.length
+            ? assignments.map(item=>`<tr>
+                <td>${escapeHtml(item.imei||'—')}</td>
+                <td>${escapeHtml(item.mobile_number||'—')}</td>
+                <td>${escapeHtml(item.plan||'—')}</td>
+                <td>${escapeHtml(g.ip_address||'—')}</td>
+                <td>${escapeHtml(item.port||'—')}</td>
+                <td class="actions-column">
+                    <div class="row-actions">
+                        ${canEdit?`<button class="action-btn edit" type="button" data-gsm-sim-edit data-gateway-id="${escapeHtml(g.id)}" data-assignment-id="${escapeHtml(item.assignment_id)}" data-sim-type="${escapeHtml(item.sim_type)}" data-sim-id="${escapeHtml(item.id)}" data-network="${escapeHtml(item.network||'')}" data-port="${escapeHtml(item.port||'')}" title="Edit" aria-label="Edit">${editIcon}</button>`:''}
+                        ${canDelete?`<button class="action-btn delete" type="button" data-gsm-sim-delete data-gateway-id="${escapeHtml(g.id)}" data-assignment-id="${escapeHtml(item.assignment_id)}" title="Delete" aria-label="Delete">${deleteIcon}</button>`:''}
+                    </div>
+                </td>
+            </tr>`).join('')
+            : `<tr><td colspan="6"><div class="empty-state">No SIM assignments.</div></td></tr>`;
+        const plus=canCreate
+            ? `<button class="plus-btn" type="button" data-gsm-sim-add="${escapeHtml(g.id)}" data-channel-count="${escapeHtml(g.channel_count||'')}" data-assignment-count="${assignments.length}" title="Add SIM Assignment" aria-label="Add SIM Assignment">+</button>`
+            : '';
+        return `<tr class="ca-nested-row" id="gsm-panel-${escapeHtml(g.id)}" hidden>
+            <td colspan="9">
+                <div class="ca-nested">
+                    <table class="gsm-sim-nested" aria-label="SIM assignments">
+                        <thead>
+                            <tr>
+                                <th>IMEI</th>
+                                <th>Mobile Number</th>
+                                <th>Plan</th>
+                                <th>IP</th>
+                                <th>Port</th>
+                                <th class="actions-column"><span class="ca-actions-head">Actions${plus}</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            </td>
+        </tr>`;
+    }
+
+    function restoreExpanded(){
+        expandedIds.forEach(id=>{
+            const panel=document.getElementById('gsm-panel-'+id);
+            const row=document.querySelector('tr.gsm-gateway-row[data-gateway="'+id+'"]');
+            if(!panel||!row)return;
+            panel.removeAttribute('hidden');
+            row.classList.add('open');
+            row.querySelectorAll('[data-ca-toggle]').forEach(el=>el.setAttribute('aria-expanded','true'));
+        });
+    }
+
+    function setDeleteCopy(kind){
+        const title=qs('#deleteModalTitle');
+        const body=qs('#deleteModalBody');
+        if(!title||!body)return;
+        if(kind==='sim'){
+            title.textContent='Delete SIM Assignment';
+            body.textContent='Are you sure you want to delete this SIM assignment?';
+            return;
+        }
+        title.textContent='Delete '+entity;
+        body.textContent='Are you sure you want to delete this '+entity+'?';
+    }
+
     function render(data){
         const records=data.records||[];
         const canEdit=document.body.dataset.canEdit==='1';
         const canDelete=document.body.dataset.canDelete==='1';
         const canReveal=document.body.dataset.canRevealSecrets==='1';
+        const colspan=isGsm?9:10;
 
+        closeGsmMenus();
+        if(!dom.rows)return;
         dom.rows.innerHTML=records.length
-            ? records.map(g=>`<tr>
+            ? records.map(g=>{
+                if(isGsm){
+                    return `<tr class="gsm-gateway-row" data-gateway="${escapeHtml(g.id)}">
+                <td>${gsmChevron(g.id,g.hostname)}</td>
+                <td>${escapeHtml(g.ip_address)}</td>
+                <td>${escapeHtml(g.site_code)}</td>
+                <td>${escapeHtml(g.channel_count||'—')}</td>
+                <td>${escapeHtml(g.device_function||'—')}</td>
+                <td>${escapeHtml(g.site_name)}</td>
+                <td>${escapeHtml(g.username)}</td>
+                <td>${passwordCell(g,canReveal)}</td>
+                <td class="actions-column">${actionsCell(g,canEdit,canDelete,canReveal)}</td>
+            </tr>${nestedSimTable(g,canEdit,canDelete)}`;
+                }
+                return `<tr>
                 <td>${escapeHtml(g.ip_address)}</td>
                 <td>${escapeHtml(g.site_code)}</td>
                 <td>${escapeHtml(g.plan||'—')}</td>
@@ -437,25 +726,13 @@ async function initMedia(){
                 <td>${escapeHtml(g.device_function||'—')}</td>
                 <td>${escapeHtml(g.site_name)}</td>
                 <td>${escapeHtml(g.username)}</td>
-                <td>
-                    <span class="pdc-secret">
-                        <span class="pdc-secret-mask">••••••</span>
-                        ${canReveal && g.password ? `<span class="pdc-secret-value" hidden>${escapeHtml(g.password)}</span>
-                        <button type="button" class="pdc-secret-toggle" title="Show password" aria-label="Show password">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-                        </button>` : ''}
-                    </span>
-                </td>
-                <td><div class="row-actions">
-                    ${canEdit?`<button type="button" class="action-btn edit" data-edit-id="${escapeHtml(g.id)}" data-edit-site_name="${escapeHtml(g.site_name)}" data-edit-site_code="${escapeHtml(g.site_code)}" data-edit-ip_address="${escapeHtml(g.ip_address)}" data-edit-plan="${escapeHtml(g.plan||'')}" data-edit-port="${escapeHtml(g.port||'')}" data-edit-network="${escapeHtml(g.network||'')}" data-edit-device_function="${escapeHtml(g.device_function||'')}" data-edit-username="${escapeHtml(g.username)}"${canReveal?` data-edit-password="${escapeHtml(g.password||'')}"`:''} title="Edit ${entity}" aria-label="Edit ${entity}">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
-                    </button>`:''}
-                    ${canDelete?`<button type="button" class="action-btn delete" data-delete-id="${escapeHtml(g.id)}" title="Delete ${entity}" aria-label="Delete ${entity}">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="m6 7 1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>
-                    </button>`:''}
-                </div></td>
-            </tr>`).join('')
-            : `<tr><td colspan="10"><div class="empty-state">No ${entity}s Found</div></td></tr>`;
+                <td>${passwordCell(g,canReveal)}</td>
+                <td class="actions-column">${actionsCell(g,canEdit,canDelete,canReveal)}</td>
+            </tr>`;
+            }).join('')
+            : `<tr><td colspan="${colspan}"><div class="empty-state">No ${entity}s Found</div></td></tr>`;
+
+        if(isGsm)restoreExpanded();
 
         dom.summary.textContent=`Showing ${data.pagination?.from||0} to ${data.pagination?.to||0} of ${data.pagination?.total||0} entries`;
 
@@ -511,6 +788,24 @@ async function initMedia(){
         }
     }
 
+    function fillGatewayFields(source){
+        ['hostname','site_name','site_code','ip_address','channel_count','plan','port','network','device_function','username','password'].forEach(field=>{
+            const element=qs('#'+field);
+            if(!element)return;
+            const value=source[field]||'';
+            if((field==='site_name' || field==='device_function' || field==='network') && element.tagName==='SELECT' && value){
+                const exists=[...element.options].some((option)=>option.value===value);
+                if(!exists){
+                    const option=document.createElement('option');
+                    option.value=value;
+                    option.textContent=value;
+                    element.appendChild(option);
+                }
+            }
+            element.value=value;
+        });
+    }
+
     function openAdd(){
         dom.modalTitle.textContent='Add '+entity;
         dom.form.reset();
@@ -528,21 +823,11 @@ async function initMedia(){
         dom.gatewayId.value=id;
         dom.formMethod.value='PUT';
         if(dom.form)dom.form.action=base+'/'+encodeURIComponent(id);
-        ['site_name','site_code','ip_address','plan','port','network','device_function','username','password'].forEach(field=>{
-            const element=qs('#'+field);
-            if(!element)return;
-            const value=button.dataset['edit'+field.charAt(0).toUpperCase()+field.slice(1)]||'';
-            if(field==='site_name' && element.tagName==='SELECT' && value){
-                const exists=[...element.options].some((option)=>option.value===value);
-                if(!exists){
-                    const option=document.createElement('option');
-                    option.value=value;
-                    option.textContent=value;
-                    element.appendChild(option);
-                }
-            }
-            element.value=value;
+        const values={};
+        ['hostname','site_name','site_code','ip_address','channel_count','plan','port','network','device_function','username','password'].forEach(field=>{
+            values[field]=button.dataset['edit'+field.charAt(0).toUpperCase()+field.slice(1)]||'';
         });
+        fillGatewayFields(values);
         const password=qs('#password');
         if(password)password.type='password';
         showModal('mediaGatewayModal');
@@ -577,7 +862,113 @@ async function initMedia(){
         }
     }
 
+    async function saveSimAssignment(event){
+        event.preventDefault();
+        const gatewayId=qs('#gsmSimGatewayId')?.value;
+        const assignmentId=qs('#gsmSimAssignmentId')?.value;
+        const network=qs('#gsmSimNetwork')?.value||'';
+        if(!gatewayId)return;
+        if(!network || !simPicked){
+            flash('Select a network and a SIM record.','error');
+            return;
+        }
+        const formData=new FormData();
+        formData.append('network', network);
+        formData.append('sim_type', simPicked.sim_type);
+        formData.append('sim_id', String(simPicked.id));
+        if(assignmentId)formData.append('_method','PUT');
+        const endpoint=assignmentId
+            ? base+'/'+encodeURIComponent(gatewayId)+'/assignments/'+encodeURIComponent(assignmentId)
+            : base+'/'+encodeURIComponent(gatewayId)+'/assignments';
+        try{
+            const response=await fetch(endpoint,{
+                method:'POST',
+                headers:{
+                    Accept:'application/json',
+                    'X-CSRF-TOKEN':csrf(),
+                    'X-Requested-With':'XMLHttpRequest'
+                },
+                body:formData
+            });
+            const data=await response.json().catch(()=>({}));
+            if(!response.ok){
+                const validation=Object.values(data.errors||{}).flat().join(' ');
+                throw new Error(data.message||validation||`Unable to save SIM assignment (${response.status})`);
+            }
+            hideModal('gsmSimModal');
+            expandedIds.add(String(gatewayId));
+            flash(data.message||'Saved successfully.');
+            await load(state.page);
+        }catch(error){
+            flash(error.message||'Unable to save SIM assignment.','error');
+        }
+    }
+
+    function openSimAdd(button){
+        const gatewayId=button.dataset.gsmSimAdd;
+        const channelCount=Number(button.dataset.channelCount||0);
+        const assignmentCount=Number(button.dataset.assignmentCount||0);
+        if(channelCount>0 && assignmentCount>=channelCount){
+            flash('SIM assignments cannot exceed the Channel Count.','error');
+            return;
+        }
+        qs('#gsmSimModalTitle').textContent='Add SIM Assignment';
+        qs('#gsmSimGatewayId').value=gatewayId;
+        qs('#gsmSimAssignmentId').value='';
+        resetSims();
+        showModal('gsmSimModal');
+    }
+
+    function openSimEdit(button){
+        qs('#gsmSimModalTitle').textContent='Edit SIM Assignment';
+        qs('#gsmSimGatewayId').value=button.dataset.gatewayId||'';
+        qs('#gsmSimAssignmentId').value=button.dataset.assignmentId||'';
+        simPicked={
+            id:button.dataset.simId,
+            sim_type:button.dataset.simType
+        };
+        simPickedPort=button.dataset.port||'';
+        simFilter='';
+        const search=qs('#gsmSimSearch');
+        if(search)search.value='';
+        const network=qs('#gsmSimNetwork');
+        if(network){
+            const value=button.dataset.network||'';
+            if(value && ![...network.options].some(option=>option.value===value)){
+                const option=document.createElement('option');
+                option.value=value;
+                option.textContent=value;
+                network.appendChild(option);
+            }
+            network.value=value;
+        }
+        loadSims(qs('#gsmSimNetwork')?.value||'');
+        showModal('gsmSimModal');
+    }
+
     async function remove(){
+        if(simDelete){
+            try{
+                const response=await fetch(base+'/'+encodeURIComponent(simDelete.gatewayId)+'/assignments/'+encodeURIComponent(simDelete.assignmentId),{
+                    method:'DELETE',
+                    headers:{
+                        Accept:'application/json',
+                        'X-CSRF-TOKEN':csrf(),
+                        'X-Requested-With':'XMLHttpRequest'
+                    }
+                });
+                const data=await response.json().catch(()=>({}));
+                if(!response.ok)throw new Error(data.message||`Unable to delete (${response.status})`);
+                hideModal('deleteModal');
+                expandedIds.add(String(simDelete.gatewayId));
+                simDelete=null;
+                flash(data.message||'Deleted successfully.');
+                await load(state.page);
+            }catch(error){
+                flash(error.message||'Unable to delete SIM assignment.','error');
+            }
+            return;
+        }
         if(!deleteId)return;
 
         try{
@@ -593,6 +984,7 @@ async function initMedia(){
             if(!response.ok)throw new Error(data.message||`Unable to delete (${response.status})`);
 
             hideModal('deleteModal');
+            expandedIds.delete(String(deleteId));
             deleteId=null;
             flash(data.message||'Deleted successfully.');
 
@@ -621,9 +1013,35 @@ async function initMedia(){
     }
 
     function bindRowEvents(){
-        qsa('#mediaGatewayRows [data-edit-id]').forEach(button=>button.onclick=()=>openEdit(button));
+        qsa('#mediaGatewayRows [data-edit-id]').forEach(button=>button.onclick=()=>{
+            closeGsmMenus();
+            openEdit(button);
+        });
         qsa('#mediaGatewayRows [data-delete-id]').forEach(button=>button.onclick=()=>{
+            simDelete=null;
             deleteId=button.dataset.deleteId;
+            setDeleteCopy('gateway');
+            showModal('deleteModal');
+        });
+        qsa('#mediaGatewayRows [data-gsm-sim-add]').forEach(button=>button.onclick=event=>{
+            event.preventDefault();
+            event.stopPropagation();
+            openSimAdd(button);
+        });
+        qsa('#mediaGatewayRows [data-gsm-sim-edit]').forEach(button=>button.onclick=event=>{
+            event.preventDefault();
+            event.stopPropagation();
+            openSimEdit(button);
+        });
+        qsa('#mediaGatewayRows [data-gsm-sim-delete]').forEach(button=>button.onclick=event=>{
+            event.preventDefault();
+            event.stopPropagation();
+            deleteId=null;
+            simDelete={
+                gatewayId:button.dataset.gatewayId,
+                assignmentId:button.dataset.assignmentId
+            };
+            setDeleteCopy('sim');
             showModal('deleteModal');
         });
         qsa('#paginationLinks [data-page]').forEach(button=>button.onclick=event=>{
@@ -640,7 +1058,66 @@ async function initMedia(){
         input.type=input.type==='password'?'text':'password';
     });
     dom.form?.addEventListener('submit',save);
+    qs('#gsmSimForm')?.addEventListener('submit',saveSimAssignment);
     dom.deleteConfirm?.addEventListener('click',remove);
+
+    qs('#gsmSimNetwork')?.addEventListener('change',()=>{
+        simPicked=null;
+        simPickedPort='';
+        loadSims(qs('#gsmSimNetwork').value);
+    });
+    qs('#gsmSimSearch')?.addEventListener('input',()=>{
+        simFilter=qs('#gsmSimSearch').value||'';
+        renderSimList();
+    });
+    qs('#gsmSimRows')?.addEventListener('click',event=>{
+        const row=event.target.closest('.gsm-sim-row');
+        if(!row)return;
+        const sim=simCatalog.find(item=>String(item.id)===String(row.dataset.simId) && item.sim_type===row.dataset.simType);
+        if(sim)pickSim(sim);
+    });
+    if(isGsm && !document.body.dataset.gsmMenuBound){
+        document.body.dataset.gsmMenuBound='1';
+        document.addEventListener('click',event=>{
+            if(!(event.target instanceof Element))return;
+            const toggle=event.target.closest('#mediaGatewayRows [data-ca-toggle]');
+            if(toggle){
+                const id=toggle.getAttribute('data-ca-toggle');
+                const panel=document.getElementById('gsm-panel-'+id);
+                const row=document.querySelector('tr.gsm-gateway-row[data-gateway="'+id+'"]');
+                if(!panel)return;
+                const open=panel.hasAttribute('hidden');
+                panel.toggleAttribute('hidden', !open);
+                row?.classList.toggle('open', open);
+                row?.querySelectorAll('[data-ca-toggle]').forEach(el=>el.setAttribute('aria-expanded', open?'true':'false'));
+                if(open)expandedIds.add(String(id));
+                else expandedIds.delete(String(id));
+                return;
+            }
+            const gatewayRow=event.target.closest('tr.gsm-gateway-row[data-gateway]');
+            if(gatewayRow && !event.target.closest('.actions-column, .ca-menu, a, input, select, textarea, label, .action-btn, .plus-btn, .pdc-secret-toggle, button')){
+                gatewayRow.querySelector('[data-ca-toggle]')?.click();
+            }
+            const button=event.target.closest('#mediaGatewayRows .ca-menu-btn');
+            if(button){
+                event.preventDefault();
+                event.stopPropagation();
+                const menu=button.closest('.ca-menu');
+                const dropdown=menu?.querySelector('.ca-menu-dropdown');
+                const willOpen=!menu.classList.contains('open');
+                closeGsmMenus(willOpen?menu:null);
+                if(!menu||!dropdown)return;
+                menu.classList.toggle('open',willOpen);
+                dropdown.toggleAttribute('hidden',!willOpen);
+                button.setAttribute('aria-expanded',willOpen?'true':'false');
+                return;
+            }
+            if(!event.target.closest('#mediaGatewayRows .ca-menu'))closeGsmMenus();
+        });
+        document.addEventListener('keydown',event=>{
+            if(event.key==='Escape')closeGsmMenus();
+        });
+    }
 
     dom.perPage?.addEventListener('change',()=>{
         state.perPage=Number(dom.perPage.value);

@@ -59,6 +59,7 @@
     $dnsLines = array_values(array_filter($dnsLines, fn ($line) => $line !== ''));
     $groupValues = [
         'campaign_id' => $group->campaign_id,
+        'campaign' => $campaignName === '—' ? '' : $campaignName,
         'location' => $group->location,
         'date_endorse' => $group->date_endorse ? \App\Support\PdcEndorseDate::display($group->date_endorse->format('Y-m-d')) : '',
         'dns' => $group->dns,
@@ -274,17 +275,17 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="pdc_campaign_id">Campaign</label>
-                        <select class="form-control" name="campaign_id" id="pdc_campaign_id" required>
-                            <option value="">Select Campaign</option>
-                            <?php $__currentLoopData = $campaigns; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $campaign): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                                <option value="<?php echo e($campaign->id); ?>"><?php echo e($campaign->name); ?></option>
-                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                        </select>
+                        <?php echo $__env->make('partials.campaign-combo', [
+                            'inputId' => 'pdc_campaign_id',
+                            'inputName' => 'campaign',
+                            'menuId' => 'pdcCampaignMenu',
+                            'campaigns' => $campaigns,
+                        ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
                     </div>
                     <div class="form-group">
                         <label for="pdc_location">Location</label>
                         <select class="form-control" name="location" id="pdc_location">
-                            <option value="">Select Location</option>
+                            <option value="" selected hidden>Select Location</option>
                             <?php $__currentLoopData = $locations; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $name): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                 <option value="<?php echo e($name); ?>"><?php echo e($name); ?></option>
                             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
@@ -693,7 +694,7 @@ document.addEventListener('DOMContentLoaded', () => {
         groupForm.action = groupBase + '/' + button.dataset.id;
         document.getElementById('pdcGroupModalTitle').textContent = 'Edit PDC Servers';
         document.getElementById('pdcGroupSubmit').textContent = 'Save';
-        document.getElementById('pdc_campaign_id').value = values.campaign_id ?? '';
+        document.getElementById('pdc_campaign_id').value = values.campaign ?? '';
         document.getElementById('pdc_location').value = values.location ?? '';
         document.getElementById('pdc_date_endorse').value = values.date_endorse ?? '';
         document.getElementById('pdc_dns').value = values.dns ?? '';

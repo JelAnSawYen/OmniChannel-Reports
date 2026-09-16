@@ -13,6 +13,7 @@ use App\Http\Controllers\MediaGatewayController;
 use App\Http\Controllers\OperationsDataController;
 use App\Http\Controllers\PdcServerController;
 use App\Http\Controllers\SipChannelController;
+use App\Http\Controllers\ChannelRangeListController;
 use App\Http\Controllers\ChannelAllocationController;
 use App\Http\Controllers\ArchiveRecordingController;
 use App\Http\Controllers\CampaignController;
@@ -53,6 +54,7 @@ Route::middleware(['auth', 'account.active'])->group(function () {
 
         $gatewayRoutes = function () {
             Route::get('/', [MediaGatewayController::class, 'index'])->middleware('permission:media.view')->name('index');
+            Route::get('/sims', [MediaGatewayController::class, 'sims'])->middleware('permission:media.view')->name('sims');
             Route::get('/export', [MediaGatewayController::class, 'export'])->middleware('permission:media.export')->name('export');
             Route::get('/import/template', [MediaGatewayController::class, 'importTemplate'])->middleware('permission:media.create')->name('import.template');
             Route::get('/import/errors', [MediaGatewayController::class, 'importErrors'])->middleware('permission:media.create')->name('import.errors');
@@ -64,7 +66,12 @@ Route::middleware(['auth', 'account.active'])->group(function () {
         };
 
         Route::prefix('media-gateways')->name('media-gateways.')->middleware('module:media-gateways')->group($gatewayRoutes);
-        Route::prefix('gsm-gateways')->name('gsm-gateways.')->middleware('module:gsm-gateways')->group($gatewayRoutes);
+        Route::prefix('gsm-gateways')->name('gsm-gateways.')->middleware('module:gsm-gateways')->group(function () use ($gatewayRoutes) {
+            $gatewayRoutes();
+            Route::post('/{mediaGateway}/assignments', [MediaGatewayController::class, 'storeAssignment'])->middleware(['permission:media.create', 'throttle:sensitive'])->whereNumber('mediaGateway')->name('assignments.store');
+            Route::put('/{mediaGateway}/assignments/{assignment}', [MediaGatewayController::class, 'updateAssignment'])->middleware(['permission:media.edit', 'throttle:sensitive'])->whereNumber('mediaGateway')->whereNumber('assignment')->name('assignments.update');
+            Route::delete('/{mediaGateway}/assignments/{assignment}', [MediaGatewayController::class, 'destroyAssignment'])->middleware('permission:media.delete')->whereNumber('mediaGateway')->whereNumber('assignment')->name('assignments.destroy');
+        });
 
         Route::prefix('users')->name('users.')->middleware('module:users')->group(function () {
             Route::get('/', [UserController::class, 'index'])->middleware('permission:users.view')->name('index');
@@ -150,6 +157,18 @@ Route::middleware(['auth', 'account.active'])->group(function () {
             Route::post('/{group}/servers', [PdcServerController::class, 'storeServer'])->middleware('permission:media.create')->whereNumber('group')->name('pdc-servers.servers.store');
             Route::put('/{group}/servers/{server}', [PdcServerController::class, 'updateServer'])->middleware('permission:media.edit')->whereNumber('group')->whereNumber('server')->name('pdc-servers.servers.update');
             Route::delete('/{group}/servers/{server}', [PdcServerController::class, 'destroyServer'])->middleware('permission:media.delete')->whereNumber('group')->whereNumber('server')->name('pdc-servers.servers.destroy');
+        });
+
+        Route::prefix('channel-range-list')->middleware('module:sip-channels')->group(function () {
+            Route::get('/', [ChannelRangeListController::class, 'index'])->middleware('permission:media.view')->name('channel-range-list');
+            Route::get('/export', [ChannelRangeListController::class, 'export'])->middleware('permission:media.export')->name('channel-range-list.export');
+            Route::get('/import/template', [ChannelRangeListController::class, 'importTemplate'])->middleware('permission:media.create')->name('channel-range-list.import.template');
+            Route::get('/import/errors', [ChannelRangeListController::class, 'importErrors'])->middleware('permission:media.create')->name('channel-range-list.import.errors');
+            Route::post('/import/preview', [ChannelRangeListController::class, 'importPreview'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('channel-range-list.import.preview');
+            Route::post('/import/confirm', [ChannelRangeListController::class, 'importConfirm'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('channel-range-list.import.confirm');
+            Route::post('/', [ChannelRangeListController::class, 'store'])->middleware('permission:media.create')->name('channel-range-list.store');
+            Route::put('/{sipChannelNumber}', [ChannelRangeListController::class, 'update'])->middleware('permission:media.edit')->whereNumber('sipChannelNumber')->name('channel-range-list.update');
+            Route::delete('/{sipChannelNumber}', [ChannelRangeListController::class, 'destroy'])->middleware('permission:media.delete')->whereNumber('sipChannelNumber')->name('channel-range-list.destroy');
         });
 
         Route::prefix('sip-channels')->middleware('module:sip-channels')->group(function () {

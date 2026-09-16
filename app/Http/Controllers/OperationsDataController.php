@@ -9,6 +9,8 @@ use App\Support\InventoryImportCatalog;
 use App\Support\OperationCatalog;
 use App\Support\PdcEndorseDate;
 use App\Support\ProgramInboundNumberValidator;
+use App\Support\ProgramInboundSimLookup;
+use App\Support\GsmSimInventory;
 use App\Support\PublicError;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
@@ -22,7 +24,11 @@ class OperationsDataController extends Controller
     {
         $config=$this->config($module); $query=$config['model']::query();
         if (OperationCatalog::isInbound($module)) {
-            $query->with(['campaign:id,name', 'mediaGateway:id,ip_address,port,network']);
+            ProgramInboundSimLookup::flush();
+            $query->with(['campaign:id,name']);
+        }
+        if (OperationCatalog::isSim($module)) {
+            $query->with(['gatewayAssignment.gateway:id,ip_address']);
         }
         $this->applyInventorySearch($query, $request, $config, $module);
         $perPage=(int)$request->query('per_page',10);
@@ -36,22 +42,34 @@ class OperationsDataController extends Controller
         $campaigns = OperationCatalog::isInbound($module)
             ? ChannelAllocationCampaign::optionsForDropdown()
             : collect();
-        $gsmGateways = OperationCatalog::isInbound($module)
+        $gsmGateways = (OperationCatalog::isInbound($module) || OperationCatalog::isSim($module))
             ? MediaGateway::query()->orderBy('ip_address')->get(['id', 'ip_address', 'port', 'network'])
             : collect();
-        return view('operations.index', compact('config','module','records','gateways','statusOptions','search','perPage','campaigns','gsmGateways'));
+        $pinSimDirectory = OperationCatalog::isInbound($module)
+            ? ProgramInboundSimLookup::payload()
+            : [];
+        $pinChannelNumbers = OperationCatalog::isInbound($module)
+            ? ProgramInboundSimLookup::channelNumbers()
+            : [];
+        $pinNetworks = OperationCatalog::isInbound($module)
+            ? GsmSimInventory::networks()
+            : [];
+        $locations = OperationCatalog::locations();
+        return view('operations.index', compact('config','module','records','gateways','statusOptions','search','perPage','campaigns','gsmGateways','locations','pinSimDirectory','pinChannelNumbers','pinNetworks'));
     }
 
     public function store(Request $request, string $module)
     {
-        $config=$this->config($module); $data=$request->validate($this->rules($module), $this->messages($module));
+        $config=$this->config($module);         $data=$request->validate($this->rules($module), $this->messages($module));
         if (OperationCatalog::isSim($module)) {
+            $data = $this->applySimDefaults($module, $data);
             $data = $this->parseSimDates($data);
         }
         if (OperationCatalog::isDefective($module)) {
             $data = $this->parseReportedOn($data);
         }
         if (OperationCatalog::isInbound($module)) {
+            ProgramInboundSimLookup::flush();
             $data = $this->syncInboundNumbersAndGateway($data);
             $data = $this->syncInboundCampaign($data);
         }
@@ -72,12 +90,14 @@ class OperationsDataController extends Controller
         [$config, $module, $id, $record] = $this->resolveRecord($request);
         $data = $request->validate($this->rules($module, $id), $this->messages($module));
         if (OperationCatalog::isSim($module)) {
+            $data = $this->applySimDefaults($module, $data);
             $data = $this->parseSimDates($data);
         }
         if (OperationCatalog::isDefective($module)) {
             $data = $this->parseReportedOn($data);
         }
         if (OperationCatalog::isInbound($module)) {
+            ProgramInboundSimLookup::flush();
             $data = $this->syncInboundNumbersAndGateway($data, $id);
             $data = $this->syncInboundCampaign($data);
         }
@@ -111,7 +131,8 @@ class OperationsDataController extends Controller
         $isInbound = OperationCatalog::isInbound($module);
         $isDefective = OperationCatalog::isDefective($module);
         if ($isInbound) {
-            $query->with(['campaign:id,name', 'mediaGateway:id,ip_address,port,network']);
+            ProgramInboundSimLookup::flush();
+            $query->with(['campaign:id,name']);
         }
         $headers = $isInbound
             ? array_values($config['table_columns'] ?? $config['columns'])
@@ -125,19 +146,22 @@ class OperationsDataController extends Controller
                 $headers,
                 $query->latest()->get()->map(function ($record) use ($fields, $isSim, $isInbound, $isDefective, &$sequence) {
                     if ($isInbound) {
+                        $rows = $record->mobileDisplayRows();
+
                         return [
                             $record->campaign?->name ?: $record->program ?: '',
                             implode("\n", $record->mobileList()),
                             implode("\n", $record->landlineList()),
-                            trim((string) ($record->mediaGateway?->ip_address ?? '')),
-                            trim((string) ($record->port ?: $record->mediaGateway?->port ?: '')),
-                            trim((string) ($record->network ?: $record->mediaGateway?->network ?: '')),
+                            implode("\n", array_map(static fn (array $row) => $row['hostname'], $rows)),
+                            implode("\n", array_map(static fn (array $row) => $row['port'], $rows)),
+                            GsmSimInventory::canonicalNetwork($record->network) ?: trim((string) ($record->network ?? '')),
                             trim((string) ($record->remarks ?? '')),
                         ];
                     }
 
                     $sequence++;
-                    $values = collect($fields)->map(function ($field) use ($record, $isSim, $isDefective) {
+                    $exportFields = $isSim ? array_keys(OperationCatalog::simTransferColumns()) : $fields;
+                    $values = collect($exportFields)->map(function ($field) use ($record, $isSim, $isDefective) {
                         $value = $record->{$field};
                         if ($value instanceof \DateTimeInterface) {
                             return ($isSim || $isDefective)
@@ -236,12 +260,11 @@ class OperationsDataController extends Controller
         return [
             'imei' => ['required', 'string', 'max:50', Rule::unique($table, 'imei')->ignore($id)],
             'mobile_number' => ['required', 'string', 'max:50', Rule::unique($table, 'mobile_number')->ignore($id)],
-            'network' => 'nullable|string|max:255',
-            'plan' => 'nullable|string|max:255',
-            'ip_address' => 'nullable|ipv4',
-            'account_number' => 'nullable|string|max:255',
-            'contract_start' => 'nullable|string',
-            'contract_end' => 'nullable|string',
+            'plan' => ['required', 'string', 'max:255'],
+            'ip_address' => ['required', 'ipv4', Rule::exists('media_gateways', 'ip_address')],
+            'account_number' => ['required', 'string', 'max:255'],
+            'contract_start' => ['required', 'string'],
+            'contract_end' => ['required', 'string'],
         ];
     }
 
@@ -268,6 +291,18 @@ class OperationsDataController extends Controller
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
+    private function applySimDefaults(string $module, array $data): array
+    {
+        unset($data['network'], $data['port']);
+        $data['network'] = $module === 'smart-sim' ? 'Smart' : 'Globe';
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function parseReportedOn(array $data): array
     {
         $parsed = PdcEndorseDate::parse($data['reported_on'] ?? '');
@@ -286,6 +321,9 @@ class OperationsDataController extends Controller
         if ($search = trim((string) $request->query('search'))) {
             $query->where(function ($q) use ($search, $config, $module) {
                 foreach (array_keys($config['columns']) as $i => $field) {
+                    if (OperationCatalog::isSim($module) && $field === 'port') {
+                        continue;
+                    }
                     $i === 0 ? $q->where($field, 'like', "%$search%") : $q->orWhere($field, 'like', "%$search%");
                 }
                 if (OperationCatalog::isSim($module)) {
@@ -331,30 +369,28 @@ class OperationsDataController extends Controller
             'pdc-servers'=>[
                 'hostname'=>['required','string','max:255',Rule::unique('pdc_servers','hostname')->ignore($id)],
                 'ip_address'=>['required','ip',Rule::unique('pdc_servers','ip_address')->ignore($id)],
-                'location'=>'nullable|string|max:255','role'=>'nullable|string|max:255','status'=>['required',Rule::in($this->statusOptions($module))],
+                'location'=>['nullable','string',Rule::in(OperationCatalog::locationNames())],'role'=>'nullable|string|max:255','status'=>['required',Rule::in($this->statusOptions($module))],
             ],
             'archive-recordings'=>[],
             'globe-sim'=>$this->simRules('globe_sims', $id),
             'smart-sim'=>$this->simRules('smart_sims', $id),
             'program-inbound-numbers'=>[
                 'campaign'=>'required|string|max:255',
+                'network'=>'nullable|string|max:255',
                 'mobile_numbers'=>'nullable|array',
                 'mobile_numbers.*'=>'nullable|string|max:50',
                 'landline_numbers'=>'nullable|array',
                 'landline_numbers.*'=>'nullable|string|max:50',
-                'media_gateway_id'=>'nullable|integer|exists:media_gateways,id',
-                'port'=>'nullable|string|max:50',
-                'network'=>'nullable|string|max:255',
                 'remarks'=>'nullable|string|max:1000',
             ],
             'signal-boosters'=>[
                 'model'=>'required|string|max:255',
                 'specs'=>'nullable|string|max:5000',
                 'serial_number'=>['required','string','max:255',Rule::unique('signal_boosters','serial_number')->ignore($id)],
-                'location'=>'nullable|string|max:255','status'=>['required',Rule::in($this->statusOptions($module))],
+                'location'=>['nullable','string',Rule::in(OperationCatalog::locationNames())],'status'=>['required',Rule::in($this->statusOptions($module))],
             ],
             'defective-gsm'=>[
-                'asset_code'=>'required|string|max:255','location'=>'nullable|string|max:255','issue'=>'nullable|string|max:5000','reported_on'=>'nullable|string','status'=>['required',Rule::in($this->statusOptions($module))],
+                'asset_code'=>'required|string|max:255','location'=>['nullable','string',Rule::in(OperationCatalog::locationNames())],'issue'=>'nullable|string|max:5000','reported_on'=>'nullable|string','status'=>['required',Rule::in($this->statusOptions($module))],
             ],
             default=>[]
         };
@@ -404,8 +440,7 @@ class OperationsDataController extends Controller
 
         return [
             'campaign.required' => ProgramInboundNumberValidator::CAMPAIGN_REQUIRED,
-            'media_gateway_id.exists' => ProgramInboundNumberValidator::GSM_MUST_EXIST,
-            'media_gateway_id.integer' => ProgramInboundNumberValidator::GSM_REQUIRED,
+            'network.in' => ProgramInboundNumberValidator::NETWORK_MUST_MATCH,
         ];
     }
 
@@ -417,10 +452,12 @@ class OperationsDataController extends Controller
     {
         $mobiles = ProgramInboundNumberValidator::normalize($data['mobile_numbers'] ?? []);
         $landlines = ProgramInboundNumberValidator::normalize($data['landline_numbers'] ?? []);
+        $network = GsmSimInventory::canonicalNetwork($data['network'] ?? null);
         $data['mobile_numbers'] = $mobiles === [] ? null : $mobiles;
         $data['landline_numbers'] = $landlines === [] ? null : $landlines;
         $data['number'] = $mobiles[0] ?? $landlines[0] ?? '';
         $data['status'] = $data['status'] ?? 'Active';
+        unset($data['media_gateway_id'], $data['port']);
 
         $messages = [];
         if ($data['number'] === '') {
@@ -430,30 +467,25 @@ class OperationsDataController extends Controller
             $field = $error === ProgramInboundNumberValidator::LANDLINE_DIGITS ? 'landline_numbers' : 'mobile_numbers';
             $messages[$field] = $error;
         }
+        foreach (ProgramInboundNumberValidator::landlineSourceErrors($landlines) as $error) {
+            $messages['landline_numbers'] = $error;
+        }
         $seen = [];
         foreach (ProgramInboundNumberValidator::uniquenessErrors($mobiles, $landlines, $seen, $ignoreId) as $error) {
             $messages['number'] = $error;
         }
 
-        if ($mobiles === []) {
-            if ($messages !== []) {
-                throw ValidationException::withMessages($messages);
-            }
-            $data['media_gateway_id'] = null;
-            $data['port'] = null;
-            $data['network'] = null;
-
-            return $data;
+        if ($mobiles !== [] && $network === null) {
+            $messages['network'] = ProgramInboundNumberValidator::NETWORK_REQUIRED;
         }
 
-        $gateway = MediaGateway::query()->find($data['media_gateway_id'] ?? null);
-        if (! $gateway) {
-            $messages['media_gateway_id'] = ProgramInboundNumberValidator::GSM_REQUIRED;
-        } else {
-            $data['media_gateway_id'] = $gateway->id;
-            $data['port'] = $gateway->port;
-            $data['network'] = $gateway->network;
-        }
+        $assignments = $mobiles === [] ? [] : ProgramInboundSimLookup::resolveMany($network, $mobiles);
+        $linked = collect($assignments)->first(static fn (array $row) => ! empty($row['media_gateway_id']));
+
+        $data['mobile_assignments'] = $assignments === [] ? null : $assignments;
+        $data['media_gateway_id'] = $linked['media_gateway_id'] ?? null;
+        $data['port'] = $linked['port'] ?? null;
+        $data['network'] = $mobiles === [] ? null : $network;
 
         if ($messages !== []) {
             throw ValidationException::withMessages($messages);

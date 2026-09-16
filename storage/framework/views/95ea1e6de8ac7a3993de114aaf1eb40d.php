@@ -130,12 +130,12 @@
             <div class="form-grid">
                 <div class="form-group full">
                     <label for="arAddCampaign">Campaign</label>
-                    <select class="form-control" id="arAddCampaign" required>
-                        <option value="" selected disabled hidden>Select Campaign</option>
-                        <?php $__currentLoopData = $campaigns; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $campaign): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                            <option value="<?php echo e($campaign->id); ?>"><?php echo e($campaign->name); ?></option>
-                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                    </select>
+                    <?php echo $__env->make('partials.campaign-combo', [
+                        'inputId' => 'arAddCampaign',
+                        'inputName' => 'campaign',
+                        'menuId' => 'arCampaignMenu',
+                        'campaigns' => $campaigns,
+                    ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
                 </div>
                 <div class="form-group">
                     <label for="arAddYear">Year</label>
@@ -450,7 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const formData = new FormData();
-        formData.append('campaign_id', addCampaign.value);
+        formData.append('campaign', addCampaign.value);
         formData.append('year', addYear.value);
         formData.append('month', addMonth.value);
         formData.append('location', document.getElementById('arAddLocation')?.value || '');
