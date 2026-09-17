@@ -9,7 +9,7 @@
     <form class="search-filter-form log-search-form" method="GET">
         <div class="search-box">
             <span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg></span>
-            <input name="search" value="<?php echo e(request('search')); ?>" placeholder="Search email" autocomplete="off">
+            <input name="search" value="<?php echo e(request('search')); ?>" placeholder="Search user or email" autocomplete="off">
         </div>
         <button class="btn primary" type="submit">Search</button>
     </form>
@@ -28,7 +28,7 @@
                 <th>Date/Time</th>
                 <th>User</th>
                 <th>Email</th>
-                <th>Status</th>
+                <th>Activity</th>
                 <th>IP Address</th>
             </tr>
         </thead>
@@ -43,7 +43,7 @@
                 </td>
                 <td><?php echo e($log->user?->name ?? 'Unknown'); ?></td>
                 <td><?php echo e($log->email); ?></td>
-                <td><span class="status-pill <?php echo e(strtolower($log->status)==='success'?'online':'offline'); ?>"><?php echo e($log->status); ?></span></td>
+                <td><span class="status-pill <?php echo e($log->activityTone()); ?>"><?php echo e($log->activityLabel()); ?></span></td>
                 <td><?php echo e($log->ip_address ?? '—'); ?></td>
             </tr>
         <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>

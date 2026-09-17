@@ -47,6 +47,7 @@ class ChannelUtilizationPageTest extends TestCase
             ->assertSee('Atome')
             ->assertSee('280')
             ->assertSee('<title>Channel Utilization</title>', false)
+            ->assertSee('class="campaigns-name"', false)
             ->assertDontSee('>Reports</', false);
 
         $css = file_get_contents(resource_path('css/app.css'));
@@ -54,6 +55,8 @@ class ChannelUtilizationPageTest extends TestCase
         $this->assertStringContainsString('.dash-util-table th.num,.dash-util-table td.num{text-align:center}', $css);
         $this->assertStringContainsString('table[aria-label="Channel Utilization"] th.num-col', $css);
         $this->assertStringContainsString('table[aria-label="Channel Utilization"] td.num-col{text-align:center}', $css);
+        $this->assertMatchesRegularExpression('/table\[aria-label="Channel Utilization"\]\s*\{\s*table-layout:\s*fixed;\s*width:\s*100%;/', $css);
+        $this->assertMatchesRegularExpression('/table\[aria-label="Channel Utilization"\] > thead > tr > th:first-child,\s*table\[aria-label="Channel Utilization"\] > tbody > tr > td:first-child\s*\{\s*text-align:\s*left;/', $css);
 
         $this->actingAs($this->standard)->get('/channel-utilization')
             ->assertOk()

@@ -4,12 +4,12 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\MailSetting;
-use App\Services\AuditLogger;
+use App\Services\Logs\AuditLogger;
 use App\Support\MailFailure;
 use App\Support\PasswordRules;
+use App\Support\SessionInvalidator;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
-use App\Support\SessionInvalidator;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 

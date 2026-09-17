@@ -71,7 +71,7 @@
         'remarks' => $campaign->remarks,
     ];
 ?>
-<tr class="ca-campaign-row" data-campaign="<?php echo e($campaign->id); ?>">
+<tr class="ca-campaign-row" data-campaign="<?php echo e($campaign->id); ?>" <?php if(auth()->user()->hasPermission('media.delete')): ?> data-bulk-row="main" data-bulk-id="<?php echo e($campaign->id); ?>" data-bulk-url="<?php echo e(route('channel-allocation.bulk-destroy')); ?>" <?php endif; ?>>
     <td>
         <span class="ca-campaign-cell">
             <button type="button" class="ca-toggle" data-ca-toggle="<?php echo e($campaign->id); ?>" aria-expanded="false" aria-controls="ca-panel-<?php echo e($campaign->id); ?>" title="Expand <?php echo e($campaign->name); ?>">
@@ -149,7 +149,7 @@
                             'remarks' => $allocation->remarks,
                         ];
                     ?>
-                    <tr>
+                    <tr <?php if(auth()->user()->hasPermission('media.delete')): ?> data-bulk-row="nested" data-bulk-id="<?php echo e($allocation->id); ?>" data-bulk-url="<?php echo e(route('channel-allocation.allocations.bulk-destroy', $campaign)); ?>" <?php endif; ?>>
                         <td><span class="num-align" data-label="SIP Channel"><?php echo e($allocation->channel_allocation); ?></span></td>
                         <td><span class="num-align" data-label="GSM Gateway"><?php echo e($allocation->media_gateway ?: '—'); ?></span></td>
                         <td><span class="num-align" data-label="Network"><?php echo e($allocation->network ?: '—'); ?></span></td>
@@ -196,25 +196,7 @@
                 <option value="<?php echo e(request()->fullUrlWithQuery(['per_page'=>$size,'page'=>1])); ?>" <?php echo e($perPage===$size?'selected':''); ?>><?php echo e($size); ?></option>
             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
         </select>
-        <div class="pager">
-            <?php if($campaigns->onFirstPage()): ?>
-                <span class="page-number disabled">‹</span>
-            <?php else: ?>
-                <a class="page-number" href="<?php echo e($campaigns->previousPageUrl()); ?>">‹</a>
-            <?php endif; ?>
-            <?php for($page = 1; $page <= max($campaigns->lastPage(), 1); $page++): ?>
-                <?php if($page === $campaigns->currentPage()): ?>
-                    <span class="page-number active"><?php echo e($page); ?></span>
-                <?php else: ?>
-                    <a class="page-number" href="<?php echo e($campaigns->url($page)); ?>"><?php echo e($page); ?></a>
-                <?php endif; ?>
-            <?php endfor; ?>
-            <?php if($campaigns->hasMorePages()): ?>
-                <a class="page-number" href="<?php echo e($campaigns->nextPageUrl()); ?>">›</a>
-            <?php else: ?>
-                <span class="page-number disabled">›</span>
-            <?php endif; ?>
-        </div>
+        <?php echo $__env->make('partials.table-pager', ['paginator' => $campaigns], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
     </div>
 </div>
 </div>
@@ -242,45 +224,11 @@
                             'campaigns' => $masterCampaigns,
                         ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
                     </div>
-                    <div class="form-group" data-campaign-media-gateway><label for="campaign_media_gateway">Media Gateway</label><input class="form-control" name="media_gateway" id="campaign_media_gateway"></div>
                     <div class="form-group" data-campaign-total-channels><label for="campaign_total_channels_allocated">Total Channels Allocated</label><input class="form-control" type="number" min="0" name="total_channels_allocated" id="campaign_total_channels_allocated"></div>
                     <div class="form-group"><label for="campaign_fte">FTE</label><input class="form-control" type="number" min="0" id="campaign_fte" readonly tabindex="-1"></div>
                     <div class="form-group"><label for="campaign_caller_id">Caller ID</label><input class="form-control" name="caller_id" id="campaign_caller_id"></div>
                     <div class="form-group"><label for="campaign_prefix">Prefix</label><input class="form-control" name="prefix" id="campaign_prefix"></div>
                     <div class="form-group full"><label for="campaign_remarks">Remarks</label><textarea class="form-control" name="remarks" id="campaign_remarks"></textarea></div>
-                    <div class="form-group" data-first-allocation>
-                        <label for="campaign_channel_allocation">SIP Channel</label>
-                        <select class="form-control" name="channel_allocation" id="campaign_channel_allocation">
-                            <option value="" selected hidden>Select SIP Channel</option>
-                            <?php $__currentLoopData = $sipChannels; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $sip): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                                <option value="<?php echo e($sip->etpi_sip_name); ?>" data-network="<?php echo e($sip->network); ?>" data-channel-count="<?php echo e($sip->channel_count); ?>"><?php echo e($sip->etpi_sip_name); ?></option>
-                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                        </select>
-                    </div>
-                    <div class="form-group" data-first-allocation>
-                        <label for="campaign_alloc_media_gateway">GSM Gateway</label>
-                        <select class="form-control" name="media_gateway" id="campaign_alloc_media_gateway">
-                            <option value="" selected hidden>Select GSM Gateway</option>
-                            <?php $__currentLoopData = $gsmGateways; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $gateway): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                                <?php $gatewayLabel = $gateway->site_code ?: $gateway->site_name; ?>
-                                <?php if($gatewayLabel): ?>
-                                    <option value="<?php echo e($gatewayLabel); ?>"><?php echo e($gatewayLabel); ?></option>
-                                <?php endif; ?>
-                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                        </select>
-                    </div>
-                    <div class="form-group" data-first-allocation>
-                        <label for="campaign_network">Network</label>
-                        <input class="form-control" name="network" id="campaign_network" readonly tabindex="-1">
-                    </div>
-                    <div class="form-group" data-first-allocation>
-                        <label for="campaign_line_priority">Line Priority</label>
-                        <input class="form-control" type="number" min="0" name="line_priority" id="campaign_line_priority">
-                    </div>
-                    <div class="form-group" data-first-allocation>
-                        <label for="campaign_total_channel_allocated">Total Channel Allocated</label>
-                        <input class="form-control" type="number" min="0" name="total_channel_allocated" id="campaign_total_channel_allocated" readonly tabindex="-1">
-                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -462,6 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!(event.target instanceof Element)) return;
         const row = event.target.closest('tr.ca-campaign-row[data-campaign]');
         if (!row) return;
+        if (event.ctrlKey || event.metaKey) return;
         if (event.target.closest('.actions-column, .ca-menu, a, input, select, textarea, label, .action-btn, .plus-btn')) return;
         if (event.target.closest('[data-ca-toggle]')) return;
         row.querySelector('[data-ca-toggle]')?.click();
@@ -551,42 +500,15 @@ document.addEventListener('DOMContentLoaded', () => {
     campaignSelect?.addEventListener('campaign-combo-change', (event) => fillMasterFte(event.detail?.option || null));
     campaignSelect?.addEventListener('input', () => fillMasterFte());
 
-    const campaignSipSelect = document.getElementById('campaign_channel_allocation');
-    const campaignNetworkField = document.getElementById('campaign_network');
-    const campaignTotalField = document.getElementById('campaign_total_channel_allocated');
-
     function fillSipDerived(sipSelect, networkField, totalField) {
         const option = sipSelect?.selectedOptions?.[0];
         if (networkField) networkField.value = option?.getAttribute('data-network') || '';
         if (totalField) totalField.value = option?.getAttribute('data-channel-count') || '';
     }
 
-    function showFirstAllocation(show) {
-        document.querySelectorAll('[data-first-allocation]').forEach((el) => {
-            el.hidden = !show;
-            el.querySelectorAll('input, select, textarea').forEach((field) => {
-                field.disabled = !show;
-                if (!show) field.value = '';
-            });
-        });
-        if (show) fillSipDerived(campaignSipSelect, campaignNetworkField, campaignTotalField);
-    }
-
     function setCampaignTotalChannelsVisible(show) {
         const group = document.querySelector('[data-campaign-total-channels]');
         const field = document.getElementById('campaign_total_channels_allocated');
-        if (!group) return;
-        group.hidden = !show;
-        group.style.display = show ? '' : 'none';
-        if (field) {
-            field.disabled = !show;
-            if (!show) field.value = '';
-        }
-    }
-
-    function setCampaignMediaGatewayVisible(show) {
-        const group = document.querySelector('[data-campaign-media-gateway]');
-        const field = document.getElementById('campaign_media_gateway');
         if (!group) return;
         group.hidden = !show;
         group.style.display = show ? '' : 'none';
@@ -604,9 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
         campaignForm.reset();
         if (campaignSelect) campaignSelect.disabled = false;
         fillMasterFte();
-        showFirstAllocation(true);
         setCampaignTotalChannelsVisible(false);
-        setCampaignMediaGatewayVisible(false);
         campaignModal?.classList.add('visible');
     });
 
@@ -620,15 +540,13 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('campaignModalTitle').textContent = 'Edit Campaign';
         campaignMethod.value = 'PUT';
         campaignForm.action = updateBase + '/' + recordId;
-        showFirstAllocation(false);
         setCampaignTotalChannelsVisible(true);
-        setCampaignMediaGatewayVisible(true);
         if (campaignSelect) {
-            campaignSelect.disabled = true;
+            campaignSelect.disabled = false;
             campaignSelect.value = values.name ?? '';
         }
         fillMasterFte();
-        ['media_gateway','total_channels_allocated','caller_id','prefix','remarks'].forEach((key) => {
+        ['total_channels_allocated','caller_id','prefix','remarks'].forEach((key) => {
             const field = document.getElementById('campaign_' + key);
             if (field) field.value = values[key] ?? '';
         });
@@ -678,8 +596,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     allocSipSelect?.addEventListener('change', fillAllocationFromSip);
-    campaignSipSelect?.addEventListener('change', () => fillSipDerived(campaignSipSelect, campaignNetworkField, campaignTotalField));
-    ['alloc_network', 'alloc_total_channel_allocated', 'campaign_network', 'campaign_total_channel_allocated'].forEach((id) => {
+    ['alloc_network', 'alloc_total_channel_allocated'].forEach((id) => {
         document.getElementById(id)?.addEventListener('keydown', (event) => event.preventDefault());
         document.getElementById(id)?.addEventListener('paste', (event) => event.preventDefault());
     });

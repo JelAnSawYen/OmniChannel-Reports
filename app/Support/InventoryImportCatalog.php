@@ -6,8 +6,8 @@ use App\Models\ChannelAllocation;
 use App\Models\ChannelAllocationCampaign;
 use App\Models\MediaGateway;
 use App\Models\PdcServer;
-use App\Support\GsmGatewayImportMapper;
-use App\Support\ProgramInboundImportMapper;
+use App\Support\Gsm\GsmGatewayImportMapper;
+use App\Support\Inbound\ProgramInboundImportMapper;
 
 class InventoryImportCatalog
 {

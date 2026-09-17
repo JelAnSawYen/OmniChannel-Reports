@@ -36,7 +36,7 @@ class XlsxService
         $xml .= '</sheetData></worksheet>';
 
         $zipPath = $base.'/'.Str::uuid().'.xlsx';
-        $zip = new \ZipArchive();
+        $zip = new \ZipArchive;
         $opened = $zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
         if ($opened !== true) {
             throw new RuntimeException('Unable to create the Excel file.');
@@ -105,7 +105,7 @@ class XlsxService
         $xml .= '</sheetData></worksheet>';
 
         $zipPath = $base.'/'.Str::uuid().'.xlsx';
-        $zip = new \ZipArchive();
+        $zip = new \ZipArchive;
         $opened = $zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
         if ($opened !== true) {
             throw new RuntimeException('Unable to create the Excel file.');
@@ -162,7 +162,7 @@ class XlsxService
             throw new RuntimeException('Excel import requires the PHP Zip extension.');
         }
 
-        $zip = new \ZipArchive();
+        $zip = new \ZipArchive;
         if ($zip->open($path) !== true) {
             throw new RuntimeException('Unable to open the Excel file.');
         }
@@ -480,9 +480,10 @@ class XlsxService
         $name = '';
         while ($number > 0) {
             $number--;
-            $name = chr(65 + ($number % 26)) . $name;
+            $name = chr(65 + ($number % 26)).$name;
             $number = intdiv($number, 26);
         }
+
         return $name;
     }
 

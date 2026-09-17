@@ -1,26 +1,26 @@
 <?php
 
-use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\Admin\MaintenanceController;
+use App\Http\Controllers\Admin\ProfileController;
+use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Archive\ArchiveRecordingController;
 use App\Http\Controllers\Auth\EmailVerificationController;
+use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\MfaController;
 use App\Http\Controllers\Auth\PasswordResetController;
+use App\Http\Controllers\Campaigns\CampaignController;
+use App\Http\Controllers\ChannelAllocation\ChannelAllocationController;
 use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\LocationController;
-use App\Http\Controllers\LoginController;
-use App\Http\Controllers\LoginLogController;
-use App\Http\Controllers\MaintenanceController;
-use App\Http\Controllers\MediaGatewayController;
-use App\Http\Controllers\OperationsDataController;
-use App\Http\Controllers\PdcServerController;
-use App\Http\Controllers\SipChannelController;
-use App\Http\Controllers\ChannelRangeListController;
-use App\Http\Controllers\ChannelAllocationController;
-use App\Http\Controllers\ArchiveRecordingController;
-use App\Http\Controllers\CampaignController;
-use App\Http\Controllers\ChannelUtilizationController;
-use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\SystemHealthController;
-use App\Http\Controllers\UserController;
+use App\Http\Controllers\Gsm\LocationController;
+use App\Http\Controllers\Gsm\MediaGatewayController;
+use App\Http\Controllers\Logs\ActivityLogController;
+use App\Http\Controllers\Logs\LoginLogController;
+use App\Http\Controllers\Operations\OperationsDataController;
+use App\Http\Controllers\Pdc\PdcServerController;
+use App\Http\Controllers\Reports\ChannelUtilizationController;
+use App\Http\Controllers\Reports\SystemHealthController;
+use App\Http\Controllers\Sip\ChannelRangeListController;
+use App\Http\Controllers\Sip\SipChannelController;
 use App\Support\OperationCatalog;
 use Illuminate\Support\Facades\Route;
 
@@ -61,6 +61,7 @@ Route::middleware(['auth', 'account.active'])->group(function () {
             Route::post('/import/preview', [MediaGatewayController::class, 'importPreview'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('import.preview');
             Route::post('/import/confirm', [MediaGatewayController::class, 'importConfirm'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('import.confirm');
             Route::post('/', [MediaGatewayController::class, 'store'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('store');
+            Route::delete('/bulk', [MediaGatewayController::class, 'bulkDestroy'])->middleware('permission:media.delete')->name('bulk-destroy');
             Route::put('/{mediaGateway}', [MediaGatewayController::class, 'update'])->middleware(['permission:media.edit', 'throttle:sensitive'])->name('update');
             Route::delete('/{mediaGateway}', [MediaGatewayController::class, 'destroy'])->middleware('permission:media.delete')->name('destroy');
         };
@@ -69,6 +70,7 @@ Route::middleware(['auth', 'account.active'])->group(function () {
         Route::prefix('gsm-gateways')->name('gsm-gateways.')->middleware('module:gsm-gateways')->group(function () use ($gatewayRoutes) {
             $gatewayRoutes();
             Route::post('/{mediaGateway}/assignments', [MediaGatewayController::class, 'storeAssignment'])->middleware(['permission:media.create', 'throttle:sensitive'])->whereNumber('mediaGateway')->name('assignments.store');
+            Route::delete('/{mediaGateway}/assignments/bulk', [MediaGatewayController::class, 'bulkDestroyAssignments'])->middleware('permission:media.delete')->whereNumber('mediaGateway')->name('assignments.bulk-destroy');
             Route::put('/{mediaGateway}/assignments/{assignment}', [MediaGatewayController::class, 'updateAssignment'])->middleware(['permission:media.edit', 'throttle:sensitive'])->whereNumber('mediaGateway')->whereNumber('assignment')->name('assignments.update');
             Route::delete('/{mediaGateway}/assignments/{assignment}', [MediaGatewayController::class, 'destroyAssignment'])->middleware('permission:media.delete')->whereNumber('mediaGateway')->whereNumber('assignment')->name('assignments.destroy');
         });
@@ -77,6 +79,7 @@ Route::middleware(['auth', 'account.active'])->group(function () {
             Route::get('/', [UserController::class, 'index'])->middleware('permission:users.view')->name('index');
             Route::get('/create', [UserController::class, 'create'])->middleware('permission:users.manage')->name('create');
             Route::post('/', [UserController::class, 'store'])->middleware(['permission:users.manage', 'throttle:sensitive'])->name('store');
+            Route::delete('/bulk', [UserController::class, 'bulkDestroy'])->middleware(['permission:users.manage', 'throttle:sensitive'])->name('bulk-destroy');
             Route::get('/{user}/edit', [UserController::class, 'edit'])->middleware('permission:users.manage')->name('edit');
             Route::put('/{user}', [UserController::class, 'update'])->middleware(['permission:users.manage', 'throttle:sensitive'])->name('update');
             Route::post('/{user}/verification', [UserController::class, 'resendVerification'])->middleware('permission:users.manage')->name('verification.resend');
@@ -114,6 +117,7 @@ Route::middleware(['auth', 'account.active'])->group(function () {
             Route::get('/program-location/{location}', [LocationController::class, 'show'])->middleware('permission:media.view')->name('program-location.show');
             Route::post('/program-location/{location}', [LocationController::class, 'store'])->middleware('permission:media.create')->name('program-location.store');
             Route::put('/program-location/{location}/{gateway}', [LocationController::class, 'update'])->middleware('permission:media.edit')->whereNumber('gateway')->name('program-location.update');
+            Route::delete('/program-location/{location}/bulk', [LocationController::class, 'bulkDestroy'])->middleware('permission:media.delete')->name('program-location.bulk-destroy');
             Route::delete('/program-location/{location}/{gateway}', [LocationController::class, 'destroy'])->middleware('permission:media.delete')->whereNumber('gateway')->name('program-location.destroy');
         });
 
@@ -125,9 +129,11 @@ Route::middleware(['auth', 'account.active'])->group(function () {
             Route::post('/import/preview', [ChannelAllocationController::class, 'importPreview'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('channel-allocation.import.preview');
             Route::post('/import/confirm', [ChannelAllocationController::class, 'importConfirm'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('channel-allocation.import.confirm');
             Route::post('/', [ChannelAllocationController::class, 'store'])->middleware('permission:media.create')->name('channel-allocation.store');
+            Route::delete('/bulk', [ChannelAllocationController::class, 'bulkDestroy'])->middleware('permission:media.delete')->name('channel-allocation.bulk-destroy');
             Route::put('/{campaign}', [ChannelAllocationController::class, 'update'])->middleware('permission:media.edit')->whereNumber('campaign')->name('channel-allocation.update');
             Route::delete('/{campaign}', [ChannelAllocationController::class, 'destroy'])->middleware('permission:media.delete')->whereNumber('campaign')->name('channel-allocation.destroy');
             Route::post('/{campaign}/allocations', [ChannelAllocationController::class, 'storeAllocation'])->middleware('permission:media.create')->whereNumber('campaign')->name('channel-allocation.allocations.store');
+            Route::delete('/{campaign}/allocations/bulk', [ChannelAllocationController::class, 'bulkDestroyAllocations'])->middleware('permission:media.delete')->whereNumber('campaign')->name('channel-allocation.allocations.bulk-destroy');
             Route::put('/{campaign}/allocations/{allocation}', [ChannelAllocationController::class, 'updateAllocation'])->middleware('permission:media.edit')->whereNumber('campaign')->whereNumber('allocation')->name('channel-allocation.allocations.update');
             Route::delete('/{campaign}/allocations/{allocation}', [ChannelAllocationController::class, 'destroyAllocation'])->middleware('permission:media.delete')->whereNumber('campaign')->whereNumber('allocation')->name('channel-allocation.allocations.destroy');
         });
@@ -140,6 +146,7 @@ Route::middleware(['auth', 'account.active'])->group(function () {
             Route::post('/import/preview', [CampaignController::class, 'importPreview'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('campaigns.import.preview');
             Route::post('/import/confirm', [CampaignController::class, 'importConfirm'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('campaigns.import.confirm');
             Route::post('/', [CampaignController::class, 'store'])->middleware('permission:media.create')->name('campaigns.store');
+            Route::delete('/bulk', [CampaignController::class, 'bulkDestroy'])->middleware('permission:media.delete')->name('campaigns.bulk-destroy');
             Route::put('/{campaign}', [CampaignController::class, 'update'])->middleware('permission:media.edit')->whereNumber('campaign')->name('campaigns.update');
             Route::delete('/{campaign}', [CampaignController::class, 'destroy'])->middleware('permission:media.delete')->whereNumber('campaign')->name('campaigns.destroy');
         });
@@ -152,9 +159,11 @@ Route::middleware(['auth', 'account.active'])->group(function () {
             Route::post('/import/preview', [PdcServerController::class, 'importPreview'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('pdc-servers.import.preview');
             Route::post('/import/confirm', [PdcServerController::class, 'importConfirm'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('pdc-servers.import.confirm');
             Route::post('/', [PdcServerController::class, 'store'])->middleware('permission:media.create')->name('pdc-servers.store');
+            Route::delete('/bulk', [PdcServerController::class, 'bulkDestroy'])->middleware('permission:media.delete')->name('pdc-servers.bulk-destroy');
             Route::put('/{group}', [PdcServerController::class, 'update'])->middleware('permission:media.edit')->whereNumber('group')->name('pdc-servers.update');
             Route::delete('/{group}', [PdcServerController::class, 'destroy'])->middleware('permission:media.delete')->whereNumber('group')->name('pdc-servers.destroy');
             Route::post('/{group}/servers', [PdcServerController::class, 'storeServer'])->middleware('permission:media.create')->whereNumber('group')->name('pdc-servers.servers.store');
+            Route::delete('/{group}/servers/bulk', [PdcServerController::class, 'bulkDestroyServers'])->middleware('permission:media.delete')->whereNumber('group')->name('pdc-servers.servers.bulk-destroy');
             Route::put('/{group}/servers/{server}', [PdcServerController::class, 'updateServer'])->middleware('permission:media.edit')->whereNumber('group')->whereNumber('server')->name('pdc-servers.servers.update');
             Route::delete('/{group}/servers/{server}', [PdcServerController::class, 'destroyServer'])->middleware('permission:media.delete')->whereNumber('group')->whereNumber('server')->name('pdc-servers.servers.destroy');
         });
@@ -167,6 +176,7 @@ Route::middleware(['auth', 'account.active'])->group(function () {
             Route::post('/import/preview', [ChannelRangeListController::class, 'importPreview'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('channel-range-list.import.preview');
             Route::post('/import/confirm', [ChannelRangeListController::class, 'importConfirm'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('channel-range-list.import.confirm');
             Route::post('/', [ChannelRangeListController::class, 'store'])->middleware('permission:media.create')->name('channel-range-list.store');
+            Route::delete('/bulk', [ChannelRangeListController::class, 'bulkDestroy'])->middleware('permission:media.delete')->name('channel-range-list.bulk-destroy');
             Route::put('/{sipChannelNumber}', [ChannelRangeListController::class, 'update'])->middleware('permission:media.edit')->whereNumber('sipChannelNumber')->name('channel-range-list.update');
             Route::delete('/{sipChannelNumber}', [ChannelRangeListController::class, 'destroy'])->middleware('permission:media.delete')->whereNumber('sipChannelNumber')->name('channel-range-list.destroy');
         });
@@ -179,6 +189,7 @@ Route::middleware(['auth', 'account.active'])->group(function () {
             Route::post('/import/preview', [SipChannelController::class, 'importPreview'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('sip-channels.import.preview');
             Route::post('/import/confirm', [SipChannelController::class, 'importConfirm'])->middleware(['permission:media.create', 'throttle:sensitive'])->name('sip-channels.import.confirm');
             Route::post('/', [SipChannelController::class, 'store'])->middleware('permission:media.create')->name('sip-channels.store');
+            Route::delete('/bulk', [SipChannelController::class, 'bulkDestroy'])->middleware('permission:media.delete')->name('sip-channels.bulk-destroy');
             Route::put('/{sipChannel}', [SipChannelController::class, 'update'])->middleware('permission:media.edit')->whereNumber('sipChannel')->name('sip-channels.update');
             Route::delete('/{sipChannel}', [SipChannelController::class, 'destroy'])->middleware('permission:media.delete')->whereNumber('sipChannel')->name('sip-channels.destroy');
         });
@@ -209,6 +220,7 @@ Route::middleware(['auth', 'account.active'])->group(function () {
             Route::post('/'.$module.'/import/preview', [OperationsDataController::class, 'importPreview'])->middleware(['permission:media.create', 'throttle:sensitive', 'module:'.$module])->defaults('module', $module)->name($module.'.import.preview');
             Route::post('/'.$module.'/import/confirm', [OperationsDataController::class, 'importConfirm'])->middleware(['permission:media.create', 'throttle:sensitive', 'module:'.$module])->defaults('module', $module)->name($module.'.import.confirm');
             Route::post('/'.$module, [OperationsDataController::class, 'store'])->middleware(['permission:media.create', 'module:'.$module])->defaults('module', $module)->name($module.'.store');
+            Route::delete('/'.$module.'/bulk', [OperationsDataController::class, 'bulkDestroy'])->middleware(['permission:media.delete', 'module:'.$module])->defaults('module', $module)->name($module.'.bulk-destroy');
             Route::put('/'.$module.'/{id}', [OperationsDataController::class, 'update'])->middleware(['permission:media.edit', 'module:'.$module])->defaults('module', $module)->whereNumber('id')->name($module.'.update');
             Route::delete('/'.$module.'/{id}', [OperationsDataController::class, 'destroy'])->middleware(['permission:media.delete', 'module:'.$module])->defaults('module', $module)->whereNumber('id')->name($module.'.destroy');
         }

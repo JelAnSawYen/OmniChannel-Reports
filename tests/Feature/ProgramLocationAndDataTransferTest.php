@@ -7,8 +7,10 @@ use App\Models\MediaGateway;
 use App\Models\SipChannel;
 use App\Models\User;
 use App\Models\UserType;
+use App\Support\Gsm\ProgramLocationStatus;
 use App\Support\OperationCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class ProgramLocationAndDataTransferTest extends TestCase
@@ -16,6 +18,7 @@ class ProgramLocationAndDataTransferTest extends TestCase
     use RefreshDatabase;
 
     private User $admin;
+
     private User $standard;
 
     protected function setUp(): void
@@ -36,7 +39,7 @@ class ProgramLocationAndDataTransferTest extends TestCase
 
     protected function tearDown(): void
     {
-        $path = \App\Support\ProgramLocationStatus::path();
+        $path = ProgramLocationStatus::path();
         if (is_file($path)) {
             @unlink($path);
         }
@@ -153,7 +156,7 @@ class ProgramLocationAndDataTransferTest extends TestCase
             $this->assertArrayNotHasKey('gateways', $site);
         }
 
-        $sidebar = \Illuminate\Support\Str::between(
+        $sidebar = Str::between(
             $this->get('/dashboard')->assertOk()->getContent(),
             '<aside',
             '</aside>'
@@ -183,7 +186,7 @@ class ProgramLocationAndDataTransferTest extends TestCase
         $this->assertStringContainsString('Gateway Assigned', $html);
         $this->assertStringContainsString('Assign GSM Gateway', $html);
         $this->assertStringNotContainsString('>Edit<', $html);
-        $configForm = \Illuminate\Support\Str::between($html, 'id="locConfigForm"', '</form>');
+        $configForm = Str::between($html, 'id="locConfigForm"', '</form>');
         $this->assertStringNotContainsString('<select', $configForm);
         $this->assertStringNotContainsString('hostname', $configForm);
         $this->assertStringNotContainsString('ip_address', $configForm);

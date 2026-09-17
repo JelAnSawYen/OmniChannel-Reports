@@ -31,6 +31,7 @@ class OperationCatalog
         foreach (self::locationMapSites() as $slug => $site) {
             if ($slug === 'pdc' || strcasecmp((string) ($site['name'] ?? ''), 'PDC') === 0) {
                 $locations['wfh'] = 'WFH';
+
                 continue;
             }
 
@@ -188,7 +189,7 @@ class OperationCatalog
                 'description' => 'Manage SIP channel campaigns, ranges, and activation dates.',
                 'model' => SipChannel::class,
                 'columns' => [
-                    'etpi_sip_name' => 'ETPI SIP NAME',
+                    'etpi_sip_name' => 'SIP Name',
                     'pilot_number' => 'Pilot Number',
                     'channel_count' => 'Channel Count',
                     'channel_range' => 'Channel Range',

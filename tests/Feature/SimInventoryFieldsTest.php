@@ -15,6 +15,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -127,7 +128,7 @@ class SimInventoryFieldsTest extends TestCase
         $this->assertStringContainsString('data-id="'.$record->id.'"', $showHtml);
         $this->assertStringNotContainsString('<th>Last Updated</th>', $showHtml);
         $this->assertStringNotContainsString('<th>Network</th>', $showHtml);
-        $tableHtml = \Illuminate\Support\Str::betweenFirst($showHtml, 'class="sim-table"', '</table>');
+        $tableHtml = Str::betweenFirst($showHtml, 'class="sim-table"', '</table>');
         $this->assertStringContainsString('>Port</th>', $tableHtml);
         $this->assertStringNotContainsString('>Network</th>', $tableHtml);
         $this->assertTrue(strpos($tableHtml, '>IP</th>') < strpos($tableHtml, '>Port</th>'));
@@ -303,7 +304,7 @@ class SimInventoryFieldsTest extends TestCase
         ]);
 
         $page = $this->get('/'.$module)->assertOk();
-        $tableHtml = \Illuminate\Support\Str::betweenFirst($page->getContent(), 'class="sim-table"', '</table>');
+        $tableHtml = Str::betweenFirst($page->getContent(), 'class="sim-table"', '</table>');
         $this->assertStringContainsString('>IP</th>', $tableHtml);
         $this->assertStringContainsString('>Port</th>', $tableHtml);
         $this->assertTrue(strpos($tableHtml, '>IP</th>') < strpos($tableHtml, '>Port</th>'));

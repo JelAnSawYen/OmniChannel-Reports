@@ -110,7 +110,7 @@
         $editValues['mobile_assignments'] = $record->mobileDisplayRows();
     }
 ?>
-<tr>
+<tr <?php if(auth()->user()->hasPermission('media.delete')): ?> data-bulk-row="main" data-bulk-id="<?php echo e($recordId); ?>" data-bulk-url="<?php echo e(route($module.'.bulk-destroy')); ?>" <?php endif; ?>>
     <?php if (! ($hideMeta)): ?>
         <td><?php echo e(($records->firstItem() ?? 1) + $loop->index); ?></td>
     <?php endif; ?>
@@ -234,15 +234,7 @@
                 <option value="<?php echo e(request()->fullUrlWithQuery(['per_page'=>$size,'page'=>1])); ?>" <?php echo e($perPage===$size?'selected':''); ?>><?php echo e($size); ?></option>
             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
         </select>
-        <div class="pager">
-            <?php for($page=1;$page<=$records->lastPage();$page++): ?>
-                <?php if($page===$records->currentPage()): ?>
-                    <span class="page-number active"><?php echo e($page); ?></span>
-                <?php else: ?>
-                    <a class="page-number" href="<?php echo e($records->url($page)); ?>"><?php echo e($page); ?></a>
-                <?php endif; ?>
-            <?php endfor; ?>
-        </div>
+        <?php echo $__env->make('partials.table-pager', ['paginator' => $records], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
     </div>
 </div>
 </div>

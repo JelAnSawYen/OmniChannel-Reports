@@ -1,13 +1,15 @@
 <?php
+
 namespace App\Console\Commands;
 
-use App\Services\LogRetentionService;
+use App\Services\Logs\LogRetentionService;
 use Illuminate\Console\Command;
 
 class PruneOldLogs extends Command
 {
     protected $signature = 'logs:prune';
-    protected $description = 'Delete activity logs and login history older than 3 days';
+
+    protected $description = 'Delete activity logs and login history older than 14 days';
 
     public function handle(): int
     {

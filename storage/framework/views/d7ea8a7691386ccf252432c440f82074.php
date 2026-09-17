@@ -22,7 +22,7 @@
             'previewUrl' => auth()->user()->hasPermission('media.create') ? route('pdc-servers.import.preview') : '',
             'confirmUrl' => auth()->user()->hasPermission('media.create') ? route('pdc-servers.import.confirm') : '',
             'errorsUrl' => auth()->user()->hasPermission('media.create') ? route('pdc-servers.import.errors') : '',
-            'previewHeaders' => array_values(app(\App\Services\PdcServerImportService::class)->fields()),
+            'previewHeaders' => array_values(app(\App\Services\Pdc\PdcServerImportService::class)->fields()),
             'entityTitle' => 'PDC Servers',
         ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
         <?php endif; ?>
@@ -65,7 +65,7 @@
         'dns' => $group->dns,
     ];
 ?>
-<tr class="ca-campaign-row" data-campaign="<?php echo e($group->id); ?>">
+<tr class="ca-campaign-row" data-campaign="<?php echo e($group->id); ?>" <?php if(auth()->user()->hasPermission('media.delete')): ?> data-bulk-row="main" data-bulk-id="<?php echo e($group->id); ?>" data-bulk-url="<?php echo e(route('pdc-servers.bulk-destroy')); ?>" <?php endif; ?>>
     <td>
         <span class="ca-campaign-cell">
             <button type="button" class="ca-toggle" data-ca-toggle="<?php echo e($group->id); ?>" aria-expanded="false" aria-controls="pdc-panel-<?php echo e($group->id); ?>" title="Expand <?php echo e($campaignName); ?>">
@@ -163,7 +163,7 @@
                             $serverValues['sql_db_password'] = $server->sql_db_password;
                         }
                     ?>
-                    <tr>
+                    <tr <?php if(auth()->user()->hasPermission('media.delete')): ?> data-bulk-row="nested" data-bulk-id="<?php echo e($server->id); ?>" data-bulk-url="<?php echo e(route('pdc-servers.servers.bulk-destroy', $group)); ?>" <?php endif; ?>>
                         <?php $pdcServerDisplayId++; ?>
                         <td><span class="pdc-cell-group pdc-server-id"><?php echo e($pdcServerDisplayId); ?></span></td>
                         <td><span class="pdc-cell-group"><?php echo e($server->hostname); ?></span></td>
@@ -236,25 +236,7 @@
                 <option value="<?php echo e(request()->fullUrlWithQuery(['per_page'=>$size,'page'=>1])); ?>" <?php echo e($perPage===$size?'selected':''); ?>><?php echo e($size); ?></option>
             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
         </select>
-        <div class="pager">
-            <?php if($groups->onFirstPage()): ?>
-                <span class="page-number disabled">‹</span>
-            <?php else: ?>
-                <a class="page-number" href="<?php echo e($groups->previousPageUrl()); ?>">‹</a>
-            <?php endif; ?>
-            <?php for($page = 1; $page <= max($groups->lastPage(), 1); $page++): ?>
-                <?php if($page === $groups->currentPage()): ?>
-                    <span class="page-number active"><?php echo e($page); ?></span>
-                <?php else: ?>
-                    <a class="page-number" href="<?php echo e($groups->url($page)); ?>"><?php echo e($page); ?></a>
-                <?php endif; ?>
-            <?php endfor; ?>
-            <?php if($groups->hasMorePages()): ?>
-                <a class="page-number" href="<?php echo e($groups->nextPageUrl()); ?>">›</a>
-            <?php else: ?>
-                <span class="page-number disabled">›</span>
-            <?php endif; ?>
-        </div>
+        <?php echo $__env->make('partials.table-pager', ['paginator' => $groups], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
     </div>
 </div>
 </div>
@@ -402,6 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!(event.target instanceof Element)) return;
         const row = event.target.closest('tr.ca-campaign-row[data-campaign]');
         if (!row) return;
+        if (event.ctrlKey || event.metaKey) return;
         if (event.target.closest('.actions-column, .ca-menu, a, input, select, textarea, label, .action-btn, .plus-btn')) return;
         if (event.target.closest('[data-ca-toggle]')) return;
         row.querySelector('[data-ca-toggle]')?.click();
@@ -793,7 +776,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'previewUrl' => auth()->user()->hasPermission('media.create') ? route('pdc-servers.import.preview') : '',
     'confirmUrl' => auth()->user()->hasPermission('media.create') ? route('pdc-servers.import.confirm') : '',
     'errorsUrl' => auth()->user()->hasPermission('media.create') ? route('pdc-servers.import.errors') : '',
-    'previewFields' => array_keys(app(\App\Services\PdcServerImportService::class)->fields()),
+    'previewFields' => array_keys(app(\App\Services\Pdc\PdcServerImportService::class)->fields()),
 ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 <?php $__env->stopPush(); ?>
 

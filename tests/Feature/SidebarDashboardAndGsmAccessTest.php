@@ -2,11 +2,18 @@
 
 namespace Tests\Feature;
 
+use App\Models\ChannelAllocationCampaign;
+use App\Models\GatewaySimAssignment;
+use App\Models\GlobeSim;
 use App\Models\MediaGateway;
+use App\Models\PdcGroup;
+use App\Models\PdcServer;
+use App\Models\SmartSim;
 use App\Models\User;
 use App\Models\UserType;
 use App\Services\XlsxService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class SidebarDashboardAndGsmAccessTest extends TestCase
@@ -14,6 +21,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
     use RefreshDatabase;
 
     private UserType $adminType;
+
     private UserType $standardType;
 
     protected function setUp(): void
@@ -54,14 +62,14 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             ->assertSee('href="'.url('/sip-channels').'"', false)
             ->assertSee('id="sipChannelsCaret"', false)
             ->assertSee('id="sipChannelsSub"', false)
-            ->assertSee('>Channel Range List</span></a>', false)
+            ->assertSee('>Channel Range</span></a>', false)
             ->assertDontSee('<button type="button" class="nav-caret"', false)
             ->assertDontSee('>⌃</span>', false)
             ->assertDontSee('>⌄</span>', false);
 
         $html = $this->get('/dashboard')->getContent();
-        $sipSub = \Illuminate\Support\Str::betweenFirst($html, 'id="sipChannelsSub"', '</div>');
-        $this->assertStringContainsString('Channel Range List', $sipSub);
+        $sipSub = Str::betweenFirst($html, 'id="sipChannelsSub"', '</div>');
+        $this->assertStringContainsString('Channel Range', $sipSub);
         $this->assertStringNotContainsString('SIP Channels', $sipSub);
         $this->assertStringContainsString('id="networkToggle"', $html);
         $this->assertStringContainsString('<button type="button" class="nav-item nav-parent-row" id="networkToggle"', $html);
@@ -69,7 +77,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         $this->get('/channel-range-list')
             ->assertOk()
             ->assertSee('class="nav-group open" id="sipChannelsGroup"', false)
-            ->assertSee('>Channel Range List</span></a>', false);
+            ->assertSee('>Channel Range</span></a>', false);
     }
 
     public function test_sidebar_operations_and_locations_are_reachable(): void
@@ -89,7 +97,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             '/campaigns' => 'Campaigns',
             '/pdc-servers' => 'PDC Servers',
             '/sip-channels' => 'SIP Channels',
-            '/channel-range-list' => 'Channel Range List',
+            '/channel-range-list' => 'Channel Range',
             '/channel-allocation' => 'Channel Allocation',
             '/archive-recordings' => 'Archive Recordings',
             '/gsm-gateways' => 'GSM Gateway Server List',
@@ -160,7 +168,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             '/campaigns' => 'Campaigns',
             '/pdc-servers' => 'PDC Servers',
             '/sip-channels' => 'SIP Channels',
-            '/channel-range-list' => 'Channel Range List',
+            '/channel-range-list' => 'Channel Range',
             '/channel-allocation' => 'Channel Allocation',
             '/archive-recordings' => 'Archive Recordings',
             '/gsm-gateways' => 'GSM Gateway',
@@ -185,12 +193,12 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
     {
         $this->actingAs($this->user($this->adminType));
 
-        $campaign = \App\Models\ChannelAllocationCampaign::create(['name' => 'BPI Collection']);
-        $group = \App\Models\PdcGroup::create([
+        $campaign = ChannelAllocationCampaign::create(['name' => 'BPI Collection']);
+        $group = PdcGroup::create([
             'campaign_id' => $campaign->id,
             'location' => 'Estancia',
         ]);
-        \App\Models\PdcServer::create([
+        PdcServer::create([
             'pdc_group_id' => $group->id,
             'hostname' => 'pdc-core-01',
             'ip_address' => '10.10.10.10',
@@ -220,6 +228,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
                     ->assertSee('id="arSearchInput"', false)
                     ->assertSee('Search recordings...')
                     ->assertDontSee('id="archiveSearchInput"', false);
+
                 continue;
             }
             $page->assertSee('class="search-box', false)
@@ -386,14 +395,14 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
     {
         $this->actingAs($this->user($this->adminType));
 
-        $globe = \App\Models\GlobeSim::create([
+        $globe = GlobeSim::create([
             'imei' => '123456789012345',
             'mobile_number' => '09171234567',
             'plan' => 'Corporate',
             'network' => 'Globe',
             'status' => 'Active',
         ]);
-        $smart = \App\Models\SmartSim::create([
+        $smart = SmartSim::create([
             'imei' => '987654321098765',
             'mobile_number' => '09181234567',
             'plan' => 'Unli Data',
@@ -441,9 +450,9 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             'sim_id' => $globe->id,
         ])->assertUnprocessable();
 
-        $this->assertSame(1, \App\Models\GlobeSim::count());
-        $this->assertSame(1, \App\Models\SmartSim::count());
-        $this->assertSame(2, \App\Models\GatewaySimAssignment::count());
+        $this->assertSame(1, GlobeSim::count());
+        $this->assertSame(1, SmartSim::count());
+        $this->assertSame(2, GatewaySimAssignment::count());
 
         $page = $this->get('/gsm-gateways')->assertOk();
         $page->assertSee('123456789012345')
@@ -461,15 +470,66 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         ])->assertForbidden();
     }
 
+    public function test_gsm_gateway_add_can_assign_multiple_unassigned_sims_up_to_channel_count(): void
+    {
+        $this->actingAs($this->user($this->adminType));
+
+        $first = GlobeSim::create([
+            'imei' => '356938035643001',
+            'mobile_number' => '09170000001',
+            'plan' => 'Plan A',
+            'status' => 'Active',
+        ]);
+        $second = GlobeSim::create([
+            'imei' => '356938035643002',
+            'mobile_number' => '09170000002',
+            'plan' => 'Plan B',
+            'status' => 'Active',
+        ]);
+        $third = GlobeSim::create([
+            'imei' => '356938035643003',
+            'mobile_number' => '09170000003',
+            'plan' => 'Plan C',
+            'status' => 'Active',
+        ]);
+
+        $create = $this->postJson('/gsm-gateways', [
+            'hostname' => 'gsm-multi-add',
+            'site_name' => 'Alcar',
+            'site_code' => 'SNMULTI01',
+            'ip_address' => '10.5.20.210',
+            'channel_count' => 2,
+            'device_function' => 'Inbound',
+            'username' => 'root',
+        ])->assertCreated();
+
+        $gatewayId = $create->json('record.id');
+
+        $this->postJson('/gsm-gateways/'.$gatewayId.'/assignments', [
+            'network' => 'Globe SIM',
+            'sim_id' => $first->id,
+        ])->assertCreated();
+        $this->postJson('/gsm-gateways/'.$gatewayId.'/assignments', [
+            'network' => 'Globe SIM',
+            'sim_id' => $second->id,
+        ])->assertCreated();
+        $this->postJson('/gsm-gateways/'.$gatewayId.'/assignments', [
+            'network' => 'Globe SIM',
+            'sim_id' => $third->id,
+        ])->assertUnprocessable();
+
+        $this->assertSame(2, GatewaySimAssignment::query()->where('media_gateway_id', $gatewayId)->count());
+    }
+
     public function test_sim_inventory_card_opens_a_selection_modal_for_globe_and_smart(): void
     {
-        \App\Models\GlobeSim::create([
+        GlobeSim::create([
             'imei' => '356938035643111',
             'mobile_number' => '09170001111',
             'location' => 'Estancia',
             'status' => 'Active',
         ]);
-        \App\Models\SmartSim::create([
+        SmartSim::create([
             'imei' => '356938035643222',
             'mobile_number' => '09280002222',
             'location' => 'CTN',

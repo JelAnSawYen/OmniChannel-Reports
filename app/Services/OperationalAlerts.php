@@ -19,7 +19,7 @@ class OperationalAlerts
 
         if ($user?->hasPermission('logs.view')) {
             $failedLogins = LoginLog::query()
-                ->where('status', 'Failed')
+                ->whereIn('status', ['Failed', 'Failed Login', 'Blocked'])
                 ->where('created_at', '>=', now()->subDay())
                 ->count();
             if ($failedLogins > 0) {

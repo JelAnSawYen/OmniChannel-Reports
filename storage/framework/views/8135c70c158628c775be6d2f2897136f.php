@@ -21,7 +21,7 @@
 <thead><tr><th>Id</th><th>Name</th><th>Email</th><th>User Type</th><th>Status</th><th>Last Login</th><th>Created</th><th class="actions-column">Actions</th></tr></thead>
 <tbody>
 <?php $__empty_1 = true; $__currentLoopData = $users; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $user): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
-<tr>
+<tr <?php if(auth()->user()->hasPermission('users.manage') && auth()->id() !== $user->id && auth()->user()->canManageUser($user)): ?> data-bulk-row="main" data-bulk-id="<?php echo e($user->id); ?>" data-bulk-url="<?php echo e(route('users.bulk-destroy')); ?>" <?php endif; ?>>
     <td><?php echo e(($users->firstItem() ?? 1) + $loop->index); ?></td>
     <td><strong><?php echo e($user->name); ?></strong></td>
     <td><?php echo e($user->email); ?></td>

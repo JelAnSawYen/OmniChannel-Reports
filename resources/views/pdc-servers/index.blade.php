@@ -23,7 +23,7 @@
             'previewUrl' => auth()->user()->hasPermission('media.create') ? route('pdc-servers.import.preview') : '',
             'confirmUrl' => auth()->user()->hasPermission('media.create') ? route('pdc-servers.import.confirm') : '',
             'errorsUrl' => auth()->user()->hasPermission('media.create') ? route('pdc-servers.import.errors') : '',
-            'previewHeaders' => array_values(app(\App\Services\PdcServerImportService::class)->fields()),
+            'previewHeaders' => array_values(app(\App\Services\Pdc\PdcServerImportService::class)->fields()),
             'entityTitle' => 'PDC Servers',
         ])
         @endif
@@ -66,7 +66,7 @@
         'dns' => $group->dns,
     ];
 @endphp
-<tr class="ca-campaign-row" data-campaign="{{ $group->id }}">
+<tr class="ca-campaign-row" data-campaign="{{ $group->id }}" @if(auth()->user()->hasPermission('media.delete')) data-bulk-row="main" data-bulk-id="{{ $group->id }}" data-bulk-url="{{ route('pdc-servers.bulk-destroy') }}" @endif>
     <td>
         <span class="ca-campaign-cell">
             <button type="button" class="ca-toggle" data-ca-toggle="{{ $group->id }}" aria-expanded="false" aria-controls="pdc-panel-{{ $group->id }}" title="Expand {{ $campaignName }}">
@@ -164,7 +164,7 @@
                             $serverValues['sql_db_password'] = $server->sql_db_password;
                         }
                     @endphp
-                    <tr>
+                    <tr @if(auth()->user()->hasPermission('media.delete')) data-bulk-row="nested" data-bulk-id="{{ $server->id }}" data-bulk-url="{{ route('pdc-servers.servers.bulk-destroy', $group) }}" @endif>
                         @php $pdcServerDisplayId++; @endphp
                         <td><span class="pdc-cell-group pdc-server-id">{{ $pdcServerDisplayId }}</span></td>
                         <td><span class="pdc-cell-group">{{ $server->hostname }}</span></td>
@@ -237,25 +237,7 @@
                 <option value="{{ request()->fullUrlWithQuery(['per_page'=>$size,'page'=>1]) }}" {{ $perPage===$size?'selected':'' }}>{{ $size }}</option>
             @endforeach
         </select>
-        <div class="pager">
-            @if($groups->onFirstPage())
-                <span class="page-number disabled">‹</span>
-            @else
-                <a class="page-number" href="{{ $groups->previousPageUrl() }}">‹</a>
-            @endif
-            @for($page = 1; $page <= max($groups->lastPage(), 1); $page++)
-                @if($page === $groups->currentPage())
-                    <span class="page-number active">{{ $page }}</span>
-                @else
-                    <a class="page-number" href="{{ $groups->url($page) }}">{{ $page }}</a>
-                @endif
-            @endfor
-            @if($groups->hasMorePages())
-                <a class="page-number" href="{{ $groups->nextPageUrl() }}">›</a>
-            @else
-                <span class="page-number disabled">›</span>
-            @endif
-        </div>
+        @include('partials.table-pager', ['paginator' => $groups])
     </div>
 </div>
 </div>
@@ -403,6 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!(event.target instanceof Element)) return;
         const row = event.target.closest('tr.ca-campaign-row[data-campaign]');
         if (!row) return;
+        if (event.ctrlKey || event.metaKey) return;
         if (event.target.closest('.actions-column, .ca-menu, a, input, select, textarea, label, .action-btn, .plus-btn')) return;
         if (event.target.closest('[data-ca-toggle]')) return;
         row.querySelector('[data-ca-toggle]')?.click();
@@ -794,6 +777,6 @@ document.addEventListener('DOMContentLoaded', () => {
     'previewUrl' => auth()->user()->hasPermission('media.create') ? route('pdc-servers.import.preview') : '',
     'confirmUrl' => auth()->user()->hasPermission('media.create') ? route('pdc-servers.import.confirm') : '',
     'errorsUrl' => auth()->user()->hasPermission('media.create') ? route('pdc-servers.import.errors') : '',
-    'previewFields' => array_keys(app(\App\Services\PdcServerImportService::class)->fields()),
+    'previewFields' => array_keys(app(\App\Services\Pdc\PdcServerImportService::class)->fields()),
 ])
 @endpush

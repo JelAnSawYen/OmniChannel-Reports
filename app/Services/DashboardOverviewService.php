@@ -11,7 +11,8 @@ use App\Models\ProgramInboundNumber;
 use App\Models\SipChannel;
 use App\Models\SmartSim;
 use App\Support\ChannelTypeClassifier;
-use App\Support\ProgramInboundNumberValidator;
+use App\Support\Inbound\ProgramInboundNumberValidator;
+use App\Support\PageWindow;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -413,11 +414,7 @@ class DashboardOverviewService
                 .'</tr>';
         }
 
-        $pages = '';
-        for ($i = 1; $i <= $lastPage; $i++) {
-            $active = $i === $page ? ' active' : '';
-            $pages .= '<button type="button" class="page-number'.$active.'" data-dash-page="'.$i.'">'.$i.'</button>';
-        }
+        $pages = PageWindow::buttonHtml($page, $lastPage);
 
         $options = '';
         foreach ([5, 10, 25, 50] as $size) {

@@ -30,7 +30,7 @@
 <tbody>
 @forelse($records as $row)
 <tr>
-    <td>{{ $row['name'] }}</td>
+    <td><span class="campaigns-name">{{ $row['name'] }}</span></td>
     <td class="num-col">{{ $row['total_display'] }}</td>
     <td class="num-col">{{ $row['sip_display'] }}</td>
     <td class="num-col">{{ $row['gsm_display'] }}</td>
@@ -57,15 +57,7 @@
                 <option value="{{ request()->fullUrlWithQuery(['per_page' => $size, 'page' => 1]) }}" {{ $perPage === $size ? 'selected' : '' }}>{{ $size }}</option>
             @endforeach
         </select>
-        <div class="pager">
-            @for($page = 1; $page <= max($records->lastPage(), 1); $page++)
-                @if($page === $records->currentPage())
-                    <span class="page-number active">{{ $page }}</span>
-                @else
-                    <a class="page-number" href="{{ $records->url($page) }}">{{ $page }}</a>
-                @endif
-            @endfor
-        </div>
+        @include('partials.table-pager', ['paginator' => $records])
     </div>
 </div>
 </div>

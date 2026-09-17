@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\AuditLogger;
 use App\Services\InventoryImportService;
+use App\Services\Logs\AuditLogger;
 use App\Services\XlsxService;
 use App\Support\PublicError;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -14,7 +15,7 @@ trait HandlesInventoryImport
 {
     abstract protected function inventoryImportConfig(Request $request): array;
 
-    public function importTemplate(Request $request, XlsxService $xlsx, InventoryImportService $import): BinaryFileResponse|\Illuminate\Http\RedirectResponse
+    public function importTemplate(Request $request, XlsxService $xlsx, InventoryImportService $import): BinaryFileResponse|RedirectResponse
     {
         $config = $this->inventoryImportConfig($request);
         try {
@@ -116,7 +117,7 @@ trait HandlesInventoryImport
         ]);
     }
 
-    public function importErrors(Request $request, InventoryImportService $import, XlsxService $xlsx): BinaryFileResponse|\Illuminate\Http\RedirectResponse
+    public function importErrors(Request $request, InventoryImportService $import, XlsxService $xlsx): BinaryFileResponse|RedirectResponse
     {
         $config = $this->inventoryImportConfig($request);
         $stored = $import->previewFromSession($config['key'], (string) $request->query('token'));

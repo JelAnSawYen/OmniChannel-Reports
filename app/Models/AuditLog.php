@@ -1,9 +1,14 @@
 <?php
+
 namespace App\Models;
+
 use Illuminate\Database\Eloquent\Model;
+
 class AuditLog extends Model
 {
     public const PROTECTED_MODULES = ['Authentication', 'Users', 'User Types', 'Maintenance', 'Profile'];
+
+    public const EXCLUDED_ACTIONS = ['Login', 'Logout', 'Failed Login', 'Created Backup'];
 
     protected $fillable = ['user_id', 'action', 'module', 'record_id', 'description', 'ip_address'];
 

@@ -15,6 +15,7 @@ use App\Models\UserType;
 use App\Services\XlsxService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class ProgramInboundNumbersPageTest extends TestCase
@@ -73,7 +74,7 @@ class ProgramInboundNumbersPageTest extends TestCase
         $html = $page->getContent();
         $css = file_get_contents(resource_path('css/app.css'));
 
-        $tableHtml = \Illuminate\Support\Str::between($html, '<table class="pin-table"', '</table>');
+        $tableHtml = Str::between($html, '<table class="pin-table"', '</table>');
 
         $page->assertSee('class="pin-table"', false)
             ->assertSee('class="pin-campaign"', false)
@@ -267,8 +268,9 @@ class ProgramInboundNumbersPageTest extends TestCase
         $this->assertStringContainsString('Add Program Inbound Number', $html);
         $this->assertStringContainsString('id="field_remarks"', $html);
         $this->assertStringNotContainsString('Add Program Inbound Number</h1>', $html);
-        $this->assertMatchesRegularExpression('/\.pin-modal-backdrop\.visible\s*\{[^}]*align-items:\s*center/', $css);
+        $this->assertMatchesRegularExpression('/\.pin-modal-backdrop\.visible\s*\{[^}]*align-items:\s*flex-start/', $css);
         $this->assertMatchesRegularExpression('/\.pin-modal-backdrop\.visible\s*\{[^}]*justify-content:\s*center/', $css);
+        $this->assertMatchesRegularExpression('/\.pin-modal-backdrop\.visible\s*\{[^}]*overflow-y:\s*auto/', $css);
     }
 
     public function test_toolbar_matches_other_tabs_without_status_filter(): void
@@ -313,7 +315,7 @@ class ProgramInboundNumbersPageTest extends TestCase
             ->assertDontSee('data-clear-search', false)
             ->assertDontSee('id="pinReset"', false);
         $this->assertDoesNotMatchRegularExpression('/>Reset</', $searched->getContent());
-        $this->assertStringNotContainsString('Hidden Campaign', \Illuminate\Support\Str::betweenFirst($searched->getContent(), 'class="pin-table"', '</table>'));
+        $this->assertStringNotContainsString('Hidden Campaign', Str::betweenFirst($searched->getContent(), 'class="pin-table"', '</table>'));
     }
 
     public function test_data_transfer_uses_inbound_columns_and_existing_gsm_gateway(): void

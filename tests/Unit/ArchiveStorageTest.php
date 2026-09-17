@@ -3,7 +3,7 @@
 namespace Tests\Unit;
 
 use App\Models\ArchiveRecording;
-use App\Support\ArchiveStorage;
+use App\Support\Archive\ArchiveStorage;
 use Tests\TestCase;
 
 class ArchiveStorageTest extends TestCase

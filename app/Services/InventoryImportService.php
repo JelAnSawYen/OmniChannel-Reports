@@ -130,6 +130,7 @@ class InventoryImportService
                 }
                 if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
                     $errors[] = ($config['fields'][$field] ?? 'IP Address').' must be a valid IPv4 address';
+
                     continue;
                 }
                 $normalized = strtolower($ip);
@@ -147,6 +148,7 @@ class InventoryImportService
                 }
                 if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
                     $errors[] = ($config['fields'][$field] ?? 'IP Address').' must be a valid IPv4 address';
+
                     continue;
                 }
                 if (! in_array(strtolower($ip), $gatewayIps, true)) {
@@ -162,6 +164,7 @@ class InventoryImportService
                 $key = mb_strtolower($value);
                 if (isset($uniqueTracker[$field][$key])) {
                     $errors[] = ($config['fields'][$field] ?? $field).' is duplicated in the file';
+
                     continue;
                 }
                 $uniqueTracker[$field][$key] = $excelRow;
@@ -189,6 +192,7 @@ class InventoryImportService
                 $trackerKey = implode('+', $fields);
                 if (isset($uniqueTracker[$trackerKey][$comboKey])) {
                     $errors[] = 'This combination already exists in the file';
+
                     continue;
                 }
                 $uniqueTracker[$trackerKey][$comboKey] = $excelRow;
@@ -243,11 +247,13 @@ class InventoryImportService
                 $parsed = PdcEndorseDate::parse((string) ($values[$field] ?? ''));
                 if (! $parsed['valid']) {
                     $errors[] = ($config['fields'][$field] ?? $field).' must be a valid date on or after 1/1/2000';
+
                     continue;
                 }
                 if ($parsed['empty']) {
                     $values[$field] = '';
                     $isoDates[$field] = null;
+
                     continue;
                 }
                 $values[$field] = $parsed['display'];
@@ -322,6 +328,7 @@ class InventoryImportService
                         }
                         if (array_key_exists($field, $isoDates)) {
                             $record[$field] = $isoDates[$field];
+
                             continue;
                         }
                         $value = $values[$field] ?? '';

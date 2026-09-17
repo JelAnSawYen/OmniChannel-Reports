@@ -82,7 +82,7 @@
 <?php $__empty_1 = true; $__currentLoopData = $mediaGateways; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $gateway): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
 <?php if($isGsm): ?>
 <?php $assignments = $gateway->assignmentPayload(); ?>
-<tr class="gsm-gateway-row" data-gateway="<?php echo e($gateway->id); ?>">
+<tr class="gsm-gateway-row" data-gateway="<?php echo e($gateway->id); ?>" <?php if(auth()->user()->hasPermission('media.delete') && auth()->user()->canMutateGateways()): ?> data-bulk-row="main" data-bulk-id="<?php echo e($gateway->id); ?>" data-bulk-url="<?php echo e(route($isGsm ? 'gsm-gateways.bulk-destroy' : 'media-gateways.bulk-destroy')); ?>" data-bulk-ajax="1" <?php endif; ?>>
     <td>
         <span class="gsm-host-cell">
             <button type="button" class="ca-toggle" data-ca-toggle="<?php echo e($gateway->id); ?>" aria-expanded="false" aria-controls="gsm-panel-<?php echo e($gateway->id); ?>" title="Expand <?php echo e($gateway->hostname ?: $gateway->site_code); ?>">
@@ -155,7 +155,7 @@
                 </thead>
                 <tbody>
                 <?php $__empty_2 = true; $__currentLoopData = $assignments; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $assignment): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_2 = false; ?>
-                    <tr>
+                    <tr <?php if(auth()->user()->hasPermission('media.delete') && auth()->user()->canMutateGateways()): ?> data-bulk-row="nested" data-bulk-id="<?php echo e($assignment['assignment_id']); ?>" data-bulk-url="<?php echo e(route('gsm-gateways.assignments.bulk-destroy', $gateway)); ?>" data-bulk-ajax="1" <?php endif; ?>>
                         <td><?php echo e($assignment['imei'] ?: '—'); ?></td>
                         <td><?php echo e($assignment['mobile_number'] ?: '—'); ?></td>
                         <td><?php echo e($assignment['plan'] ?: '—'); ?></td>
@@ -185,7 +185,7 @@
     </td>
 </tr>
 <?php else: ?>
-<tr>
+<tr <?php if(auth()->user()->hasPermission('media.delete') && auth()->user()->canMutateGateways()): ?> data-bulk-row="main" data-bulk-id="<?php echo e($gateway->id); ?>" data-bulk-url="<?php echo e(route($isGsm ? 'gsm-gateways.bulk-destroy' : 'media-gateways.bulk-destroy')); ?>" data-bulk-ajax="1" <?php endif; ?>>
     <td><?php echo e($gateway->ip_address); ?></td>
     <td><?php echo e($gateway->site_code); ?></td>
     <td><?php echo e($gateway->plan ?: '—'); ?></td>
@@ -236,15 +236,7 @@
             <option value="25" <?php echo e($perPage===25?'selected':''); ?>>25</option>
             <option value="50" <?php echo e($perPage===50?'selected':''); ?>>50</option>
         </select>
-        <div class="pager" id="paginationLinks">
-            <?php for($page=1;$page<=$mediaGateways->lastPage();$page++): ?>
-                <?php if($page===$mediaGateways->currentPage()): ?>
-                    <span class="page-number active"><?php echo e($page); ?></span>
-                <?php else: ?>
-                    <a class="page-number" data-page="<?php echo e($page); ?>" href="<?php echo e($mediaGateways->url($page)); ?>"><?php echo e($page); ?></a>
-                <?php endif; ?>
-            <?php endfor; ?>
-        </div>
+        <?php echo $__env->make('partials.table-pager', ['paginator' => $mediaGateways, 'pagerId' => 'paginationLinks', 'dataPage' => true], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
     </div>
 </div>
 </div>
@@ -266,18 +258,18 @@
                 <div id="formErrors"></div>
                 <?php if($isGsm): ?>
                     <div class="form-grid">
-                        <div class="form-group"><label for="hostname">Hostname <span class="req">*</span></label><input class="form-control" id="hostname" name="hostname" required></div>
+                        <div class="form-group"><label for="hostname">Hostname</label><input class="form-control" id="hostname" name="hostname" required></div>
                         <div class="form-group">
-                            <label for="device_function">Function <span class="req">*</span></label>
+                            <label for="device_function">Function</label>
                             <select class="form-control" id="device_function" name="device_function" required>
                                 <option value="" selected hidden>Select Function</option>
                                 <option value="Inbound">Inbound</option>
                                 <option value="Outbound">Outbound</option>
                             </select>
                         </div>
-                        <div class="form-group"><label for="ip_address">IP Address <span class="req">*</span></label><input class="form-control" id="ip_address" name="ip_address" required></div>
+                        <div class="form-group"><label for="ip_address">IP Address</label><input class="form-control" id="ip_address" name="ip_address" required></div>
                         <div class="form-group">
-                            <label for="site_name">Site <span class="req">*</span></label>
+                            <label for="site_name">Site</label>
                             <select class="form-control" id="site_name" name="site_name" required>
                                 <option value="" selected hidden>Select Site</option>
                                 <?php $__currentLoopData = ($locations ?? []); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $slug => $name): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
@@ -285,9 +277,9 @@
                                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                             </select>
                         </div>
-                        <div class="form-group"><label for="site_code">Serial Number <span class="req">*</span></label><input class="form-control" id="site_code" name="site_code" required></div>
-                        <div class="form-group"><label for="username">User <span class="req">*</span></label><input class="form-control" id="username" name="username" required></div>
-                        <div class="form-group"><label for="channel_count">Channel Count <span class="req">*</span></label><input class="form-control" id="channel_count" name="channel_count" type="number" min="1" max="512" required></div>
+                        <div class="form-group"><label for="site_code">Serial Number</label><input class="form-control" id="site_code" name="site_code" required></div>
+                        <div class="form-group"><label for="username">User</label><input class="form-control" id="username" name="username" required></div>
+                        <div class="form-group"><label for="channel_count">Channel Count</label><input class="form-control" id="channel_count" name="channel_count" type="number" min="1" max="512" required></div>
                         <div class="form-group">
                             <label for="password">Password</label>
                             <div class="pdc-password-field">

@@ -14,17 +14,17 @@ class UserTypeMiddleware
      */
     public function handle(Request $request, Closure $next, string ...$userTypes): Response
     {
-        if (!Auth::check()) {
+        if (! Auth::check()) {
             return redirect()->route('login');
         }
 
         $user = Auth::user();
 
-        if (!$user->userType) {
+        if (! $user->userType) {
             abort(403, 'Your account does not have a user type assigned.');
         }
 
-        if (!in_array($user->userType->name, $userTypes)) {
+        if (! in_array($user->userType->name, $userTypes)) {
             abort(403, 'You do not have permission to access this page.');
         }
 

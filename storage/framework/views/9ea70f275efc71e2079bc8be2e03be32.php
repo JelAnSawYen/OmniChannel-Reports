@@ -12,8 +12,8 @@
             <input name="search" value="<?php echo e(request('search')); ?>" placeholder="Search logs..." autocomplete="off">
         </div>
         <select class="select" name="action">
-            <option value="">All Actions</option>
-            <?php $__currentLoopData = ['Login','Logout','Added','Updated','Deleted','Imported','Exported','Created Backup','Restore Started','Changed Password','Cleared Logs','Created']; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $a): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+            <option value="" <?php echo e(request('action') ? '' : 'selected'); ?> hidden>All Actions</option>
+            <?php $__currentLoopData = ['Created','Added','Updated','Deleted','Imported','Exported','Changed Password','Cleared Logs']; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $a): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                 <option value="<?php echo e($a); ?>" <?php echo e(request('action')===$a?'selected':''); ?>><?php echo e($a); ?></option>
             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
         </select>
@@ -33,6 +33,7 @@
             <tr>
                 <th>Date/Time</th>
                 <th>User</th>
+                <th>Email</th>
                 <th>Action</th>
                 <th>Module</th>
                 <th>Description</th>
@@ -49,13 +50,14 @@
                     </span>
                 </td>
                 <td><?php echo e($log->user?->name ?? 'System'); ?></td>
+                <td><?php echo e($log->user?->email ?? '—'); ?></td>
                 <td><span class="badge"><?php echo e($log->action); ?></span></td>
                 <td><?php echo e($log->module); ?></td>
                 <td class="activity-description"><?php echo e($log->description); ?></td>
                 <td><?php echo e($log->ip_address ?? '—'); ?></td>
             </tr>
         <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
-            <tr><td colspan="6" class="empty-state">No activity found.</td></tr>
+            <tr><td colspan="7" class="empty-state">No activity found.</td></tr>
         <?php endif; ?>
         </tbody>
     </table>

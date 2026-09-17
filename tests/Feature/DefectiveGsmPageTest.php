@@ -8,6 +8,7 @@ use App\Models\UserType;
 use App\Services\XlsxService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class DefectiveGsmPageTest extends TestCase
@@ -42,7 +43,7 @@ class DefectiveGsmPageTest extends TestCase
         $page = $this->get('/defective-gsm')->assertOk();
         $html = $page->getContent();
         $css = file_get_contents(resource_path('css/app.css'));
-        $tableHtml = \Illuminate\Support\Str::between($html, '<table class="dg-table"', '</table>');
+        $tableHtml = Str::between($html, '<table class="dg-table"', '</table>');
 
         $page->assertSee('class="dg-table"', false)
             ->assertSee('class="dg-issue-col"', false)

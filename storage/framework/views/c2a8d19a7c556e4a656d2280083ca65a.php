@@ -1,7 +1,7 @@
 <?php $__env->startSection('content'); ?>
 <div class="page-head">
     <div>
-        <h1 class="page-title">Channel Range List</h1>
+        <h1 class="page-title">Channel Range</h1>
         <p class="page-subtitle">Manage channel numbers for each SIP channel.</p>
     </div>
     <div class="toolbar">
@@ -22,7 +22,7 @@
             'previewUrl' => auth()->user()->hasPermission('media.create') ? route('channel-range-list.import.preview') : '',
             'confirmUrl' => auth()->user()->hasPermission('media.create') ? route('channel-range-list.import.confirm') : '',
             'errorsUrl' => auth()->user()->hasPermission('media.create') ? route('channel-range-list.import.errors') : '',
-            'previewHeaders' => array_values(app(\App\Services\ChannelRangeListImportService::class)->fields()),
+            'previewHeaders' => array_values(app(\App\Services\Sip\ChannelRangeListImportService::class)->fields()),
             'entityTitle' => 'Channel Range List',
         ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
         <?php endif; ?>
@@ -47,9 +47,9 @@
         <span class="ca-toggle" aria-hidden="true"></span>
     </th>
     <th class="crl-campaign-col">Campaign</th>
-    <th class="crl-channel-col" aria-hidden="true"></th>
+    <th class="crl-channel-col">Channel Range</th>
     <th class="crl-sip-col">SIP Name</th>
-    <th class="crl-actions-col" aria-hidden="true"></th>
+    <th class="crl-actions-col">Actions</th>
 </tr>
 </thead>
 <tbody>
@@ -57,8 +57,9 @@
 <?php
     $campaignName = $sip->campaign?->name ?: '—';
     $sipName = $sip->etpi_sip_name ?: '—';
+    $channelRange = $sip->channelRangeFromNumbers();
 ?>
-<tr class="ca-campaign-row" data-campaign="<?php echo e($sip->id); ?>">
+<tr class="ca-campaign-row" data-campaign="<?php echo e($sip->id); ?>" <?php if(auth()->user()->hasPermission('media.delete')): ?> data-bulk-row="main" data-bulk-ids="<?php echo e($sip->channelNumbers->pluck('id')->implode(',')); ?>" data-bulk-url="<?php echo e(route('channel-range-list.bulk-destroy')); ?>" <?php endif; ?>>
     <td class="crl-toggle-col">
         <button type="button" class="ca-toggle" data-ca-toggle="<?php echo e($sip->id); ?>" aria-expanded="false" aria-controls="crl-panel-<?php echo e($sip->id); ?>" title="Expand <?php echo e($campaignName); ?>">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"></path></svg>
@@ -66,12 +67,28 @@
     </td>
     <td class="crl-campaign-col">
         <span class="ca-campaign-identity">
-            <button type="button" class="ca-campaign-link" data-ca-toggle="<?php echo e($sip->id); ?>"><?php echo e($campaignName); ?></button>
+            <span class="ca-campaign-link campaigns-name"><?php echo e($campaignName); ?></span>
         </span>
     </td>
-    <td class="crl-channel-col"></td>
+    <td class="crl-channel-col"><span class="crl-channel-range"><?php echo e($channelRange !== '' ? $channelRange : '—'); ?></span></td>
     <td class="crl-sip-col"><span class="crl-sip-name"><?php echo e($sipName); ?></span></td>
-    <td class="crl-actions-col"></td>
+    <td class="crl-actions-col actions-column">
+        <?php if(auth()->user()->hasPermission('media.delete')): ?>
+            <span class="row-actions">
+                <form method="POST" action="<?php echo e(route('channel-range-list.bulk-destroy')); ?>" data-confirm="Delete this record?" data-confirm-title="Delete Record" data-confirm-ok="Delete">
+                    <?php echo csrf_field(); ?>
+                    <?php echo method_field('DELETE'); ?>
+                    <input type="hidden" name="sip_channel_id" value="<?php echo e($sip->id); ?>">
+                    <?php $__currentLoopData = $sip->channelNumbers; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $number): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                        <input type="hidden" name="ids[]" value="<?php echo e($number->id); ?>">
+                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                    <button class="action-btn delete" type="submit" title="Delete" aria-label="Delete">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="m6 7 1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>
+                    </button>
+                </form>
+            </span>
+        <?php endif; ?>
+    </td>
 </tr>
 <tr class="ca-nested-row" id="crl-panel-<?php echo e($sip->id); ?>" hidden>
     <td colspan="5">
@@ -90,7 +107,7 @@
                         <th class="crl-campaign-col"></th>
                         <th class="crl-channel-col">Channel Number</th>
                         <th class="crl-sip-col"></th>
-                        <th class="crl-actions-col">Actions</th>
+                        <th class="crl-actions-col"></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -100,24 +117,7 @@
                         <td class="crl-campaign-col"></td>
                         <td class="crl-channel-col"><span class="crl-channel-number"><?php echo e($number->channel_number); ?></span></td>
                         <td class="crl-sip-col"></td>
-                        <td class="crl-actions-col actions-column">
-                            <span class="row-actions">
-                                <?php if(auth()->user()->hasPermission('media.edit')): ?>
-                                    <button class="action-btn edit" type="button" data-crl-edit data-id="<?php echo e($number->id); ?>" data-channel-number="<?php echo e($number->channel_number); ?>" title="Edit" aria-label="Edit">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
-                                    </button>
-                                <?php endif; ?>
-                                <?php if(auth()->user()->hasPermission('media.delete')): ?>
-                                    <form method="POST" action="<?php echo e(route('channel-range-list.destroy', $number)); ?>" data-confirm="Delete this record?" data-confirm-title="Delete Record" data-confirm-ok="Delete">
-                                        <?php echo csrf_field(); ?>
-                                        <?php echo method_field('DELETE'); ?>
-                                        <button class="action-btn delete" type="submit" title="Delete" aria-label="Delete">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="m6 7 1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>
-                                        </button>
-                                    </form>
-                                <?php endif; ?>
-                            </span>
-                        </td>
+                        <td class="crl-actions-col"></td>
                     </tr>
                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_2): ?>
                     <tr><td colspan="5"><div class="empty-state">No channel numbers for this SIP channel.</div></td></tr>
@@ -182,7 +182,10 @@
                         <select class="form-control" name="sip_channel_id" id="crl_sip_channel_id" required>
                             <option value="" selected hidden>Select Campaign</option>
                             <?php $__currentLoopData = $sipChannels; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $channel): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                                <option value="<?php echo e($channel->id); ?>" data-sip-name="<?php echo e($channel->etpi_sip_name); ?>"><?php echo e($channel->campaign?->name); ?></option>
+                                <?php
+                                    [$optionFrom, $optionTo] = \App\Models\SipChannel::boundsFromRange($channel->resolvedChannelRange());
+                                ?>
+                                <option value="<?php echo e($channel->id); ?>" data-sip-name="<?php echo e($channel->etpi_sip_name); ?>" data-from="<?php echo e($optionFrom); ?>" data-to="<?php echo e($optionTo); ?>"><?php echo e($channel->campaign?->name); ?></option>
                             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                         </select>
                     </div>
@@ -192,11 +195,11 @@
                     </div>
                     <div class="form-group">
                         <label for="crl_from">From</label>
-                        <input class="form-control" name="from" id="crl_from" inputmode="numeric" autocomplete="off" required>
+                        <input class="form-control" name="from" id="crl_from" inputmode="numeric" autocomplete="off" required readonly>
                     </div>
                     <div class="form-group">
                         <label for="crl_to">To</label>
-                        <input class="form-control" name="to" id="crl_to" inputmode="numeric" autocomplete="off" required>
+                        <input class="form-control" name="to" id="crl_to" inputmode="numeric" autocomplete="off" required readonly>
                     </div>
                 </div>
             </div>
@@ -258,6 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!(event.target instanceof Element)) return;
         const row = event.target.closest('tr.ca-campaign-row[data-campaign]');
         if (!row) return;
+        if (event.ctrlKey || event.metaKey) return;
         if (event.target.closest('.actions-column, .ca-menu, a, input, select, textarea, label, .action-btn, .plus-btn')) return;
         if (event.target.closest('[data-ca-toggle]')) return;
         row.querySelector('[data-ca-toggle]')?.click();
@@ -265,9 +269,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const campaignSelect = document.getElementById('crl_sip_channel_id');
     const sipNameInput = document.getElementById('crl_sip_name');
+    const fromInput = document.getElementById('crl_from');
+    const toInput = document.getElementById('crl_to');
     const syncSipName = () => {
         const option = campaignSelect?.selectedOptions?.[0];
         if (sipNameInput) sipNameInput.value = option?.getAttribute('data-sip-name') || '';
+        if (fromInput) fromInput.value = option?.getAttribute('data-from') || '';
+        if (toInput) toInput.value = option?.getAttribute('data-to') || '';
     };
     campaignSelect?.addEventListener('change', syncSipName);
 
@@ -303,7 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'previewUrl' => auth()->user()->hasPermission('media.create') ? route('channel-range-list.import.preview') : '',
     'confirmUrl' => auth()->user()->hasPermission('media.create') ? route('channel-range-list.import.confirm') : '',
     'errorsUrl' => auth()->user()->hasPermission('media.create') ? route('channel-range-list.import.errors') : '',
-    'previewFields' => array_keys(app(\App\Services\ChannelRangeListImportService::class)->fields()),
+    'previewFields' => array_keys(app(\App\Services\Sip\ChannelRangeListImportService::class)->fields()),
 ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 <?php $__env->stopPush(); ?>
 

@@ -3,9 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\ChannelAllocationCampaign;
+use App\Models\GlobeSim;
 use App\Models\MediaGateway;
+use App\Models\PdcGroup;
 use App\Models\PdcServer;
 use App\Models\SipChannel;
+use App\Models\SmartSim;
 use App\Models\User;
 use App\Models\UserType;
 use App\Services\XlsxService;
@@ -32,7 +35,7 @@ class InventoryImportTest extends TestCase
     public function test_pdc_import_inherits_blanks_allows_duplicate_non_ip_and_rejects_duplicate_ipv4(): void
     {
         $this->actingAs($this->admin);
-        \App\Models\ChannelAllocationCampaign::create(['name' => 'BPI Collection']);
+        ChannelAllocationCampaign::create(['name' => 'BPI Collection']);
         PdcServer::create([
             'hostname' => 'existing-pdc',
             'ip_address' => '10.9.9.9',
@@ -77,7 +80,7 @@ class InventoryImportTest extends TestCase
             ->assertJson(['ok' => true]);
 
         $this->assertSame(3, PdcServer::count());
-        $this->assertSame('Estancia', \App\Models\PdcGroup::first()->location);
+        $this->assertSame('Estancia', PdcGroup::first()->location);
 
         $export = $this->get('/pdc-servers/export')->assertOk()->assertDownload('pdc-servers.xlsx');
         [$headers] = app(XlsxService::class)->read($export->getFile()->getPathname());
@@ -198,14 +201,14 @@ class InventoryImportTest extends TestCase
     public function test_gsm_import_assigns_existing_sims_without_duplicating_inventory(): void
     {
         $this->actingAs($this->admin);
-        $globe = \App\Models\GlobeSim::create([
+        $globe = GlobeSim::create([
             'imei' => '123456789012345',
             'mobile_number' => '09171234567',
             'plan' => 'Corporate',
             'network' => 'Globe',
             'status' => 'Active',
         ]);
-        $smart = \App\Models\SmartSim::create([
+        $smart = SmartSim::create([
             'imei' => '987654321098765',
             'mobile_number' => '09181234567',
             'plan' => 'Unli Data',
@@ -232,8 +235,8 @@ class InventoryImportTest extends TestCase
         $this->assertSame('gsm_globe_phq108', $gateway->hostname);
         $this->assertSame(20, (int) $gateway->channel_count);
         $this->assertSame(1, MediaGateway::count());
-        $this->assertSame(1, \App\Models\GlobeSim::count());
-        $this->assertSame(1, \App\Models\SmartSim::count());
+        $this->assertSame(1, GlobeSim::count());
+        $this->assertSame(1, SmartSim::count());
         $this->assertDatabaseHas('gateway_sim_assignments', [
             'media_gateway_id' => $gateway->id,
             'sim_type' => 'globe',
@@ -259,7 +262,7 @@ class InventoryImportTest extends TestCase
         $this->assertContains('Site Name', $headers);
         $this->assertContains('IP Address', $headers);
         $sheet = '';
-        $zip = new \ZipArchive();
+        $zip = new \ZipArchive;
         $this->assertTrue($zip->open($template->getFile()->getPathname()) === true);
         $sheet = (string) $zip->getFromName('xl/worksheets/sheet1.xml');
         $zip->close();
@@ -291,7 +294,7 @@ class InventoryImportTest extends TestCase
             ->assertSee('Download Excel Template');
 
         $path = $this->spreadsheet([
-            ['Campaign', 'ETPI SIP NAME', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
+            ['Campaign', 'SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
             ['Mynt', 'ETPI-A', '100', '2', '100 - 101', 'ETPI', '7/9/2026'],
             ['', 'ETPI-B', '', '', '', '', ''],
         ]);
@@ -319,7 +322,7 @@ class InventoryImportTest extends TestCase
             ]);
         }
 
-        foreach (['globe-sim' => \App\Models\GlobeSim::class, 'smart-sim' => \App\Models\SmartSim::class] as $module => $model) {
+        foreach (['globe-sim' => GlobeSim::class, 'smart-sim' => SmartSim::class] as $module => $model) {
             $network = $module === 'globe-sim' ? 'Globe' : 'Smart';
             $path = $this->spreadsheet([
                 ['IMEI', 'Mobile Number', 'Plan', 'IP', 'Account Number', 'Contract Start', 'Contract End'],
@@ -380,7 +383,7 @@ class InventoryImportTest extends TestCase
     public function test_sim_import_rejects_invalid_ip_duplicate_mobile_number_and_reversed_contracts(): void
     {
         $this->actingAs($this->admin);
-        \App\Models\GlobeSim::create([
+        GlobeSim::create([
             'imei' => '356938035643501',
             'mobile_number' => '09172220001',
             'network' => 'Globe',
@@ -462,7 +465,7 @@ class InventoryImportTest extends TestCase
         foreach ($urls as $url) {
             $response = $this->get($url)->assertOk();
             $path = $response->getFile()->getPathname();
-            $zip = new \ZipArchive();
+            $zip = new \ZipArchive;
             $this->assertTrue($zip->open($path) === true, $url);
             $sheet = (string) $zip->getFromName('xl/worksheets/sheet1.xml');
             $styles = (string) $zip->getFromName('xl/styles.xml');

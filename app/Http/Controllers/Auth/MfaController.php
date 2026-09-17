@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Services\AuditLogger;
-use App\Services\TotpService;
+use App\Services\Auth\TotpService;
+use App\Services\Logs\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\MediaGateway;
 use App\Models\User;
 use App\Models\UserType;
@@ -13,6 +14,7 @@ class RoleAccessAndWorkflowTest extends TestCase
     use RefreshDatabase;
 
     private UserType $adminType;
+
     private UserType $standardType;
 
     protected function setUp(): void
@@ -240,7 +242,7 @@ class RoleAccessAndWorkflowTest extends TestCase
     {
         $this->actingAs($this->user($this->adminType));
 
-        \App\Models\AuditLog::create([
+        AuditLog::create([
             'action' => 'Added',
             'module' => 'Media Gateways',
             'description' => 'Added gateway LONGCODE-WITH-EXTRA-DETAIL-THAT-MUST-NOT-BE-CUT',

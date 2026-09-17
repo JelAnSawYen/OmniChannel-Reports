@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Services\DatabaseBackupService;
+use App\Services\Admin\DatabaseBackupService;
 use Illuminate\Console\Command;
 use Throwable;
 

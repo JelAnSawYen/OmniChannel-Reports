@@ -53,7 +53,7 @@
         'location' => $record->location,
     ];
 @endphp
-<tr>
+<tr @if(auth()->user()->hasPermission('media.delete')) data-bulk-row="main" data-bulk-id="{{ $record->id }}" data-bulk-url="{{ route('campaigns.bulk-destroy') }}" @endif>
     <td>{{ ($records->firstItem() ?? 1) + $loop->index }}</td>
     <td><span class="campaigns-name">{{ $record->name }}</span></td>
     <td>{{ $record->fte !== null ? $record->fte : '—' }}</td>
@@ -91,15 +91,7 @@
                 <option value="{{ request()->fullUrlWithQuery(['per_page'=>$size,'page'=>1]) }}" {{ $perPage===$size?'selected':'' }}>{{ $size }}</option>
             @endforeach
         </select>
-        <div class="pager">
-            @for($page=1;$page<=$records->lastPage();$page++)
-                @if($page===$records->currentPage())
-                    <span class="page-number active">{{ $page }}</span>
-                @else
-                    <a class="page-number" href="{{ $records->url($page) }}">{{ $page }}</a>
-                @endif
-            @endfor
-        </div>
+        @include('partials.table-pager', ['paginator' => $records])
     </div>
 </div>
 </div>

@@ -17,6 +17,7 @@ class ChannelAllocationPageTest extends TestCase
     use RefreshDatabase;
 
     private User $admin;
+
     private User $standard;
 
     protected function setUp(): void
@@ -97,11 +98,11 @@ class ChannelAllocationPageTest extends TestCase
             ->assertSee('>GSM Gateway</th>', false)
             ->assertSee('id="alloc_channel_allocation"', false)
             ->assertSee('id="alloc_media_gateway"', false)
-            ->assertSee('id="campaign_channel_allocation"', false)
-            ->assertSee('id="campaign_alloc_media_gateway"', false)
-            ->assertSee('for="campaign_channel_allocation">SIP Channel', false)
-            ->assertSee('for="campaign_alloc_media_gateway">GSM Gateway', false)
-            ->assertDontSee('for="campaign_channel_allocation">Channel Allocation', false)
+            ->assertDontSee('id="campaign_channel_allocation"', false)
+            ->assertDontSee('id="campaign_alloc_media_gateway"', false)
+            ->assertDontSee('id="campaign_media_gateway"', false)
+            ->assertDontSee('for="campaign_channel_allocation">SIP Channel', false)
+            ->assertDontSee('for="campaign_alloc_media_gateway">GSM Gateway', false)
             ->assertSee('id="alloc_network"', false)
             ->assertSee('readonly', false)
             ->assertSee('Allocations')
@@ -139,7 +140,7 @@ class ChannelAllocationPageTest extends TestCase
         $this->get('/channel-allocation?search=Atome')
             ->assertOk()
             ->assertSee('Atome');
-        $atomeTable = \Illuminate\Support\Str::between(
+        $atomeTable = Str::between(
             $this->get('/channel-allocation?search=Atome')->getContent(),
             'class="ca-table"',
             'class="table-footer"'
@@ -263,7 +264,7 @@ class ChannelAllocationPageTest extends TestCase
             ->assertOk()
             ->assertSee('Alpha Campaign');
 
-        $this->assertStringNotContainsString('Beta Campaign</button>', \Illuminate\Support\Str::between(
+        $this->assertStringNotContainsString('Beta Campaign</button>', Str::between(
             $this->get('/channel-allocation?search=CH-A-UPDATED')->getContent(),
             'class="ca-table"',
             'class="table-footer"'
@@ -345,8 +346,10 @@ class ChannelAllocationPageTest extends TestCase
         $page = $this->get('/channel-allocation')->assertOk();
         $page->assertSee('>SIP Channel</th>', false)
             ->assertSee('>GSM Gateway</th>', false)
-            ->assertSee('id="campaign_channel_allocation"', false)
-            ->assertSee('id="campaign_alloc_media_gateway"', false)
+            ->assertDontSee('id="campaign_channel_allocation"', false)
+            ->assertDontSee('id="campaign_alloc_media_gateway"', false)
+            ->assertSee('id="alloc_channel_allocation"', false)
+            ->assertSee('id="alloc_media_gateway"', false)
             ->assertSee('ETPI_53235320')
             ->assertSee('PDC-MG1')
             ->assertSee('readonly', false)

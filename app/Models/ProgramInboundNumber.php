@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use App\Support\GsmSimInventory;
-use App\Support\ProgramInboundSimLookup;
+use App\Support\Inbound\ProgramInboundSimLookup;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -116,7 +116,6 @@ class ProgramInboundNumber extends Model
     }
 
     /**
-     * @param  mixed  $stored
      * @return list<string>
      */
     private function numberList(mixed $stored, ?string $legacy = null): array

@@ -137,13 +137,7 @@
                         <option value="{{ request()->fullUrlWithQuery(['per_page' => $size, 'page' => 1]) }}" {{ $perPage === $size ? 'selected' : '' }}>{{ $size }} per page</option>
                     @endforeach
                 </select>
-                <div class="pager">
-                    @if($items->onFirstPage())<span class="page-number">‹</span>@else<a class="page-number" href="{{ $items->previousPageUrl() }}">‹</a>@endif
-                    @for($p = 1; $p <= $items->lastPage(); $p++)
-                        @if($p === $items->currentPage())<span class="page-number active">{{ $p }}</span>@else<a class="page-number" href="{{ $items->url($p) }}">{{ $p }}</a>@endif
-                    @endfor
-                    @if($items->hasMorePages())<a class="page-number" href="{{ $items->nextPageUrl() }}">›</a>@else<span class="page-number">›</span>@endif
-                </div>
+                @include('partials.table-pager', ['paginator' => $items])
             </div>
         </div>
         <div class="health-module-note">

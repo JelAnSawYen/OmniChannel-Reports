@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Services\AuditLogger;
+use App\Services\Logs\AuditLogger;
 use App\Support\MailFailure;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\Request;

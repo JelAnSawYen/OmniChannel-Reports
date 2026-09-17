@@ -12,7 +12,9 @@ class UserType extends Model
     use HasFactory;
 
     public const ADMINISTRATOR = 'Administrator';
+
     public const STANDARD_USER = 'Standard User';
+
     public const ASSIGNABLE_NAMES = [self::ADMINISTRATOR, self::STANDARD_USER];
 
     protected $fillable = [

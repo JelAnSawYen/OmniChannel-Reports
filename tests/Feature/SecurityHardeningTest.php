@@ -7,8 +7,9 @@ use App\Models\User;
 use App\Models\UserType;
 use App\Notifications\ResetUserPassword;
 use App\Notifications\VerifyUserEmail;
-use App\Services\TotpService;
+use App\Services\Auth\TotpService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
@@ -20,6 +21,7 @@ class SecurityHardeningTest extends TestCase
     use RefreshDatabase;
 
     private UserType $adminType;
+
     private UserType $standardType;
 
     protected function setUp(): void
@@ -148,7 +150,7 @@ class SecurityHardeningTest extends TestCase
         file_put_contents($path, 'hello');
 
         $this->actingAs($admin)->post('/maintenance/restore', [
-            'backup_file' => new \Illuminate\Http\UploadedFile($path, 'backup.sqlite', 'application/octet-stream', null, true),
+            'backup_file' => new UploadedFile($path, 'backup.sqlite', 'application/octet-stream', null, true),
         ])->assertRedirect()->assertSessionHas('error');
 
         @unlink($path);

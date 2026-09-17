@@ -11,6 +11,7 @@
     </div>
     <select class="select" name="user_type_id"><option value="">All User Types</option>@foreach($userTypes as $type)<option value="{{ $type->id }}" {{ request('user_type_id')==$type->id?'selected':'' }}>{{ $type->name }}</option>@endforeach</select>
     <select class="select" name="status"><option value="">All Statuses</option><option value="Active" {{ request('status')==='Active'?'selected':'' }}>Active</option><option value="Inactive" {{ request('status')==='Inactive'?'selected':'' }}>Inactive</option></select>
+    @if(request('per_page'))<input type="hidden" name="per_page" value="{{ request('per_page') }}">@endif
     <button class="btn primary" type="submit">Search</button>
     @if(auth()->user()->hasPermission('users.manage'))
         <a href="{{ route('users.create') }}" class="plus-btn" title="Add User" aria-label="Add User">+</a>
@@ -22,7 +23,7 @@
 <thead><tr><th>Id</th><th>Name</th><th>Email</th><th>User Type</th><th>Status</th><th>Last Login</th><th>Created</th><th class="actions-column">Actions</th></tr></thead>
 <tbody>
 @forelse($users as $user)
-<tr>
+<tr @if(auth()->user()->hasPermission('users.manage') && auth()->id() !== $user->id && auth()->user()->canManageUser($user)) data-bulk-row="main" data-bulk-id="{{ $user->id }}" data-bulk-url="{{ route('users.bulk-destroy') }}" @endif>
     <td>{{ ($users->firstItem() ?? 1) + $loop->index }}</td>
     <td><strong>{{ $user->name }}</strong></td>
     <td>{{ $user->email }}</td>
@@ -54,11 +55,15 @@
 </tbody>
 </table>
 <div class="table-footer">
-    <span>{{ $users->firstItem()??0 }}-{{ $users->lastItem()??0 }} / {{ $users->total() }}</span>
-    <div class="pager">
-        @if($users->onFirstPage())<span class="page-number">‹</span>@else<a class="page-number" href="{{ $users->previousPageUrl() }}">‹</a>@endif
-        @for($p=1;$p<=$users->lastPage();$p++)@if($p===$users->currentPage())<span class="page-number active">{{ $p }}</span>@else<a class="page-number" href="{{ $users->url($p) }}">{{ $p }}</a>@endif @endfor
-        @if($users->hasMorePages())<a class="page-number" href="{{ $users->nextPageUrl() }}">›</a>@else<span class="page-number">›</span>@endif
+    <span>Showing {{ $users->firstItem() ?? 0 }} to {{ $users->lastItem() ?? 0 }} of {{ $users->total() }} entries</span>
+    <div class="footer-right">
+        <span>Records per page:</span>
+        <select class="per-page-select" onchange="location.href=this.value" aria-label="Records per page">
+            @foreach([5,10,25,50] as $size)
+                <option value="{{ request()->fullUrlWithQuery(['per_page'=>$size,'page'=>1]) }}" {{ $perPage===$size?'selected':'' }}>{{ $size }}</option>
+            @endforeach
+        </select>
+        @include('partials.table-pager', ['paginator' => $users])
     </div>
 </div>
 </div>

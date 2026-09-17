@@ -1,8 +1,9 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use App\Services\DashboardOverviewService;
-use App\Services\LogRetentionService;
+use App\Services\Logs\LogRetentionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;

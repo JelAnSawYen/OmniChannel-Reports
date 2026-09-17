@@ -12,6 +12,7 @@ class RoleStructureTest extends TestCase
     use RefreshDatabase;
 
     private UserType $adminType;
+
     private UserType $standardType;
 
     protected function setUp(): void

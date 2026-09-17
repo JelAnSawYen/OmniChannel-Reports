@@ -100,6 +100,7 @@ class SystemHealthService
             $model = $source['model'];
             if ($source['status'] === null) {
                 $counts['excellent'] += $model::query()->count();
+
                 continue;
             }
 

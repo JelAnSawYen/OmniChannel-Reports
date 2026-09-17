@@ -257,8 +257,15 @@ class OperationsCrudSearchTest extends TestCase
             ->assertDontSee('placeholder="Enter username"', false)
             ->assertDontSee('placeholder="Enter channel count"', false)
             ->assertDontSee('placeholder="Enter password"', false)
-            ->assertSee('Hostname <span class="req">*</span>', false)
-            ->assertSee('IP Address <span class="req">*</span>', false);
+            ->assertSee('>Hostname</label>', false)
+            ->assertSee('>IP Address</label>', false)
+            ->assertDontSee('Hostname <span class="req">*</span>', false)
+            ->assertDontSee('IP Address <span class="req">*</span>', false)
+            ->assertDontSee('Function <span class="req">*</span>', false)
+            ->assertDontSee('Site <span class="req">*</span>', false)
+            ->assertDontSee('Serial Number <span class="req">*</span>', false)
+            ->assertDontSee('User <span class="req">*</span>', false)
+            ->assertDontSee('Channel Count <span class="req">*</span>', false);
 
         $css = file_get_contents(resource_path('css/app.css'));
         $this->assertStringContainsString('body[data-page="gsm-gateways"] .gsm-host-cell > span', $css);

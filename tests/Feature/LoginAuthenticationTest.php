@@ -13,6 +13,7 @@ class LoginAuthenticationTest extends TestCase
     use RefreshDatabase;
 
     private UserType $adminType;
+
     private UserType $standardType;
 
     protected function setUp(): void
@@ -158,5 +159,47 @@ class LoginAuthenticationTest extends TestCase
 
         $this->assertAuthenticatedAs($user);
         $this->get('/dashboard')->assertOk();
+    }
+
+    public function test_login_logout_and_failed_login_are_recorded_in_login_history_not_audit_logs(): void
+    {
+        $user = $this->makeUser($this->adminType);
+
+        $this->from('/login')->post('/login', [
+            'email' => $user->email,
+            'password' => 'wrong-password',
+        ])->assertRedirect('/login');
+
+        $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'Password123!Aa',
+        ])->assertRedirect(route('dashboard'));
+
+        $this->post('/logout')->assertRedirect(route('login'));
+
+        $this->assertDatabaseHas('login_logs', [
+            'email' => $user->email,
+            'status' => 'Failed Login',
+        ]);
+        $this->assertDatabaseHas('login_logs', [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'status' => 'Login',
+        ]);
+        $this->assertDatabaseHas('login_logs', [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'status' => 'Logout',
+        ]);
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'Login']);
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'Logout']);
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'Failed Login']);
+
+        $this->actingAs($user)->get('/login-history')
+            ->assertOk()
+            ->assertSee('>Activity</th>', false)
+            ->assertSee('>Login</span>', false)
+            ->assertSee('>Logout</span>', false)
+            ->assertSee('>Failed Login</span>', false);
     }
 }

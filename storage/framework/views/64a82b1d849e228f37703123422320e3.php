@@ -22,7 +22,7 @@
             'previewUrl' => auth()->user()->hasPermission('media.create') ? route('sip-channels.import.preview') : '',
             'confirmUrl' => auth()->user()->hasPermission('media.create') ? route('sip-channels.import.confirm') : '',
             'errorsUrl' => auth()->user()->hasPermission('media.create') ? route('sip-channels.import.errors') : '',
-            'previewHeaders' => array_values(app(\App\Services\SipChannelImportService::class)->fields()),
+            'previewHeaders' => array_values(app(\App\Services\Sip\SipChannelImportService::class)->fields()),
             'entityTitle' => 'SIP Channels',
         ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
         <?php endif; ?>
@@ -37,7 +37,7 @@
 <thead>
 <tr>
     <th>Campaign</th>
-    <th>SIP NAME</th>
+    <th>SIP Name</th>
     <th>Pilot Number</th>
     <th>Channel Count</th>
     <th>Channel Range</th>
@@ -61,7 +61,7 @@
         'date_activation' => $record->date_activation ? \App\Support\PdcEndorseDate::display($record->date_activation->format('Y-m-d')) : '',
     ];
 ?>
-<tr>
+<tr <?php if(auth()->user()->hasPermission('media.delete')): ?> data-bulk-row="main" data-bulk-id="<?php echo e($record->id); ?>" data-bulk-url="<?php echo e(route('sip-channels.bulk-destroy')); ?>" <?php endif; ?>>
     <td><span class="sip-cell sip-campaign"><?php echo e($campaignName); ?></span></td>
     <td><span class="sip-cell"><?php echo e($record->etpi_sip_name ?: '—'); ?></span></td>
     <td><span class="sip-cell"><?php echo e($record->pilot_number ?: '—'); ?></span></td>
@@ -102,15 +102,7 @@
                 <option value="<?php echo e(request()->fullUrlWithQuery(['per_page'=>$size,'page'=>1])); ?>" <?php echo e($perPage===$size?'selected':''); ?>><?php echo e($size); ?></option>
             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
         </select>
-        <div class="pager">
-            <?php for($page=1;$page<=$records->lastPage();$page++): ?>
-                <?php if($page===$records->currentPage()): ?>
-                    <span class="page-number active"><?php echo e($page); ?></span>
-                <?php else: ?>
-                    <a class="page-number" href="<?php echo e($records->url($page)); ?>"><?php echo e($page); ?></a>
-                <?php endif; ?>
-            <?php endfor; ?>
-        </div>
+        <?php echo $__env->make('partials.table-pager', ['paginator' => $records], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
     </div>
 </div>
 </div>
@@ -139,7 +131,7 @@
                         ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
                     </div>
                     <div class="form-group">
-                        <label for="sip_etpi_sip_name">ETPI SIP NAME</label>
+                        <label for="sip_etpi_sip_name">SIP Name</label>
                         <input class="form-control" name="etpi_sip_name" id="sip_etpi_sip_name" required>
                     </div>
                     <div class="form-group">
@@ -241,7 +233,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
     };
 
-    const closeCal = () => cal?.setAttribute('hidden', '');
+    const closeCal = () => {
+        cal?.setAttribute('hidden', '');
+    };
     const setPicked = (year, month, day) => {
         const iso = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
         if (datePicker) datePicker.value = iso;
@@ -415,6 +409,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const modal = document.getElementById('sipModal');
+    if (modal) {
+        new MutationObserver(() => {
+            if (!modal.classList.contains('visible')) closeCal();
+        }).observe(modal, { attributes: true, attributeFilter: ['class'] });
+    }
     const form = document.getElementById('sipForm');
     const method = document.getElementById('sipMethod');
     const storeAction = <?php echo json_encode(route('sip-channels.store'), 15, 512) ?>;
@@ -470,18 +469,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         dateText.setCustomValidity('');
     });
-
-    const restoreSipEdit = <?php echo json_encode(session('sip_edit'), 15, 512) ?>;
-    if (restoreSipEdit) {
-        document.querySelector('[data-sip-edit][data-id="' + restoreSipEdit + '"]')?.click();
-    }
 });
 </script>
 <?php echo $__env->make('partials.inventory-import-script', [
     'previewUrl' => auth()->user()->hasPermission('media.create') ? route('sip-channels.import.preview') : '',
     'confirmUrl' => auth()->user()->hasPermission('media.create') ? route('sip-channels.import.confirm') : '',
     'errorsUrl' => auth()->user()->hasPermission('media.create') ? route('sip-channels.import.errors') : '',
-    'previewFields' => array_keys(app(\App\Services\SipChannelImportService::class)->fields()),
+    'previewFields' => array_keys(app(\App\Services\Sip\SipChannelImportService::class)->fields()),
 ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 <?php $__env->stopPush(); ?>
 

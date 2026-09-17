@@ -12,6 +12,7 @@ use App\Services\XlsxService;
 use App\Support\OperationCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class PdcServersPageTest extends TestCase
@@ -100,7 +101,7 @@ class PdcServersPageTest extends TestCase
         ChannelAllocationCampaign::create(['name' => 'BPI Collection']);
 
         $html = $this->get('/pdc-servers')->assertOk()->getContent();
-        $groupForm = \Illuminate\Support\Str::between($html, 'id="pdcGroupForm"', 'id="pdcServerForm"');
+        $groupForm = Str::between($html, 'id="pdcGroupForm"', 'id="pdcServerForm"');
         $this->assertStringContainsString('id="pdc_campaign_id"', $groupForm);
         $this->assertStringContainsString('pin-campaign-combo', $groupForm);
         $this->assertStringContainsString('Select or type a campaign...', $groupForm);
@@ -125,7 +126,7 @@ class PdcServersPageTest extends TestCase
         ])->assertRedirect();
 
         $html = $this->get('/pdc-servers')->assertOk()->getContent();
-        $menu = \Illuminate\Support\Str::between($html, 'id="pdcCampaignMenu"', '</div>');
+        $menu = Str::between($html, 'id="pdcCampaignMenu"', '</div>');
         $this->assertStringContainsString('>BPI Collection</button>', $menu);
         $this->assertStringContainsString('>Atome</button>', $menu);
         $this->assertStringContainsString('>Mynt</button>', $menu);

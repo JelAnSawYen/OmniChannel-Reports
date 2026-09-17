@@ -52,7 +52,7 @@ class SipChannelsPageTest extends TestCase
         $css = file_get_contents(resource_path('css/app.css'));
 
         $page->assertSee('Campaign')
-            ->assertSee('ETPI SIP NAME')
+            ->assertSee('>SIP Name</th>', false)
             ->assertSee('Pilot Number')
             ->assertSee('Channel Count')
             ->assertSee('Channel Range')
@@ -82,11 +82,26 @@ class SipChannelsPageTest extends TestCase
         $this->assertStringContainsString('.sip-campaign', $css);
         $this->assertStringContainsString('color: #0b70f7', $css);
         $this->assertMatchesRegularExpression('/\.sip-campaign\s*\{[^}]*font-weight:\s*700/', $css);
+        $this->assertMatchesRegularExpression('/\.sip-table > thead > tr > th:first-child,\s*\.sip-table > tbody > tr > td:first-child \{\s*text-align: left;/', $css);
+        $this->assertMatchesRegularExpression('/\.sip-table > tbody > tr > td \.sip-campaign \{\s*color: #0b70f7;\s*font-weight: 700;\s*justify-content: flex-start;\s*text-align: left;/', $css);
         $this->assertStringContainsString('pdc-date-field', $html);
         $this->assertStringContainsString('id="sip_date_activation"', $html);
         $this->assertStringContainsString('min="2000-01-01"', $html);
+        $this->assertStringContainsString("cal?.removeAttribute('hidden')", $html);
+        $this->assertStringNotContainsString("cal.style.position = 'fixed'", $html);
+        $this->assertStringNotContainsString('document.body.appendChild(cal)', $html);
+        $this->assertStringContainsString('top:calc(100% + 5px)', $css);
         $this->assertMatchesRegularExpression('/\.pdc-cal-year\s*\{[^}]*color:\s*#000/', $css);
         $this->assertMatchesRegularExpression('/\.pdc-cal-month\s*\{[^}]*color:\s*#000/', $css);
+        $this->assertMatchesRegularExpression('/body\[data-page="sip-channels"\] #sipModal\.modal-backdrop\.visible \{\s*align-items: flex-start;\s*justify-content: center;\s*overflow-y: auto;/', $css);
+        $this->assertMatchesRegularExpression('/body\[data-page="sip-channels"\] #sipModal \.modal \{\s*margin: 30px auto;\s*overflow: visible;/', $css);
+        $this->assertMatchesRegularExpression('/body\[data-page="sip-channels"\] #sipModal \.modal-body \{\s*overflow: visible;/', $css);
+        $this->assertMatchesRegularExpression('/body\[data-page="sip-channels"\] #sipCal\.pdc-cal \{\s*overflow: visible;/', $css);
+        $this->assertStringContainsString('id="sip_channel_range"', $html);
+        $this->assertStringNotContainsString('id="sip_channel_range" readonly', $html);
+        $this->assertStringNotContainsString('id="sip_from"', $html);
+        $this->assertStringNotContainsString('id="sip_to"', $html);
+        $this->assertStringNotContainsString('fillAddChannelRange', $html);
     }
 
     public function test_add_edit_delete_search_and_pagination(): void
@@ -133,7 +148,7 @@ class SipChannelsPageTest extends TestCase
             ->assertSee('data-id="'.$record->id.'"', false)
             ->assertSee('action="'.url('/sip-channels/'.$record->id).'"', false);
 
-        $this->put('/sip-channels/'.$record->id, [
+        $this->from('/sip-channels')->put('/sip-channels/'.$record->id, [
             'campaign_id' => $campaign->id,
             'etpi_sip_name' => 'ETPI_ALPHA_UPDATED',
             'pilot_number' => '111',
@@ -141,7 +156,7 @@ class SipChannelsPageTest extends TestCase
             'channel_range' => '111 - 122',
             'network' => 'ETPI',
             'date_activation' => '7/9/2026',
-        ])->assertRedirect();
+        ])->assertRedirect('/sip-channels')->assertSessionMissing('sip_edit');
 
         $this->assertDatabaseHas('sip_channels', [
             'id' => $record->id,
@@ -221,7 +236,7 @@ class SipChannelsPageTest extends TestCase
         [$headers] = app(XlsxService::class)->read($template->getFile()->getPathname());
         $this->assertSame([
             'Campaign',
-            'ETPI SIP NAME',
+            'SIP Name',
             'Pilot Number',
             'Channel Count',
             'Channel Range',
@@ -232,7 +247,7 @@ class SipChannelsPageTest extends TestCase
 
         $preview = $this->postJson('/sip-channels/import/preview', [
             'file' => $this->upload($this->spreadsheet([
-                ['Campaign', 'ETPI SIP NAME', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
+                ['Campaign', 'SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
                 ['Mynt', 'ETPI_53235320', '253235320', '14', '253235320 - 253235333', 'ETPI', '7/9/2026'],
                 ['', 'ETPI_53235334', '253235334', '2', '253235334 - 253235335', 'ETPI', ''],
                 ['-', 'ETPI_SKIP', '1', '1', '1 - 1', 'ETPI', '7/10/2026'],
@@ -251,7 +266,7 @@ class SipChannelsPageTest extends TestCase
 
         $ok = $this->postJson('/sip-channels/import/preview', [
             'file' => $this->upload($this->spreadsheet([
-                ['Campaign', 'ETPI SIP NAME', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
+                ['Campaign', 'SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
                 ['Mynt', 'ETPI_53235320', '253235320', '14', '253235320 - 253235333', 'ETPI', '7/9/2026'],
                 ['', 'ETPI_53235334', '253235334', '2', '253235334 - 253235335', 'ETPI', ''],
                 ['Atome', 'ETPI_ATOME', '300', '3', '300 - 302', 'ETPI', '8/1/2026'],
@@ -274,7 +289,7 @@ class SipChannelsPageTest extends TestCase
 
         $dup = $this->postJson('/sip-channels/import/preview', [
             'file' => $this->upload($this->spreadsheet([
-                ['Campaign', 'ETPI SIP NAME', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
+                ['Campaign', 'SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
                 ['Mynt', 'ETPI_53235320', '1', '1', '1 - 1', 'ETPI', '7/9/2026'],
             ])),
         ])->assertOk()->json();
@@ -284,7 +299,7 @@ class SipChannelsPageTest extends TestCase
         $export = $this->get('/sip-channels/export')->assertOk()->assertDownload('sip-channels.xlsx');
         [$exportHeaders] = app(XlsxService::class)->read($export->getFile()->getPathname());
         $this->assertSame('Campaign', $exportHeaders[0]);
-        $this->assertContains('ETPI SIP NAME', $exportHeaders);
+        $this->assertContains('SIP Name', $exportHeaders);
         $this->assertContains('Date Activation', $exportHeaders);
         $this->assertNotContains('Id', $exportHeaders);
     }

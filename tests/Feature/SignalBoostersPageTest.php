@@ -9,6 +9,7 @@ use App\Services\XlsxService;
 use App\Support\InventoryImportCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class SignalBoostersPageTest extends TestCase
@@ -43,7 +44,7 @@ class SignalBoostersPageTest extends TestCase
         $page = $this->get('/signal-boosters')->assertOk();
         $html = $page->getContent();
         $css = file_get_contents(resource_path('css/app.css'));
-        $tableHtml = \Illuminate\Support\Str::between($html, '<table class="sb-table"', '</table>');
+        $tableHtml = Str::between($html, '<table class="sb-table"', '</table>');
 
         $page->assertSee('class="sb-table"', false)
             ->assertSee('class="sb-specs-col"', false)

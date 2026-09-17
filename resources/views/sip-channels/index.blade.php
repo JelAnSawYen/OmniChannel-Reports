@@ -23,7 +23,7 @@
             'previewUrl' => auth()->user()->hasPermission('media.create') ? route('sip-channels.import.preview') : '',
             'confirmUrl' => auth()->user()->hasPermission('media.create') ? route('sip-channels.import.confirm') : '',
             'errorsUrl' => auth()->user()->hasPermission('media.create') ? route('sip-channels.import.errors') : '',
-            'previewHeaders' => array_values(app(\App\Services\SipChannelImportService::class)->fields()),
+            'previewHeaders' => array_values(app(\App\Services\Sip\SipChannelImportService::class)->fields()),
             'entityTitle' => 'SIP Channels',
         ])
         @endif
@@ -38,7 +38,7 @@
 <thead>
 <tr>
     <th>Campaign</th>
-    <th>SIP NAME</th>
+    <th>SIP Name</th>
     <th>Pilot Number</th>
     <th>Channel Count</th>
     <th>Channel Range</th>
@@ -62,7 +62,7 @@
         'date_activation' => $record->date_activation ? \App\Support\PdcEndorseDate::display($record->date_activation->format('Y-m-d')) : '',
     ];
 @endphp
-<tr>
+<tr @if(auth()->user()->hasPermission('media.delete')) data-bulk-row="main" data-bulk-id="{{ $record->id }}" data-bulk-url="{{ route('sip-channels.bulk-destroy') }}" @endif>
     <td><span class="sip-cell sip-campaign">{{ $campaignName }}</span></td>
     <td><span class="sip-cell">{{ $record->etpi_sip_name ?: '—' }}</span></td>
     <td><span class="sip-cell">{{ $record->pilot_number ?: '—' }}</span></td>
@@ -103,15 +103,7 @@
                 <option value="{{ request()->fullUrlWithQuery(['per_page'=>$size,'page'=>1]) }}" {{ $perPage===$size?'selected':'' }}>{{ $size }}</option>
             @endforeach
         </select>
-        <div class="pager">
-            @for($page=1;$page<=$records->lastPage();$page++)
-                @if($page===$records->currentPage())
-                    <span class="page-number active">{{ $page }}</span>
-                @else
-                    <a class="page-number" href="{{ $records->url($page) }}">{{ $page }}</a>
-                @endif
-            @endfor
-        </div>
+        @include('partials.table-pager', ['paginator' => $records])
     </div>
 </div>
 </div>
@@ -140,7 +132,7 @@
                         ])
                     </div>
                     <div class="form-group">
-                        <label for="sip_etpi_sip_name">ETPI SIP NAME</label>
+                        <label for="sip_etpi_sip_name">SIP Name</label>
                         <input class="form-control" name="etpi_sip_name" id="sip_etpi_sip_name" required>
                     </div>
                     <div class="form-group">
@@ -242,7 +234,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
     };
 
-    const closeCal = () => cal?.setAttribute('hidden', '');
+    const closeCal = () => {
+        cal?.setAttribute('hidden', '');
+    };
     const setPicked = (year, month, day) => {
         const iso = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
         if (datePicker) datePicker.value = iso;
@@ -416,6 +410,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const modal = document.getElementById('sipModal');
+    if (modal) {
+        new MutationObserver(() => {
+            if (!modal.classList.contains('visible')) closeCal();
+        }).observe(modal, { attributes: true, attributeFilter: ['class'] });
+    }
     const form = document.getElementById('sipForm');
     const method = document.getElementById('sipMethod');
     const storeAction = @json(route('sip-channels.store'));
@@ -471,17 +470,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         dateText.setCustomValidity('');
     });
-
-    const restoreSipEdit = @json(session('sip_edit'));
-    if (restoreSipEdit) {
-        document.querySelector('[data-sip-edit][data-id="' + restoreSipEdit + '"]')?.click();
-    }
 });
 </script>
 @include('partials.inventory-import-script', [
     'previewUrl' => auth()->user()->hasPermission('media.create') ? route('sip-channels.import.preview') : '',
     'confirmUrl' => auth()->user()->hasPermission('media.create') ? route('sip-channels.import.confirm') : '',
     'errorsUrl' => auth()->user()->hasPermission('media.create') ? route('sip-channels.import.errors') : '',
-    'previewFields' => array_keys(app(\App\Services\SipChannelImportService::class)->fields()),
+    'previewFields' => array_keys(app(\App\Services\Sip\SipChannelImportService::class)->fields()),
 ])
 @endpush

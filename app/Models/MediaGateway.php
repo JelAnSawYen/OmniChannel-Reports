@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\GsmSimInventory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -40,21 +41,21 @@ class MediaGateway extends Model
             ->orderBy('port')
             ->get()
             ->map(function (GatewaySimAssignment $assignment) {
-                $sim = \App\Support\GsmSimInventory::findSim((string) $assignment->sim_type, (int) $assignment->sim_id);
+                $sim = GsmSimInventory::findSim((string) $assignment->sim_type, (int) $assignment->sim_id);
                 $serialized = $sim
-                    ? \App\Support\GsmSimInventory::serialize((string) $assignment->sim_type, $sim)
+                    ? GsmSimInventory::serialize((string) $assignment->sim_type, $sim)
                     : [
                         'id' => (int) $assignment->sim_id,
                         'imei' => '',
                         'mobile_number' => '',
                         'plan' => '',
-                        'network' => \App\Support\GsmSimInventory::networkForType((string) $assignment->sim_type),
+                        'network' => GsmSimInventory::networkForType((string) $assignment->sim_type),
                         'sim_type' => $assignment->sim_type,
                     ];
                 $serialized['assignment_id'] = (int) $assignment->id;
                 $serialized['port'] = (int) $assignment->port;
                 $serialized['ip_address'] = (string) ($this->ip_address ?? '');
-                $serialized['network'] = \App\Support\GsmSimInventory::networkForType((string) $assignment->sim_type);
+                $serialized['network'] = GsmSimInventory::networkForType((string) $assignment->sim_type);
 
                 return $serialized;
             })

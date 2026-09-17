@@ -1,23 +1,24 @@
-const qs=(s,r=document)=>r.querySelector(s), qsa=(s,r=document)=>[...r.querySelectorAll(s)];
-const csrf=()=>qs('meta[name="csrf-token"]')?.content||'';
-const expandedViewKey='omnichannel.expandedView';
-function readPageScroll(){
-    const se=document.scrollingElement||document.documentElement;
-    return {x:window.scrollX||0,y:window.scrollY||se.scrollTop||0};
+const qs = (s, r = document) => r.querySelector(s);
+const qsa = (s, r = document) => [...r.querySelectorAll(s)];
+const csrf = () => qs('meta[name="csrf-token"]')?.content || '';
+const expandedViewKey = 'omnichannel.expandedView';
+function readPageScroll() {
+    const se = document.scrollingElement || document.documentElement;
+    return { x: window.scrollX || 0, y: window.scrollY || se.scrollTop || 0 };
 }
-function writePageScroll(pos){
-    if(!pos)return;
-    const x=Number(pos.x)||0;
-    const y=Number(pos.y)||0;
-    window.scrollTo(x,y);
-    if(document.scrollingElement)document.scrollingElement.scrollTop=y;
+function writePageScroll(pos) {
+    if (!pos) return;
+    const x = Number(pos.x) || 0;
+    const y = Number(pos.y) || 0;
+    window.scrollTo(x, y);
+    if (document.scrollingElement) document.scrollingElement.scrollTop = y;
 }
-let pinnedPageScroll=null;
-function pinPageScroll(pos){
-    pinnedPageScroll=pos||readPageScroll();
+let pinnedPageScroll = null;
+function pinPageScroll(pos) {
+    pinnedPageScroll = pos || readPageScroll();
 }
-const showModal=(id)=>qs('#'+id)?.classList.add('visible');
-const hideModal=(id)=>qs('#'+id)?.classList.remove('visible');
+const showModal = (id) => qs('#' + id)?.classList.add('visible');
+const hideModal = (id) => qs('#' + id)?.classList.remove('visible');
 
 function bindCampaignCombo(root){
     if(!root||root.dataset.campaignComboBound==='1')return;
@@ -70,7 +71,44 @@ function initCampaignCombos(){
     });
 }
 
-function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+    }[c]));
+}
+
+function pageWindow(current, last, size=7){
+    last=Math.max(1, Number(last)||1);
+    current=Math.max(1, Math.min(Number(current)||1, last));
+    if(last<=size){
+        return {pages:Array.from({length:last},(_,i)=>i+1), hasStartEllipsis:false, hasEndEllipsis:false};
+    }
+    let start=current-Math.floor(size/2);
+    let end=start+size-1;
+    if(start<1){start=1;end=size;}
+    if(end>last){end=last;start=last-size+1;}
+    return {
+        pages:Array.from({length:end-start+1},(_,i)=>start+i),
+        hasStartEllipsis:start>1,
+        hasEndEllipsis:end<last
+    };
+}
+
+function pagerMarkup(current, last, item){
+    const windowPages=pageWindow(current,last);
+    let html=current<=1?'<span class="page-number disabled">‹</span>':item(current-1,'‹',false);
+    if(windowPages.hasStartEllipsis)html+='<span class="pager-ellipsis">...</span>';
+    windowPages.pages.forEach(page=>{
+        html+=item(page,String(page),page===current);
+    });
+    if(windowPages.hasEndEllipsis)html+='<span class="pager-ellipsis">...</span>';
+    html+=current>=last?'<span class="page-number disabled">›</span>':item(current+1,'›',false);
+    return html;
+}
 
 function isSystemFlash(el){
     return el && el.id!=='importUploadError' && !el.classList.contains('import-upload-error');
@@ -314,6 +352,7 @@ function initGlobal(){
     });
 
     initConfirm();
+    initBulkSelection();
     initPreserveExpandedView();
 }
 
@@ -403,6 +442,8 @@ function initConfirm(){
         showModal('confirmModal');
     }
 
+    window.omniOpenConfirm=openConfirm;
+
     ok?.addEventListener('click',()=>{
         const run=pending;
         closeConfirm();
@@ -433,6 +474,213 @@ function initConfirm(){
                 else form.submit();
             }
         });
+    });
+}
+
+function initBulkSelection(){
+    if(document.body.dataset.bulkBound==='1')return;
+    document.body.dataset.bulkBound='1';
+
+    const selected=new Set();
+    let activePanel=null;
+    let bar=null;
+    const isMod=event=>event.ctrlKey||event.metaKey;
+    const blockedSel='a, button, input, select, textarea, label, .actions-column, .ca-menu, .action-btn, .plus-btn, .pdc-secret-toggle, [data-ca-toggle]';
+
+    function panelFor(row){
+        return row.closest('tr.ca-nested-row');
+    }
+
+    function openNestedPanels(){
+        return qsa('tr.ca-nested-row:not([hidden])').filter(panel=>panel.querySelector('[data-bulk-row="nested"]'));
+    }
+
+    function nestedScope(){
+        if(activePanel && !activePanel.hasAttribute('hidden'))return activePanel;
+        const open=openNestedPanels();
+        return open.length?open[open.length-1]:null;
+    }
+
+    function selectRow(row,on){
+        if(on){
+            selected.add(row);
+            row.classList.add('bulk-selected');
+        }else{
+            selected.delete(row);
+            row.classList.remove('bulk-selected');
+        }
+    }
+
+    function clearSelection(){
+        [...selected].forEach(row=>selectRow(row,false));
+        selected.clear();
+        renderBar();
+    }
+
+    function pruneSelection(){
+        [...selected].forEach(row=>{
+            if(!row.isConnected)selectRow(row,false);
+        });
+    }
+
+    function renderBar(){
+        pruneSelection();
+        if(!selected.size){
+            if(bar)bar.hidden=true;
+            return;
+        }
+        if(!bar){
+            bar=document.createElement('div');
+            bar.className='bulk-action-bar';
+            bar.hidden=true;
+            bar.innerHTML='<span class="bulk-action-count"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"></path></svg><span data-bulk-count>0 selected</span></span><button type="button" class="btn secondary" data-bulk-clear>Clear Selection</button><button type="button" class="btn danger" data-bulk-delete>Delete Selected</button>';
+            document.body.appendChild(bar);
+            bar.querySelector('[data-bulk-clear]').addEventListener('click',clearSelection);
+            bar.querySelector('[data-bulk-delete]').addEventListener('click',confirmDelete);
+        }
+        bar.querySelector('[data-bulk-count]').textContent=selected.size+' selected';
+        bar.hidden=false;
+    }
+
+    function onPanelToggled(toggle){
+        const key=toggle.getAttribute('data-ca-toggle');
+        const panel=document.getElementById(toggle.getAttribute('aria-controls'))
+            || document.getElementById('ca-panel-'+key)
+            || document.getElementById('pdc-panel-'+key)
+            || document.getElementById('crl-panel-'+key)
+            || document.getElementById('gsm-panel-'+key);
+        if(!panel)return;
+        if(panel.hasAttribute('hidden') && activePanel===panel)activePanel=null;
+    }
+
+    function toggleRow(row){
+        const kind=row.getAttribute('data-bulk-row');
+        if(kind==='nested'){
+            const panel=panelFor(row);
+            if(!panel || panel.hasAttribute('hidden'))return;
+            if(activePanel!==panel){
+                clearSelection();
+                activePanel=panel;
+            }
+        }else{
+            if(nestedScope())return;
+            if(activePanel){
+                clearSelection();
+                activePanel=null;
+            }
+        }
+        selectRow(row,!selected.has(row));
+        renderBar();
+    }
+
+    function selectAll(){
+        const nested=document.body.dataset.page==='channel-range-list'?null:nestedScope();
+        const rows=nested?qsa('[data-bulk-row="nested"]',nested):qsa('[data-bulk-row="main"]');
+        if(!rows.length)return;
+        activePanel=nested||null;
+        clearSelection();
+        rows.forEach(row=>selectRow(row,true));
+        renderBar();
+    }
+
+    function confirmDelete(){
+        pruneSelection();
+        if(!selected.size)return;
+        const count=selected.size;
+        const run=submitDelete;
+        if(typeof window.omniOpenConfirm==='function'){
+            window.omniOpenConfirm({
+                titleText:'Delete Selected',
+                messageText:count===1?'Delete this record?':'Delete the '+count+' selected records?',
+                okText:'Delete',
+                cancelText:'Cancel',
+                onConfirm:run
+            });
+            return;
+        }
+        if(window.confirm('Delete the selected records?'))run();
+    }
+
+    function submitDelete(){
+        pruneSelection();
+        const rows=[...selected];
+        if(!rows.length)return;
+        const url=rows[0].dataset.bulkUrl;
+        if(!url)return;
+        const ids=rows.flatMap(row=>{
+            if(row.hasAttribute('data-bulk-ids'))return String(row.dataset.bulkIds||'').split(',').map(value=>value.trim()).filter(Boolean);
+            return row.dataset.bulkId?[row.dataset.bulkId]:[];
+        });
+        if(!ids.length)return;
+        if(rows[0].dataset.bulkAjax==='1'){
+            fetch(url,{
+                method:'DELETE',
+                headers:{
+                    Accept:'application/json',
+                    'Content-Type':'application/json',
+                    'X-CSRF-TOKEN':csrf(),
+                    'X-Requested-With':'XMLHttpRequest'
+                },
+                body:JSON.stringify({ids})
+            }).then(async response=>{
+                const data=await response.json().catch(()=>({}));
+                if(!response.ok)throw new Error(data.message||'Unable to delete selected records.');
+                location.reload();
+            }).catch(error=>{
+                window.alert(error.message||'Unable to delete selected records.');
+            });
+            return;
+        }
+        const form=document.createElement('form');
+        form.method='POST';
+        form.action=url;
+        form.hidden=true;
+        const token=document.createElement('input');
+        token.type='hidden';
+        token.name='_token';
+        token.value=csrf();
+        form.appendChild(token);
+        const method=document.createElement('input');
+        method.type='hidden';
+        method.name='_method';
+        method.value='DELETE';
+        form.appendChild(method);
+        ids.forEach(id=>{
+            const input=document.createElement('input');
+            input.type='hidden';
+            input.name='ids[]';
+            input.value=id;
+            form.appendChild(input);
+        });
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    document.addEventListener('click',event=>{
+        if(!(event.target instanceof Element))return;
+        const toggle=event.target.closest('[data-ca-toggle]');
+        if(toggle)queueMicrotask(()=>onPanelToggled(toggle));
+        if(!isMod(event))return;
+        if(event.target.closest(blockedSel))return;
+        const row=event.target.closest('[data-bulk-row]');
+        if(!row)return;
+        event.preventDefault();
+        toggleRow(row);
+    });
+
+    document.addEventListener('keydown',event=>{
+        if(!(event.ctrlKey||event.metaKey))return;
+        if(event.key!=='a'&&event.key!=='A')return;
+        if(event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]'))return;
+        if(qs('#gsmSimModal.visible'))return;
+        if(!qsa('[data-bulk-row]').length)return;
+        event.preventDefault();
+        selectAll();
+    });
+
+    document.addEventListener('omni:table-rerendered',()=>{
+        activePanel=null;
+        clearSelection();
     });
 }
 
@@ -500,9 +748,18 @@ async function initMedia(){
     const deleteIcon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="m6 7 1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>';
     const dotsIcon='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>';
     let simCatalog=[];
-    let simPicked=null;
+    let simPickedList=[];
     let simFilter='';
     let simPickedPort='';
+    let simAssignCapacity={channelCount:0,assignmentCount:0};
+
+    function isSimAddMode(){
+        return !qs('#gsmSimAssignmentId')?.value;
+    }
+
+    function simIsPicked(sim){
+        return simPickedList.some(item=>simKey(item)===simKey(sim));
+    }
 
     function passwordCell(g,canReveal){
         return `<span class="pdc-secret">
@@ -556,18 +813,35 @@ async function initMedia(){
             return;
         }
         body.innerHTML=rows.map(sim=>{
-            const selected=simPicked && simKey(simPicked)===simKey(sim);
+            const selected=simIsPicked(sim);
             return `<tr class="gsm-sim-row${selected?' is-selected':''}" data-sim-type="${escapeHtml(sim.sim_type)}" data-sim-id="${escapeHtml(sim.id)}">
                 <td>${escapeHtml(sim.imei||'—')}</td>
                 <td>${escapeHtml(sim.mobile_number||'—')}</td>
                 <td>${escapeHtml(sim.plan||'—')}</td>
-                <td>${selected && simPickedPort?escapeHtml(simPickedPort):'—'}</td>
+                <td>${selected && simPickedList.length===1 && simPickedPort?escapeHtml(simPickedPort):'—'}</td>
             </tr>`;
         }).join('');
     }
 
-    function pickSim(sim){
-        simPicked=sim;
+    function pickSim(sim, additive){
+        if(!additive || !isSimAddMode()){
+            simPickedList=[sim];
+            renderSimList();
+            return;
+        }
+        const idx=simPickedList.findIndex(item=>simKey(item)===simKey(sim));
+        if(idx>=0)simPickedList.splice(idx,1);
+        else simPickedList.push(sim);
+        renderSimList();
+    }
+
+    function selectVisibleSims(){
+        if(!isSimAddMode())return;
+        const needle=simFilter.trim().toLowerCase();
+        simPickedList=(simCatalog||[]).filter(sim=>{
+            if(!needle)return true;
+            return String(sim.imei||'').toLowerCase().includes(needle) || String(sim.mobile_number||'').toLowerCase().includes(needle);
+        });
         renderSimList();
     }
 
@@ -600,7 +874,7 @@ async function initMedia(){
 
     function resetSims(){
         simCatalog=[];
-        simPicked=null;
+        simPickedList=[];
         simPickedPort='';
         simFilter='';
         const search=qs('#gsmSimSearch');
@@ -631,7 +905,7 @@ async function initMedia(){
     function nestedSimTable(g,canEdit,canDelete){
         const assignments=g.assignments||[];
         const rows=assignments.length
-            ? assignments.map(item=>`<tr>
+            ? assignments.map(item=>`<tr${canDelete?` data-bulk-row="nested" data-bulk-id="${escapeHtml(item.assignment_id)}" data-bulk-url="${escapeHtml(base+'/'+g.id+'/assignments/bulk')}" data-bulk-ajax="1"`:''}>
                 <td>${escapeHtml(item.imei||'—')}</td>
                 <td>${escapeHtml(item.mobile_number||'—')}</td>
                 <td>${escapeHtml(item.plan||'—')}</td>
@@ -705,7 +979,7 @@ async function initMedia(){
         dom.rows.innerHTML=records.length
             ? records.map(g=>{
                 if(isGsm){
-                    return `<tr class="gsm-gateway-row" data-gateway="${escapeHtml(g.id)}">
+                    return `<tr class="gsm-gateway-row" data-gateway="${escapeHtml(g.id)}"${canDelete?` data-bulk-row="main" data-bulk-id="${escapeHtml(g.id)}" data-bulk-url="${escapeHtml(base+'/bulk')}" data-bulk-ajax="1"`:''}>
                 <td>${gsmChevron(g.id,g.hostname)}</td>
                 <td>${escapeHtml(g.ip_address)}</td>
                 <td>${escapeHtml(g.site_code)}</td>
@@ -717,7 +991,7 @@ async function initMedia(){
                 <td class="actions-column">${actionsCell(g,canEdit,canDelete,canReveal)}</td>
             </tr>${nestedSimTable(g,canEdit,canDelete)}`;
                 }
-                return `<tr>
+                return `<tr${canDelete?` data-bulk-row="main" data-bulk-id="${escapeHtml(g.id)}" data-bulk-url="${escapeHtml(base+'/bulk')}" data-bulk-ajax="1"`:''}>
                 <td>${escapeHtml(g.ip_address)}</td>
                 <td>${escapeHtml(g.site_code)}</td>
                 <td>${escapeHtml(g.plan||'—')}</td>
@@ -733,18 +1007,16 @@ async function initMedia(){
             : `<tr><td colspan="${colspan}"><div class="empty-state">No ${entity}s Found</div></td></tr>`;
 
         if(isGsm)restoreExpanded();
+        document.dispatchEvent(new Event('omni:table-rerendered'));
 
         dom.summary.textContent=`Showing ${data.pagination?.from||0} to ${data.pagination?.to||0} of ${data.pagination?.total||0} entries`;
 
         const last=Number(data.pagination?.last_page||1);
         const cur=Number(data.pagination?.current_page||1);
-        dom.pages.innerHTML='';
-        for(let i=1;i<=last;i++){
-            dom.pages.insertAdjacentHTML(
-                'beforeend',
-                i===cur
-                    ? `<span class="page-number active">${i}</span>`
-                    : `<a href="#" class="page-number" data-page="${i}">${i}</a>`
+        if(dom.pages){
+            dom.pages.innerHTML=pagerMarkup(cur,last,(page,label,active)=>active
+                ? `<span class="page-number active">${label}</span>`
+                : `<a href="#" class="page-number" data-page="${page}">${label}</a>`
             );
         }
 
@@ -862,45 +1134,70 @@ async function initMedia(){
         }
     }
 
+    async function postSimAssignment(gatewayId, assignmentId, network, sim){
+        const formData=new FormData();
+        formData.append('network', network);
+        formData.append('sim_type', sim.sim_type);
+        formData.append('sim_id', String(sim.id));
+        if(assignmentId)formData.append('_method','PUT');
+        const endpoint=assignmentId
+            ? base+'/'+encodeURIComponent(gatewayId)+'/assignments/'+encodeURIComponent(assignmentId)
+            : base+'/'+encodeURIComponent(gatewayId)+'/assignments';
+        const response=await fetch(endpoint,{
+            method:'POST',
+            headers:{
+                Accept:'application/json',
+                'X-CSRF-TOKEN':csrf(),
+                'X-Requested-With':'XMLHttpRequest'
+            },
+            body:formData
+        });
+        const data=await response.json().catch(()=>({}));
+        if(!response.ok){
+            const validation=Object.values(data.errors||{}).flat().join(' ');
+            throw new Error(data.message||validation||`Unable to save SIM assignment (${response.status})`);
+        }
+        return data;
+    }
+
     async function saveSimAssignment(event){
         event.preventDefault();
         const gatewayId=qs('#gsmSimGatewayId')?.value;
         const assignmentId=qs('#gsmSimAssignmentId')?.value;
         const network=qs('#gsmSimNetwork')?.value||'';
+        const picked=simPickedList.slice();
         if(!gatewayId)return;
-        if(!network || !simPicked){
+        if(!network || !picked.length){
             flash('Select a network and a SIM record.','error');
             return;
         }
-        const formData=new FormData();
-        formData.append('network', network);
-        formData.append('sim_type', simPicked.sim_type);
-        formData.append('sim_id', String(simPicked.id));
-        if(assignmentId)formData.append('_method','PUT');
-        const endpoint=assignmentId
-            ? base+'/'+encodeURIComponent(gatewayId)+'/assignments/'+encodeURIComponent(assignmentId)
-            : base+'/'+encodeURIComponent(gatewayId)+'/assignments';
+        if(!assignmentId){
+            const remaining=Math.max(0, Number(simAssignCapacity.channelCount||0)-Number(simAssignCapacity.assignmentCount||0));
+            if(simAssignCapacity.channelCount>0 && picked.length>remaining){
+                flash('SIM assignments cannot exceed the Channel Count.','error');
+                return;
+            }
+        }
         try{
-            const response=await fetch(endpoint,{
-                method:'POST',
-                headers:{
-                    Accept:'application/json',
-                    'X-CSRF-TOKEN':csrf(),
-                    'X-Requested-With':'XMLHttpRequest'
-                },
-                body:formData
-            });
-            const data=await response.json().catch(()=>({}));
-            if(!response.ok){
-                const validation=Object.values(data.errors||{}).flat().join(' ');
-                throw new Error(data.message||validation||`Unable to save SIM assignment (${response.status})`);
+            let data=null;
+            if(assignmentId){
+                data=await postSimAssignment(gatewayId, assignmentId, network, picked[0]);
+            }else{
+                for(const sim of picked){
+                    data=await postSimAssignment(gatewayId, '', network, sim);
+                    simAssignCapacity.assignmentCount+=1;
+                }
             }
             hideModal('gsmSimModal');
             expandedIds.add(String(gatewayId));
-            flash(data.message||'Saved successfully.');
+            flash(assignmentId || picked.length===1
+                ? (data?.message||'Saved successfully.')
+                : 'SIM assignments added successfully.');
             await load(state.page);
         }catch(error){
+            expandedIds.add(String(gatewayId));
             flash(error.message||'Unable to save SIM assignment.','error');
+            await load(state.page);
         }
     }
 
@@ -915,6 +1212,7 @@ async function initMedia(){
         qs('#gsmSimModalTitle').textContent='Add SIM Assignment';
         qs('#gsmSimGatewayId').value=gatewayId;
         qs('#gsmSimAssignmentId').value='';
+        simAssignCapacity={channelCount,assignmentCount};
         resetSims();
         showModal('gsmSimModal');
     }
@@ -923,10 +1221,10 @@ async function initMedia(){
         qs('#gsmSimModalTitle').textContent='Edit SIM Assignment';
         qs('#gsmSimGatewayId').value=button.dataset.gatewayId||'';
         qs('#gsmSimAssignmentId').value=button.dataset.assignmentId||'';
-        simPicked={
+        simPickedList=[{
             id:button.dataset.simId,
             sim_type:button.dataset.simType
-        };
+        }];
         simPickedPort=button.dataset.port||'';
         simFilter='';
         const search=qs('#gsmSimSearch');
@@ -1062,7 +1360,7 @@ async function initMedia(){
     dom.deleteConfirm?.addEventListener('click',remove);
 
     qs('#gsmSimNetwork')?.addEventListener('change',()=>{
-        simPicked=null;
+        simPickedList=[];
         simPickedPort='';
         loadSims(qs('#gsmSimNetwork').value);
     });
@@ -1073,8 +1371,17 @@ async function initMedia(){
     qs('#gsmSimRows')?.addEventListener('click',event=>{
         const row=event.target.closest('.gsm-sim-row');
         if(!row)return;
+        if(event.ctrlKey||event.metaKey)event.preventDefault();
         const sim=simCatalog.find(item=>String(item.id)===String(row.dataset.simId) && item.sim_type===row.dataset.simType);
-        if(sim)pickSim(sim);
+        if(sim)pickSim(sim, event.ctrlKey||event.metaKey);
+    });
+    document.addEventListener('keydown',event=>{
+        if(!(event.ctrlKey||event.metaKey))return;
+        if(event.key!=='a'&&event.key!=='A')return;
+        if(!qs('#gsmSimModal.visible') || !isSimAddMode())return;
+        if(event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]'))return;
+        event.preventDefault();
+        selectVisibleSims();
     });
     if(isGsm && !document.body.dataset.gsmMenuBound){
         document.body.dataset.gsmMenuBound='1';
@@ -1095,7 +1402,7 @@ async function initMedia(){
                 return;
             }
             const gatewayRow=event.target.closest('tr.gsm-gateway-row[data-gateway]');
-            if(gatewayRow && !event.target.closest('.actions-column, .ca-menu, a, input, select, textarea, label, .action-btn, .plus-btn, .pdc-secret-toggle, button')){
+            if(gatewayRow && !(event.ctrlKey||event.metaKey) && !event.target.closest('.actions-column, .ca-menu, a, input, select, textarea, label, .action-btn, .plus-btn, .pdc-secret-toggle, button')){
                 gatewayRow.querySelector('[data-ca-toggle]')?.click();
             }
             const button=event.target.closest('#mediaGatewayRows .ca-menu-btn');
@@ -1190,10 +1497,10 @@ function initDashboard(){
             body=slice.map(row=>`<tr><td>${escapeHtml(row.name)}</td><td class="num">${escapeHtml(row.total_display||formatNumber(row.total))}</td><td class="num">${escapeHtml(row.sip_display||formatNumber(row.sip))}</td><td class="num">${escapeHtml(row.gsm_display||formatNumber(row.gsm))}</td></tr>`).join('');
             body+=`<tr class="dash-total-row"><td>Total</td><td class="num">${formatNumber(sum('total'))}</td><td class="num">${formatNumber(sum('sip'))}</td><td class="num">${formatNumber(sum('gsm'))}</td></tr>`;
         }
-        let pages='';
-        for(let i=1;i<=lastPage;i++){
-            pages+=`<button type="button" class="page-number${i===utilPage?' active':''}" data-dash-page="${i}">${i}</button>`;
-        }
+        const pages=pagerMarkup(utilPage,lastPage,(page,label,active)=>active
+            ? `<button type="button" class="page-number active" data-dash-page="${page}">${label}</button>`
+            : `<button type="button" class="page-number" data-dash-page="${page}">${label}</button>`
+        );
         const options=[5,10,25,50].map(size=>`<option value="${size}"${size===utilPerPage?' selected':''}>${size}</option>`).join('');
         panel.innerHTML=`<div class="table-card table-wrap dash-util-table"><table><thead><tr><th>Campaign</th><th class="num">Total Channels</th><th class="num">SIP</th><th class="num">GSM</th></tr></thead><tbody>${body}</tbody></table><div class="table-footer"><span>Showing ${from} to ${to} of ${totalCount} entries</span><div class="footer-right"><span>Records per page:</span><select class="per-page-select" data-dash-per-page aria-label="Records per page">${options}</select><div class="pager">${pages}</div></div></div></div>`;
     };

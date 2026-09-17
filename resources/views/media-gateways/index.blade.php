@@ -83,7 +83,7 @@
 @forelse($mediaGateways as $gateway)
 @if($isGsm)
 @php $assignments = $gateway->assignmentPayload(); @endphp
-<tr class="gsm-gateway-row" data-gateway="{{ $gateway->id }}">
+<tr class="gsm-gateway-row" data-gateway="{{ $gateway->id }}" @if(auth()->user()->hasPermission('media.delete') && auth()->user()->canMutateGateways()) data-bulk-row="main" data-bulk-id="{{ $gateway->id }}" data-bulk-url="{{ route($isGsm ? 'gsm-gateways.bulk-destroy' : 'media-gateways.bulk-destroy') }}" data-bulk-ajax="1" @endif>
     <td>
         <span class="gsm-host-cell">
             <button type="button" class="ca-toggle" data-ca-toggle="{{ $gateway->id }}" aria-expanded="false" aria-controls="gsm-panel-{{ $gateway->id }}" title="Expand {{ $gateway->hostname ?: $gateway->site_code }}">
@@ -156,7 +156,7 @@
                 </thead>
                 <tbody>
                 @forelse($assignments as $assignment)
-                    <tr>
+                    <tr @if(auth()->user()->hasPermission('media.delete') && auth()->user()->canMutateGateways()) data-bulk-row="nested" data-bulk-id="{{ $assignment['assignment_id'] }}" data-bulk-url="{{ route('gsm-gateways.assignments.bulk-destroy', $gateway) }}" data-bulk-ajax="1" @endif>
                         <td>{{ $assignment['imei'] ?: '—' }}</td>
                         <td>{{ $assignment['mobile_number'] ?: '—' }}</td>
                         <td>{{ $assignment['plan'] ?: '—' }}</td>
@@ -186,7 +186,7 @@
     </td>
 </tr>
 @else
-<tr>
+<tr @if(auth()->user()->hasPermission('media.delete') && auth()->user()->canMutateGateways()) data-bulk-row="main" data-bulk-id="{{ $gateway->id }}" data-bulk-url="{{ route($isGsm ? 'gsm-gateways.bulk-destroy' : 'media-gateways.bulk-destroy') }}" data-bulk-ajax="1" @endif>
     <td>{{ $gateway->ip_address }}</td>
     <td>{{ $gateway->site_code }}</td>
     <td>{{ $gateway->plan ?: '—' }}</td>
@@ -237,15 +237,7 @@
             <option value="25" {{ $perPage===25?'selected':'' }}>25</option>
             <option value="50" {{ $perPage===50?'selected':'' }}>50</option>
         </select>
-        <div class="pager" id="paginationLinks">
-            @for($page=1;$page<=$mediaGateways->lastPage();$page++)
-                @if($page===$mediaGateways->currentPage())
-                    <span class="page-number active">{{ $page }}</span>
-                @else
-                    <a class="page-number" data-page="{{ $page }}" href="{{ $mediaGateways->url($page) }}">{{ $page }}</a>
-                @endif
-            @endfor
-        </div>
+        @include('partials.table-pager', ['paginator' => $mediaGateways, 'pagerId' => 'paginationLinks', 'dataPage' => true])
     </div>
 </div>
 </div>
@@ -267,18 +259,18 @@
                 <div id="formErrors"></div>
                 @if($isGsm)
                     <div class="form-grid">
-                        <div class="form-group"><label for="hostname">Hostname <span class="req">*</span></label><input class="form-control" id="hostname" name="hostname" required></div>
+                        <div class="form-group"><label for="hostname">Hostname</label><input class="form-control" id="hostname" name="hostname" required></div>
                         <div class="form-group">
-                            <label for="device_function">Function <span class="req">*</span></label>
+                            <label for="device_function">Function</label>
                             <select class="form-control" id="device_function" name="device_function" required>
                                 <option value="" selected hidden>Select Function</option>
                                 <option value="Inbound">Inbound</option>
                                 <option value="Outbound">Outbound</option>
                             </select>
                         </div>
-                        <div class="form-group"><label for="ip_address">IP Address <span class="req">*</span></label><input class="form-control" id="ip_address" name="ip_address" required></div>
+                        <div class="form-group"><label for="ip_address">IP Address</label><input class="form-control" id="ip_address" name="ip_address" required></div>
                         <div class="form-group">
-                            <label for="site_name">Site <span class="req">*</span></label>
+                            <label for="site_name">Site</label>
                             <select class="form-control" id="site_name" name="site_name" required>
                                 <option value="" selected hidden>Select Site</option>
                                 @foreach(($locations ?? []) as $slug => $name)
@@ -286,9 +278,9 @@
                                 @endforeach
                             </select>
                         </div>
-                        <div class="form-group"><label for="site_code">Serial Number <span class="req">*</span></label><input class="form-control" id="site_code" name="site_code" required></div>
-                        <div class="form-group"><label for="username">User <span class="req">*</span></label><input class="form-control" id="username" name="username" required></div>
-                        <div class="form-group"><label for="channel_count">Channel Count <span class="req">*</span></label><input class="form-control" id="channel_count" name="channel_count" type="number" min="1" max="512" required></div>
+                        <div class="form-group"><label for="site_code">Serial Number</label><input class="form-control" id="site_code" name="site_code" required></div>
+                        <div class="form-group"><label for="username">User</label><input class="form-control" id="username" name="username" required></div>
+                        <div class="form-group"><label for="channel_count">Channel Count</label><input class="form-control" id="channel_count" name="channel_count" type="number" min="1" max="512" required></div>
                         <div class="form-group">
                             <label for="password">Password</label>
                             <div class="pdc-password-field">

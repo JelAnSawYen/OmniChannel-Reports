@@ -111,7 +111,7 @@
         $editValues['mobile_assignments'] = $record->mobileDisplayRows();
     }
 @endphp
-<tr>
+<tr @if(auth()->user()->hasPermission('media.delete')) data-bulk-row="main" data-bulk-id="{{ $recordId }}" data-bulk-url="{{ route($module.'.bulk-destroy') }}" @endif>
     @unless($hideMeta)
         <td>{{ ($records->firstItem() ?? 1) + $loop->index }}</td>
     @endunless
@@ -230,15 +230,7 @@
                 <option value="{{ request()->fullUrlWithQuery(['per_page'=>$size,'page'=>1]) }}" {{ $perPage===$size?'selected':'' }}>{{ $size }}</option>
             @endforeach
         </select>
-        <div class="pager">
-            @for($page=1;$page<=$records->lastPage();$page++)
-                @if($page===$records->currentPage())
-                    <span class="page-number active">{{ $page }}</span>
-                @else
-                    <a class="page-number" href="{{ $records->url($page) }}">{{ $page }}</a>
-                @endif
-            @endfor
-        </div>
+        @include('partials.table-pager', ['paginator' => $records])
     </div>
 </div>
 </div>
