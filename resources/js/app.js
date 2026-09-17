@@ -523,10 +523,47 @@ function initBulkSelection(){
         });
     }
 
+    function bulkLockTargets(){
+        return [qs('.sidebar'), qs('#sidebarOverlay'), qs('.app-header'), ...qsa('.page-head, .filter-row, .toolbar, .table-footer, .search-filter-form, .log-clear-form')];
+    }
+
+    function syncBulkLock(){
+        const on=selected.size>0;
+        document.body.classList.toggle('bulk-mode',on);
+        bulkLockTargets().forEach(el=>{
+            if(!el)return;
+            if(on)el.setAttribute('inert','');
+            else el.removeAttribute('inert');
+        });
+        if(on && document.activeElement instanceof Element && !document.activeElement.closest('.bulk-action-bar, #confirmModal, [data-bulk-row]')){
+            document.activeElement.blur();
+        }
+    }
+
+    function isAllowedBulkEvent(event){
+        const el=event.target;
+        if(!(el instanceof Element))return false;
+        if(el.closest('.bulk-action-bar, #confirmModal'))return true;
+        if(isMod(event) && el.closest('[data-bulk-row]') && !el.closest(blockedSel))return true;
+        return false;
+    }
+
+    function lockChrome(event){
+        if(!selected.size)return;
+        if(isAllowedBulkEvent(event))return;
+        const el=event.target;
+        if(!(el instanceof Element))return;
+        const interactive=el.closest('a, button, input, select, textarea, label, summary, [data-open], [data-close], [data-ca-toggle], .nav-item, .plus-btn, .page-number, .per-page-select, .ca-campaign-link, .hamburger, .account-wrap, .notification-button, tr[data-bulk-row], tr.ca-campaign-row, tr.gsm-gateway-row');
+        if(!interactive)return;
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
     function renderBar(){
         pruneSelection();
         if(!selected.size){
             if(bar)bar.hidden=true;
+            syncBulkLock();
             return;
         }
         if(!bar){
@@ -540,6 +577,7 @@ function initBulkSelection(){
         }
         bar.querySelector('[data-bulk-count]').textContent=selected.size+' selected';
         bar.hidden=false;
+        syncBulkLock();
     }
 
     function onPanelToggled(toggle){
@@ -667,6 +705,28 @@ function initBulkSelection(){
         event.preventDefault();
         toggleRow(row);
     });
+
+    document.addEventListener('pointerdown',lockChrome,true);
+    document.addEventListener('click',lockChrome,true);
+    document.addEventListener('auxclick',lockChrome,true);
+    document.addEventListener('change',lockChrome,true);
+    document.addEventListener('submit',event=>{
+        if(!selected.size)return;
+        if(event.target instanceof Element && event.target.closest('#confirmModal, .bulk-action-bar'))return;
+        event.preventDefault();
+        event.stopPropagation();
+    },true);
+    document.addEventListener('keydown',event=>{
+        if(!selected.size)return;
+        if(event.target instanceof Element && event.target.closest('.bulk-action-bar, #confirmModal'))return;
+        if((event.ctrlKey||event.metaKey) && (event.key==='a'||event.key==='A'))return;
+        if(!['Enter',' ','Spacebar'].includes(event.key))return;
+        const el=event.target;
+        if(!(el instanceof Element))return;
+        if(!el.closest('a, button, input, select, textarea, summary, .nav-item, .page-number'))return;
+        event.preventDefault();
+        event.stopPropagation();
+    },true);
 
     document.addEventListener('keydown',event=>{
         if(!(event.ctrlKey||event.metaKey))return;

@@ -4948,3 +4948,27 @@ tbody tr.bulk-selected:hover > td {
 .bulk-action-bar .btn.secondary:hover {
     background: rgba(255, 255, 255, .08);
 }
+
+body.bulk-mode .sidebar,
+body.bulk-mode .sidebar-overlay,
+body.bulk-mode .app-header,
+body.bulk-mode .page-head,
+body.bulk-mode .filter-row,
+body.bulk-mode .toolbar,
+body.bulk-mode .table-footer,
+body.bulk-mode .search-filter-form,
+body.bulk-mode .log-clear-form,
+body.bulk-mode .actions-column,
+body.bulk-mode .ca-menu,
+body.bulk-mode .ca-toggle,
+body.bulk-mode .ca-campaign-link,
+body.bulk-mode .plus-btn,
+body.bulk-mode .pager,
+body.bulk-mode .per-page-select {
+    pointer-events: none;
+}
+
+body.bulk-mode .sidebar,
+body.bulk-mode .app-header {
+    opacity: 0.55;
+}
