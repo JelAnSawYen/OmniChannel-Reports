@@ -10,6 +10,7 @@
     </div>
     <select class="select" name="user_type_id"><option value="">All User Types</option><?php $__currentLoopData = $userTypes; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $type): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?><option value="<?php echo e($type->id); ?>" <?php echo e(request('user_type_id')==$type->id?'selected':''); ?>><?php echo e($type->name); ?></option><?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?></select>
     <select class="select" name="status"><option value="">All Statuses</option><option value="Active" <?php echo e(request('status')==='Active'?'selected':''); ?>>Active</option><option value="Inactive" <?php echo e(request('status')==='Inactive'?'selected':''); ?>>Inactive</option></select>
+    <?php if(request('per_page')): ?><input type="hidden" name="per_page" value="<?php echo e(request('per_page')); ?>"><?php endif; ?>
     <button class="btn primary" type="submit">Search</button>
     <?php if(auth()->user()->hasPermission('users.manage')): ?>
         <a href="<?php echo e(route('users.create')); ?>" class="plus-btn" title="Add User" aria-label="Add User">+</a>
@@ -53,11 +54,15 @@
 </tbody>
 </table>
 <div class="table-footer">
-    <span><?php echo e($users->firstItem()??0); ?>-<?php echo e($users->lastItem()??0); ?> / <?php echo e($users->total()); ?></span>
-    <div class="pager">
-        <?php if($users->onFirstPage()): ?><span class="page-number">‹</span><?php else: ?><a class="page-number" href="<?php echo e($users->previousPageUrl()); ?>">‹</a><?php endif; ?>
-        <?php for($p=1;$p<=$users->lastPage();$p++): ?><?php if($p===$users->currentPage()): ?><span class="page-number active"><?php echo e($p); ?></span><?php else: ?><a class="page-number" href="<?php echo e($users->url($p)); ?>"><?php echo e($p); ?></a><?php endif; ?> <?php endfor; ?>
-        <?php if($users->hasMorePages()): ?><a class="page-number" href="<?php echo e($users->nextPageUrl()); ?>">›</a><?php else: ?><span class="page-number">›</span><?php endif; ?>
+    <span>Showing <?php echo e($users->firstItem() ?? 0); ?> to <?php echo e($users->lastItem() ?? 0); ?> of <?php echo e($users->total()); ?> entries</span>
+    <div class="footer-right">
+        <span>Records per page:</span>
+        <select class="per-page-select" onchange="location.href=this.value" aria-label="Records per page">
+            <?php $__currentLoopData = [5,10,25,50]; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $size): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                <option value="<?php echo e(request()->fullUrlWithQuery(['per_page'=>$size,'page'=>1])); ?>" <?php echo e($perPage===$size?'selected':''); ?>><?php echo e($size); ?></option>
+            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+        </select>
+        <?php echo $__env->make('partials.table-pager', ['paginator' => $users], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
     </div>
 </div>
 </div>

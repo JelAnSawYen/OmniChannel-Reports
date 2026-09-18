@@ -79,6 +79,9 @@ class SimInventoryFieldsTest extends TestCase
             ->assertSee('field_ip_address', false)
             ->assertSee('<select class="form-control" name="ip_address" id="field_ip_address" required>', false)
             ->assertSee('<option value="10.73.1.1">10.73.1.1</option>', false)
+            ->assertSee('field_port', false)
+            ->assertSee('<input class="form-control" type="number" min="1" max="512" name="port" id="field_port">', false)
+            ->assertDontSee('Port <span class="req">*</span>', false)
             ->assertSee('field_account_number', false)
             ->assertSee('field_contract_start', false)
             ->assertSee('field_contract_end', false)
@@ -88,12 +91,25 @@ class SimInventoryFieldsTest extends TestCase
             ->assertDontSee('>IMSI<', false)
             ->assertDontSee('Assigned To');
 
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertStringContainsString('body[data-page="'.$module.'"] #moduleModal.modal-backdrop.visible', $css);
+        $this->assertMatchesRegularExpression(
+            '/body\[data-page="'.$module.'"\] #moduleModal\.modal-backdrop\.visible[\s\S]*?overflow-y: auto;/',
+            $css
+        );
+        $this->assertStringContainsString('body[data-page="'.$module.'"] #moduleModal .pdc-cal', $css);
+        $this->assertMatchesRegularExpression(
+            '/body\[data-page="'.$module.'"\] #moduleModal \.pdc-cal[\s\S]*?overflow: visible;/',
+            $css
+        );
+
         $payload = [
             'imei' => '356938035644001',
             'mobile_number' => '09173330001',
             'network' => $network,
             'plan' => 'Unli Surf',
             'ip_address' => '10.73.1.1',
+            'port' => 3,
             'account_number' => 'ACC-3001',
             'contract_start' => '3/1/2026',
             'contract_end' => '9/3/2026',
@@ -106,6 +122,7 @@ class SimInventoryFieldsTest extends TestCase
         $this->assertSame($network, $record->network);
         $this->assertSame('Unli Surf', $record->plan);
         $this->assertSame('10.73.1.1', $record->ip_address);
+        $this->assertSame(3, (int) $record->fresh()->gatewayAssignment?->port);
         $this->assertSame('ACC-3001', $record->account_number);
         $this->assertSame('2026-03-01', $record->contract_start?->format('Y-m-d'));
         $this->assertSame('2026-09-03', $record->contract_end?->format('Y-m-d'));
@@ -125,6 +142,7 @@ class SimInventoryFieldsTest extends TestCase
             ->assertSee('9/3/2026');
         $this->assertStringContainsString('3\/1\/2026', $showHtml);
         $this->assertStringContainsString('9\/3\/2026', $showHtml);
+        $this->assertStringContainsString('"port":3', $showHtml);
         $this->assertStringContainsString('data-id="'.$record->id.'"', $showHtml);
         $this->assertStringNotContainsString('<th>Last Updated</th>', $showHtml);
         $this->assertStringNotContainsString('<th>Network</th>', $showHtml);
@@ -136,11 +154,13 @@ class SimInventoryFieldsTest extends TestCase
         $updated = $payload;
         $updated['account_number'] = 'ACC-3001-EDIT';
         $updated['contract_end'] = '10/15/2026';
+        $updated['port'] = 5;
         $this->put('/'.$module.'/'.$record->id, $updated)->assertRedirect();
-        $record->refresh();
+        $record->refresh()->load('gatewayAssignment');
         $this->assertSame('ACC-3001-EDIT', $record->account_number);
         $this->assertSame('2026-03-01', $record->contract_start?->format('Y-m-d'));
         $this->assertSame('2026-10-15', $record->contract_end?->format('Y-m-d'));
+        $this->assertSame(5, (int) $record->gatewayAssignment?->port);
 
         $this->delete('/'.$module.'/'.$record->id)->assertRedirect();
         $this->assertDatabaseMissing($table, ['id' => $record->id]);
@@ -241,6 +261,7 @@ class SimInventoryFieldsTest extends TestCase
             'mobile_number',
             'plan',
             'ip_address',
+            'port',
             'account_number',
             'contract_start',
             'contract_end',
@@ -260,12 +281,22 @@ class SimInventoryFieldsTest extends TestCase
             'Mobile Number',
             'Plan',
             'IP',
+            'Port',
             'Account Number',
             'Contract Start',
             'Contract End',
         ], array_values(OperationCatalog::simTransferColumns()));
+        $this->assertSame([
+            'IMEI',
+            'Mobile Number',
+            'Plan',
+            'IP',
+            'Account Number',
+            'Contract Start',
+            'Contract End',
+        ], array_values(OperationCatalog::simImportFields()));
         $this->assertSame(
-            array_values(OperationCatalog::simTransferColumns()),
+            array_values(OperationCatalog::simImportFields()),
             array_values(InventoryImportCatalog::operation('globe-sim')['fields'])
         );
         $this->assertFalse(InventoryImportCatalog::operation('globe-sim')['include_id']);

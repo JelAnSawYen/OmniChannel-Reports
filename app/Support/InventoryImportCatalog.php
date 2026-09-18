@@ -22,7 +22,7 @@ class InventoryImportCatalog
         $extras = self::operationExtras($module);
         $fields = $config['table_columns'] ?? $config['columns'];
         if (OperationCatalog::isSim($module)) {
-            $fields = OperationCatalog::simFormFields();
+            $fields = OperationCatalog::simImportFields();
         }
         if (! empty($extras['extra_fields']) && is_array($extras['extra_fields'])) {
             $fields = array_merge($fields, $extras['extra_fields']);
@@ -140,7 +140,7 @@ class InventoryImportCatalog
             'fields' => [
                 'name' => 'Campaigns',
                 'fte' => 'FTE',
-                'location' => 'Location',
+                'location' => 'Site',
             ],
             'required' => ['name', 'fte', 'location'],
             'integer_fields' => ['fte'],

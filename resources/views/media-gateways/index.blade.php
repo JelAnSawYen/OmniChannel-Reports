@@ -9,6 +9,7 @@
             'ip_address' => 'IP',
             'site_code' => 'Serial Number',
             'channel_count' => 'Channel Count',
+            'network' => 'Network',
             'device_function' => 'Function',
             'site_name' => 'Site',
             'username' => 'User',
@@ -95,6 +96,7 @@
     <td>{{ $gateway->ip_address }}</td>
     <td>{{ $gateway->site_code }}</td>
     <td>{{ $gateway->channel_count ?: '—' }}</td>
+    <td>{{ $gateway->network ?: '—' }}</td>
     <td>{{ $gateway->device_function ?: '—' }}</td>
     <td>{{ $gateway->site_name }}</td>
     <td>{{ $gateway->username }}</td>
@@ -117,7 +119,7 @@
             </button>
             <div class="ca-menu-dropdown" role="menu" hidden>
                 @if(auth()->user()->hasPermission('media.edit') && auth()->user()->canMutateGateways())
-                    <button class="ca-menu-item edit" type="button" role="menuitem" data-edit-id="{{ $gateway->id }}" data-edit-hostname="{{ $gateway->hostname }}" data-edit-site_name="{{ $gateway->site_name }}" data-edit-site_code="{{ $gateway->site_code }}" data-edit-ip_address="{{ $gateway->ip_address }}" data-edit-channel_count="{{ $gateway->channel_count }}" data-edit-device_function="{{ $gateway->device_function }}" data-edit-username="{{ $gateway->username }}" @if($canRevealSecrets) data-edit-password="{{ $gateway->password }}" @endif title="Edit {{ $resource['entity'] }}" aria-label="Edit {{ $resource['entity'] }}">
+                    <button class="ca-menu-item edit" type="button" role="menuitem" data-edit-id="{{ $gateway->id }}" data-edit-hostname="{{ $gateway->hostname }}" data-edit-site_name="{{ $gateway->site_name }}" data-edit-site_code="{{ $gateway->site_code }}" data-edit-ip_address="{{ $gateway->ip_address }}" data-edit-channel_count="{{ $gateway->channel_count }}" data-edit-network="{{ $gateway->network }}" data-edit-device_function="{{ $gateway->device_function }}" data-edit-username="{{ $gateway->username }}" @if($canRevealSecrets) data-edit-password="{{ $gateway->password }}" @endif title="Edit {{ $resource['entity'] }}" aria-label="Edit {{ $resource['entity'] }}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
                         Edit
                     </button>
@@ -137,6 +139,13 @@
     <td colspan="{{ $colspan }}">
         <div class="ca-nested">
             <table class="gsm-sim-nested" aria-label="SIM assignments">
+                <colgroup>
+                    <col class="gsm-sim-col-imei">
+                    <col class="gsm-sim-col-mobile">
+                    <col class="gsm-sim-col-plan">
+                    <col class="gsm-sim-col-ip">
+                    <col class="gsm-sim-col-port">
+                </colgroup>
                 <thead>
                     <tr>
                         <th>IMEI</th>
@@ -144,41 +153,24 @@
                         <th>Plan</th>
                         <th>IP</th>
                         <th>Port</th>
-                        <th class="actions-column">
-                            <span class="ca-actions-head">
-                                Actions
-                                @if(auth()->user()->hasPermission('media.create') && auth()->user()->canMutateGateways())
-                                    <button class="plus-btn" type="button" data-gsm-sim-add="{{ $gateway->id }}" data-channel-count="{{ $gateway->channel_count }}" data-assignment-count="{{ count($assignments) }}" title="Add SIM Assignment" aria-label="Add SIM Assignment">+</button>
-                                @endif
-                            </span>
-                        </th>
                     </tr>
                 </thead>
                 <tbody>
                 @forelse($assignments as $assignment)
-                    <tr @if(auth()->user()->hasPermission('media.delete') && auth()->user()->canMutateGateways()) data-bulk-row="nested" data-bulk-id="{{ $assignment['assignment_id'] }}" data-bulk-url="{{ route('gsm-gateways.assignments.bulk-destroy', $gateway) }}" data-bulk-ajax="1" @endif>
+                    @php
+                        $nestedBulkId = ! empty($assignment['assignment_id'])
+                            ? (string) $assignment['assignment_id']
+                            : ((string) ($assignment['sim_type'] ?? '').'-'.(string) ($assignment['id'] ?? ''));
+                    @endphp
+                    <tr @if(auth()->user()->hasPermission('media.delete') && auth()->user()->canMutateGateways() && $nestedBulkId !== '-' && $nestedBulkId !== '') data-bulk-row="nested" data-bulk-id="{{ $nestedBulkId }}" data-bulk-url="{{ route('gsm-gateways.assignments.bulk-destroy', $gateway) }}" data-bulk-ajax="1" @endif>
                         <td>{{ $assignment['imei'] ?: '—' }}</td>
                         <td>{{ $assignment['mobile_number'] ?: '—' }}</td>
                         <td>{{ $assignment['plan'] ?: '—' }}</td>
                         <td>{{ $gateway->ip_address }}</td>
-                        <td>{{ $assignment['port'] ?: '—' }}</td>
-                        <td class="actions-column">
-                            <div class="row-actions">
-                                @if(auth()->user()->hasPermission('media.edit') && auth()->user()->canMutateGateways())
-                                    <button class="action-btn edit" type="button" data-gsm-sim-edit data-gateway-id="{{ $gateway->id }}" data-assignment-id="{{ $assignment['assignment_id'] }}" data-sim-type="{{ $assignment['sim_type'] }}" data-sim-id="{{ $assignment['id'] }}" data-network="{{ $assignment['network'] }}" data-port="{{ $assignment['port'] }}" title="Edit" aria-label="Edit">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
-                                    </button>
-                                @endif
-                                @if(auth()->user()->hasPermission('media.delete') && auth()->user()->canMutateGateways())
-                                    <button class="action-btn delete" type="button" data-gsm-sim-delete data-gateway-id="{{ $gateway->id }}" data-assignment-id="{{ $assignment['assignment_id'] }}" title="Delete" aria-label="Delete">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="m6 7 1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>
-                                    </button>
-                                @endif
-                            </div>
-                        </td>
+                        <td>{{ $assignment['port'] !== '' && $assignment['port'] !== null ? $assignment['port'] : '—' }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="6"><div class="empty-state">No SIM assignments.</div></td></tr>
+                    <tr><td colspan="5"><div class="empty-state">No SIM assignments.</div></td></tr>
                 @endforelse
                 </tbody>
             </table>
@@ -281,6 +273,7 @@
                         <div class="form-group"><label for="site_code">Serial Number</label><input class="form-control" id="site_code" name="site_code" required></div>
                         <div class="form-group"><label for="username">User</label><input class="form-control" id="username" name="username" required></div>
                         <div class="form-group"><label for="channel_count">Channel Count</label><input class="form-control" id="channel_count" name="channel_count" type="number" min="1" max="512" required></div>
+                        <div class="form-group"><label for="network">Network</label><input class="form-control" id="network" name="network"></div>
                         <div class="form-group">
                             <label for="password">Password</label>
                             <div class="pdc-password-field">
@@ -318,53 +311,6 @@
                 @endif
             </div>
             <div class="modal-footer"><button type="button" class="btn secondary" data-close="mediaGatewayModal">Cancel</button><button type="submit" class="btn primary">Save</button></div>
-        </form>
-    </div>
-</div>
-@endif
-
-@if($isGsm && auth()->user()->canMutateGateways() && (auth()->user()->hasPermission('media.create') || auth()->user()->hasPermission('media.edit')))
-<div class="modal-backdrop" id="gsmSimModal">
-    <div class="modal">
-        <div class="modal-header">
-            <h3 id="gsmSimModalTitle">Add SIM Assignment</h3>
-            <button type="button" class="close-btn" data-close="gsmSimModal">×</button>
-        </div>
-        <form id="gsmSimForm">
-            <input type="hidden" id="gsmSimGatewayId">
-            <input type="hidden" id="gsmSimAssignmentId">
-            <div class="modal-body">
-                <div id="gsmSimFormErrors"></div>
-                <div class="form-group">
-                    <label for="gsmSimNetwork">Network <span class="req">*</span></label>
-                    <select class="form-control" id="gsmSimNetwork" name="network" required>
-                        <option value="" selected hidden>Select Network</option>
-                        @foreach(($simNetworks ?? []) as $networkName)
-                            <option value="{{ $networkName }}">{{ $networkName }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="gsm-sim-block">
-                    <label for="gsmSimSearch">SIM Selection <span class="req">*</span></label>
-                    <input class="form-control" id="gsmSimSearch" type="search" placeholder="Search SIM (IMEI or Mobile Number)..." autocomplete="off">
-                    <div class="gsm-sim-list" id="gsmSimList">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>IMEI</th>
-                                    <th>Mobile Number</th>
-                                    <th>Plan</th>
-                                    <th>Port</th>
-                                </tr>
-                            </thead>
-                            <tbody id="gsmSimRows">
-                                <tr><td colspan="4">Select a network to load SIM records.</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer"><button type="button" class="btn secondary" data-close="gsmSimModal">Cancel</button><button type="submit" class="btn primary">Save</button></div>
         </form>
     </div>
 </div>

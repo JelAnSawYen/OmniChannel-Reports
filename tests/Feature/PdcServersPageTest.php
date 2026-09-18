@@ -63,12 +63,18 @@ class PdcServersPageTest extends TestCase
         $this->assertStringNotContainsString('data-used', $html);
         $this->assertStringNotContainsString('filterCampaignOptions', $html);
 
-        foreach (OperationCatalog::locations() as $name) {
+        $sites = OperationCatalog::pdcSiteNames();
+        $this->assertSame(['Alcar', 'CG3', 'CTN', 'Estancia', 'PDC', 'SC5', 'Skyrise', 'WFH'], $sites);
+        foreach ($sites as $name) {
             $this->assertStringContainsString('>'.$name.'</option>', $html);
         }
+        $this->assertMatchesRegularExpression('/<option value="PDC"[^>]*\bselected\b/', $html);
+        $this->assertStringContainsString('for="pdc_location">Site</label>', $html);
+        $this->assertStringContainsString('Select Site', $html);
         $this->assertStringNotContainsString('PDC – Taytay', $html);
         $this->assertSame(2, ChannelAllocationCampaign::count());
         $this->assertSame(7, count(OperationCatalog::locations()));
+        $this->assertSame(['Alcar', 'CG3', 'CTN', 'Estancia', 'SC5', 'Skyrise', 'WFH'], array_values(OperationCatalog::locations()));
     }
 
     public function test_main_table_is_expandable_campaign_structure(): void
@@ -78,7 +84,7 @@ class PdcServersPageTest extends TestCase
 
         $page = $this->get('/pdc-servers')->assertOk();
         $page->assertSee('Campaign')
-            ->assertSee('Location')
+            ->assertSee('Site')
             ->assertSee('Date Endorse')
             ->assertSee('DNS')
             ->assertSee('1 server')
@@ -141,6 +147,53 @@ class PdcServersPageTest extends TestCase
         $this->assertTrue(
             PdcGroup::query()->whereHas('campaign', fn ($campaigns) => $campaigns->where('name', 'Typed PDC Campaign'))->exists()
         );
+    }
+
+    public function test_add_defaults_pdc_but_saves_the_selected_site(): void
+    {
+        $this->actingAs($this->admin);
+        $first = ChannelAllocationCampaign::create(['name' => 'BPI Collection']);
+        $second = ChannelAllocationCampaign::create(['name' => 'Atome']);
+
+        $this->post('/pdc-servers', [
+            'campaign_id' => $first->id,
+            'location' => 'WFH',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('pdc_groups', [
+            'campaign_id' => $first->id,
+            'location' => 'WFH',
+        ]);
+
+        $group = PdcGroup::where('campaign_id', $first->id)->firstOrFail();
+        $html = $this->get('/pdc-servers')->assertOk()->getContent();
+        $this->assertStringContainsString('"location":"WFH"', $html);
+        $this->assertStringContainsString('>WFH</span>', $html);
+
+        $this->put('/pdc-servers/'.$group->id, [
+            'campaign_id' => $first->id,
+            'location' => 'PDC',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('pdc_groups', [
+            'id' => $group->id,
+            'location' => 'PDC',
+        ]);
+        $this->assertDatabaseMissing('pdc_groups', [
+            'id' => $group->id,
+            'location' => 'WFH',
+        ]);
+
+        $this->post('/pdc-servers', [
+            'campaign_id' => $second->id,
+            'location' => 'PDC',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('pdc_groups', [
+            'campaign_id' => $second->id,
+            'location' => 'PDC',
+        ]);
+        $this->assertSame(2, PdcGroup::count());
     }
 
     public function test_date_endorse_accepts_valid_and_rejects_invalid_dates(): void
@@ -207,8 +260,11 @@ class PdcServersPageTest extends TestCase
         [$group, $server] = $this->seedGroupAndServer();
 
         $html = $this->get('/pdc-servers')->assertOk()->getContent();
-        foreach (['ID', 'Hostname', 'Source IP', 'OS', 'RAM', 'CPU', 'Storage', 'Admin Username', 'Password', 'SQL DB Password'] as $column) {
-            $this->assertStringContainsString($column, $html);
+        $nested = Str::between($html, 'class="pdc-servers-nested"', '</table>');
+        $this->assertStringNotContainsString('<th>ID</th>', $nested);
+        $this->assertStringNotContainsString('pdc-server-id', $html);
+        foreach (['Hostname', 'Source IP', 'OS', 'RAM', 'CPU', 'Storage', 'Admin Username', 'Password', 'SQL DB Password'] as $column) {
+            $this->assertStringContainsString('<th>'.$column.'</th>', $nested);
         }
         $this->assertStringContainsString('data-pdc-server-add', $html);
         $this->assertStringContainsString('data-group="'.$group->id.'"', $html);
@@ -306,7 +362,7 @@ class PdcServersPageTest extends TestCase
         $this->assertDatabaseHas('pdc_groups', ['id' => $group->id]);
     }
 
-    public function test_server_display_ids_restart_at_one_per_campaign(): void
+    public function test_nested_servers_are_grouped_per_campaign(): void
     {
         $this->actingAs($this->admin);
         $location = array_values(OperationCatalog::locations())[0];
@@ -333,11 +389,15 @@ class PdcServersPageTest extends TestCase
         }
 
         $html = $this->get('/pdc-servers')->assertOk()->getContent();
-        preg_match_all('/pdc-server-id">(\d+)</', $html, $matches);
-        $this->assertSame(['1', '2', '1', '2'], $matches[1]);
+        $this->assertStringContainsString('Atome-1', $html);
+        $this->assertStringContainsString('Atome-2', $html);
+        $this->assertStringContainsString('Chinabank-1', $html);
+        $this->assertStringContainsString('Chinabank-2', $html);
+        $this->assertStringNotContainsString('<th>ID</th>', $html);
+        $this->assertStringNotContainsString('pdc-server-id', $html);
     }
 
-    public function test_server_display_ids_are_sequential_and_renumber_after_delete(): void
+    public function test_deleting_a_server_keeps_remaining_servers(): void
     {
         $this->actingAs($this->admin);
         [$group] = $this->seedGroupAndServer('10.24.28.57');
@@ -357,22 +417,21 @@ class PdcServersPageTest extends TestCase
         ]);
 
         $html = $this->get('/pdc-servers')->assertOk()->getContent();
-        preg_match_all('/pdc-server-id">(\d+)</', $html, $matches);
-        $this->assertSame(['1', '2', '3'], $matches[1]);
         $this->assertStringContainsString('data-id="'.$second->id.'"', $html);
         $this->assertStringContainsString('data-id="'.$third->id.'"', $html);
+        $this->assertStringContainsString('pdc-core-02', $html);
+        $this->assertStringContainsString('pdc-core-03', $html);
 
         $this->delete('/pdc-servers/'.$group->id.'/servers/'.$second->id)->assertRedirect();
         $this->assertDatabaseHas('pdc_servers', ['id' => $third->id, 'hostname' => 'pdc-core-03']);
 
         $html = $this->get('/pdc-servers')->assertOk()->getContent();
-        preg_match_all('/pdc-server-id">(\d+)</', $html, $matches);
-        $this->assertSame(['1', '2'], $matches[1]);
-        $this->assertStringNotContainsString('pdc-server-id">3<', $html);
+        $this->assertStringNotContainsString('pdc-core-02', $html);
+        $this->assertStringContainsString('pdc-core-03', $html);
         $this->assertStringContainsString('data-id="'.$third->id.'"', $html);
     }
 
-    public function test_server_display_ids_continue_across_pagination(): void
+    public function test_campaign_pagination_still_lists_servers(): void
     {
         $this->actingAs($this->admin);
         $location = array_values(OperationCatalog::locations())[0];
@@ -392,12 +451,14 @@ class PdcServersPageTest extends TestCase
         }
 
         $page1 = $this->get('/pdc-servers?per_page=5')->assertOk()->getContent();
-        preg_match_all('/pdc-server-id">(\d+)</', $page1, $matches);
-        $this->assertSame(['1', '1', '1', '1', '1'], $matches[1]);
+        for ($i = 1; $i <= 5; $i++) {
+            $this->assertStringContainsString('pdc-page-'.$i, $page1);
+        }
+        $this->assertStringNotContainsString('pdc-page-6', $page1);
 
         $page2 = $this->get('/pdc-servers?per_page=5&page=2')->assertOk()->getContent();
-        preg_match_all('/pdc-server-id">(\d+)</', $page2, $matches);
-        $this->assertSame(['1'], $matches[1]);
+        $this->assertStringContainsString('pdc-page-6', $page2);
+        $this->assertStringNotContainsString('pdc-page-1', $page2);
     }
 
     public function test_nested_server_table_values_are_centered_to_headers(): void
@@ -413,14 +474,21 @@ class PdcServersPageTest extends TestCase
         $this->assertMatchesRegularExpression('/\.pdc-cal-year\s*\{[^}]*color:\s*#000/', $css);
         $this->assertMatchesRegularExpression('/\.pdc-cal-month\s*\{[^}]*color:\s*#000/', $css);
 
+        $this->assertMatchesRegularExpression('/\.pdc-table \.ca-nested \.pdc-servers-nested thead th:nth-child\(1\),\s*\.pdc-table \.ca-nested \.pdc-servers-nested tbody td:nth-child\(1\) \{ width: 14%; \}/', $css);
+        $this->assertMatchesRegularExpression('/\.pdc-table \.ca-nested \.pdc-servers-nested thead th:nth-child\(2\),\s*\.pdc-table \.ca-nested \.pdc-servers-nested tbody td:nth-child\(2\) \{ width: 11%; \}/', $css);
+        $this->assertStringContainsString('width: 16%', $css);
+
         $html = $this->get('/pdc-servers')->assertOk()->getContent();
+        $nested = Str::between($html, 'class="pdc-servers-nested"', '</table>');
         $this->assertStringContainsString('class="ca-table pdc-table"', $html);
         $this->assertStringContainsString('class="pdc-servers-nested"', $html);
         $this->assertStringContainsString('class="pdc-cell-group pdc-dns"', $html);
         $this->assertStringContainsString('class="pdc-cell-group pdc-secret"', $html);
         $this->assertStringContainsString('class="pdc-cell-group row-actions"', $html);
-        foreach (['ID', 'Hostname', 'Source IP', 'OS', 'RAM', 'CPU', 'Storage', 'Admin Username', 'Password', 'SQL DB Password'] as $column) {
-            $this->assertStringContainsString($column, $html);
+        $this->assertStringNotContainsString('<th>ID</th>', $nested);
+        $this->assertStringNotContainsString('pdc-server-id', $html);
+        foreach (['Hostname', 'Source IP', 'OS', 'RAM', 'CPU', 'Storage', 'Admin Username', 'Password', 'SQL DB Password'] as $column) {
+            $this->assertStringContainsString('<th>'.$column.'</th>', $nested);
         }
     }
 
@@ -531,13 +599,20 @@ class PdcServersPageTest extends TestCase
         ]);
         $loc = $this->postJson('/pdc-servers/import/preview', ['file' => $this->upload($badLocation)])->assertOk()->json();
         $this->assertFalse($loc['valid']);
-        $this->assertStringContainsString('Location does not exist', $loc['rows'][0]['error']);
+        $this->assertStringContainsString('Site does not exist', $loc['rows'][0]['error']);
 
         $export = $this->get('/pdc-servers/export')->assertOk()->assertDownload('pdc-servers.xlsx');
         [$headers] = app(XlsxService::class)->read($export->getFile()->getPathname());
         $this->assertSame('Campaign', $headers[0]);
+        $this->assertContains('Site', $headers);
+        $this->assertNotContains('Location', $headers);
         $this->assertContains('Source IP', $headers);
         $this->assertContains('Password', $headers);
+
+        $template = $this->get('/pdc-servers/import/template')->assertOk()->assertDownload('pdc-servers-template.xlsx');
+        [$templateHeaders] = app(XlsxService::class)->read($template->getFile()->getPathname());
+        $this->assertContains('Site', $templateHeaders);
+        $this->assertNotContains('Location', $templateHeaders);
     }
 
     public function test_search_reset_and_unrelated_modules_still_work(): void

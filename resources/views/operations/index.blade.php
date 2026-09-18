@@ -9,7 +9,7 @@
     $hideLastUpdated = $hideMeta || $isBooster;
     $tableColumns = $isInbound ? ($config['table_columns'] ?? $config['columns']) : $config['columns'];
     $transferColumns = $isSim
-        ? \App\Support\OperationCatalog::simTransferColumns()
+        ? \App\Support\OperationCatalog::simImportFields()
         : ($isInbound ? ($config['table_columns'] ?? $config['columns']) : $config['columns']);
     $numericColumns = $isSim ? [] : ['monthly_cost', 'retention_days', 'port_number', 'number'];
     $emptyColspan = count($tableColumns) + ($hideMeta ? 1 : ($hideLastUpdated ? 2 : 3));
@@ -97,6 +97,10 @@
         }
         if ($isInbound && $field === 'network') {
             $editValues['network'] = \App\Support\GsmSimInventory::canonicalNetwork($record->network) ?: ($record->network ?: '');
+            continue;
+        }
+        if ($isSim && $field === 'port') {
+            $editValues['port'] = $record->gatewayAssignment?->port ?: '';
             continue;
         }
         $value = $record->{$field};
@@ -340,6 +344,8 @@
                                     @endif
                                 @endforeach
                             </select>
+                        @elseif($isSim && $field === 'port')
+                            <input class="form-control" type="number" min="1" max="512" name="port" id="field_port">
                         @elseif($field==='description')
                             <textarea class="form-control" name="{{ $field }}" id="field_{{ $field }}"></textarea>
                         @elseif($field==='specs')
@@ -472,6 +478,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const networkMobiles = () => simDirectory[currentNetwork()] || [];
     const lookupMobile = (value) => networkMobiles().find((row) => row.mobile === value) || null;
     const dash = (value) => String(value || '').trim() || '—';
+    const assignmentFor = (mobile) => {
+        const hit = lookupMobile(mobile);
+        return {
+            hostname: hit?.hostname || '',
+            port: hit?.port || '',
+        };
+    };
 
     const setMobileEnabled = () => {
         if (!mobileInput) return;
@@ -530,9 +543,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const refreshAssignments = () => {
         selected.forEach((row) => {
-            const hit = lookupMobile(row.mobile);
-            row.hostname = hit?.hostname || '';
-            row.port = hit?.port || '';
+            const hit = assignmentFor(row.mobile);
+            row.hostname = hit.hostname;
+            row.port = hit.port;
         });
         renderSelected();
     };
@@ -557,11 +570,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         mobileInput?.setCustomValidity('');
-        const hit = lookupMobile(value);
+        const hit = assignmentFor(value);
         selected.push({
             mobile: value,
-            hostname: hit?.hostname || '',
-            port: hit?.port || '',
+            hostname: hit.hostname,
+            port: hit.port,
         });
         renderSelected();
     };
@@ -713,11 +726,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const mobiles = Array.isArray(values.mobile_numbers) ? values.mobile_numbers.map(String) : [];
         (assignments.length ? assignments : mobiles.map((mobile) => ({ mobile, hostname: '', port: '' }))).forEach((row) => {
             const mobile = String(row.mobile || row);
-            const hit = lookupMobile(mobile);
+            const hit = assignmentFor(mobile);
             selected.push({
                 mobile,
-                hostname: hit?.hostname || row.hostname || '',
-                port: hit?.port || row.port || '',
+                hostname: hit.hostname || row.hostname || '',
+                port: hit.port || row.port || '',
             });
         });
         lists.landline = Array.isArray(values.landline_numbers) ? values.landline_numbers.map(String) : [];

@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Models\UserType;
 use App\Services\DashboardOverviewService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class DashboardOverviewTest extends TestCase
@@ -56,6 +57,8 @@ class DashboardOverviewTest extends TestCase
             ->assertSee('Inbound Numbers')
             ->assertSee('>Globe</span>', false)
             ->assertSee('>Smart</span>', false)
+            ->assertSee('>Open</span>', false)
+            ->assertSee('>In Repair</span>', false)
             ->assertSee('>Mobile</span>', false)
             ->assertSee('>Landline</span>', false)
             ->assertDontSee('Total GSM Gateways')
@@ -78,7 +81,10 @@ class DashboardOverviewTest extends TestCase
             ->assertSee('>SIP</th>', false)
             ->assertSee('>GSM</th>', false)
             ->assertSee('>Total</td>', false)
-            ->assertSee('280')
+            ->assertSee('class="campaigns-name"', false)
+            ->assertSee('<span class="campaigns-name">BPI Collection</span>', false)
+            ->assertSee('<span class="campaigns-name">Atome</span>', false)
+            ->assertDontSee('<span class="campaigns-name">Total</span>', false)
             ->assertSee('View All')
             ->assertSee('href="'.url('/channel-utilization').'"', false)
             ->assertSee('Allocation Trends')
@@ -111,12 +117,14 @@ class DashboardOverviewTest extends TestCase
 
         $json = $this->actingAs($this->admin)->getJson('/dashboard/snapshot')->assertOk();
         $json->assertJsonPath('kpis.campaigns.value', 2)
-            ->assertJsonPath('kpis.gateways.value', 32)
+            ->assertJsonPath('kpis.gateways.value', 1)
             ->assertJsonPath('kpis.channels.value', 500)
             ->assertJsonPath('kpis.sims.value', 3)
             ->assertJsonPath('kpis.globe.value', 2)
             ->assertJsonPath('kpis.smart.value', 1)
             ->assertJsonPath('kpis.defective.value', 1)
+            ->assertJsonPath('kpis.defective_open.value', 1)
+            ->assertJsonPath('kpis.defective_repair.value', 0)
             ->assertJsonPath('kpis.mobile.value', 3)
             ->assertJsonPath('kpis.landline.value', 2)
             ->assertJsonPath('kpis.inbound.value', 5)
@@ -130,12 +138,20 @@ class DashboardOverviewTest extends TestCase
             ->assertJsonPath('utilization_rows.0.gsm', 20)
             ->assertJsonPath('utilization_rows.1.name', 'Atome')
             ->assertJsonPath('utilization_rows.1.total', 220)
+            ->assertJsonPath('utilization_rows.1.sip', 0)
+            ->assertJsonPath('utilization_rows.1.gsm', 220)
             ->assertJsonPath('campaign_insight', 'BPI Collection has the highest number of allocated channels with 300 channels.')
             ->assertJsonPath('trend.days', 30);
 
         $this->assertNotEmpty($json->json('fingerprint'));
         $this->assertNotEmpty($json->json('html.bars'));
         $this->assertNotEmpty($json->json('html.utilization'));
+        $utilizationHtml = (string) $json->json('html.utilization');
+        $this->assertStringContainsString('<span class="campaigns-name">BPI Collection</span>', $utilizationHtml);
+        $this->assertStringContainsString('<span class="campaigns-name">Atome</span>', $utilizationHtml);
+        $this->assertStringContainsString('<td>Total</td>', $utilizationHtml);
+        $this->assertStringNotContainsString('campaigns-name">Total', $utilizationHtml);
+        $this->assertStringContainsString('class="campaigns-name">${escapeHtml(row.name)}</span>', file_get_contents(resource_path('js/app.js')));
         $this->assertNotEmpty($json->json('html.trend'));
         $trendHtml = (string) $json->json('html.trend');
         $this->assertStringContainsString('fill="#000000"', $trendHtml);
@@ -184,7 +200,8 @@ class DashboardOverviewTest extends TestCase
         ]);
         $older = ChannelAllocation::create([
             'campaign_id' => $campaign->id,
-            'channel_allocation' => 'gsm_globe_trend',
+            'channel_allocation' => 'PAS-TREND',
+            'media_gateway' => 'PAS-TREND',
             'network' => 'Globe SIM',
             'total_channel_allocated' => 10,
         ]);
@@ -227,6 +244,59 @@ class DashboardOverviewTest extends TestCase
         $this->assertSame(6, $payload['kpis']['inbound']['value']);
     }
 
+    public function test_defective_gsm_kpi_counts_only_open_and_in_repair(): void
+    {
+        DefectiveGsm::create([
+            'asset_code' => 'GSM-D-OPEN',
+            'location' => 'Estancia',
+            'issue' => 'No signal',
+            'status' => 'Open',
+        ]);
+        DefectiveGsm::create([
+            'asset_code' => 'GSM-D-REPAIR',
+            'location' => 'Alcar',
+            'issue' => 'Port failure',
+            'status' => 'In Repair',
+        ]);
+        DefectiveGsm::create([
+            'asset_code' => 'GSM-D-REPLACED',
+            'location' => 'CTN',
+            'issue' => 'Replaced unit',
+            'status' => 'Replaced',
+        ]);
+        DefectiveGsm::create([
+            'asset_code' => 'GSM-D-CLOSED',
+            'location' => 'SC5',
+            'issue' => 'Resolved',
+            'status' => 'Closed',
+        ]);
+
+        $payload = app(DashboardOverviewService::class)->payload();
+        $this->assertSame(2, $payload['kpis']['defective']['value']);
+        $this->assertSame(1, $payload['kpis']['defective_open']['value']);
+        $this->assertSame(1, $payload['kpis']['defective_repair']['value']);
+
+        $page = $this->actingAs($this->admin)->get('/dashboard')->assertOk();
+        $html = $page->getContent();
+        $defectiveCard = Str::between(
+            $html,
+            'dash-kpi-label">Defective GSM</span>',
+            'dash-kpi-label">Inbound Numbers</span>'
+        );
+        $this->assertStringContainsString('data-dash-kpi="defective">2</div>', $defectiveCard);
+        $this->assertStringContainsString('>Open</span>', $defectiveCard);
+        $this->assertStringContainsString('data-dash-kpi="defective_open">1</strong>', $defectiveCard);
+        $this->assertStringContainsString('class="dash-sim-sep">|</span>', $defectiveCard);
+        $this->assertStringContainsString('>In Repair</span>', $defectiveCard);
+        $this->assertStringContainsString('data-dash-kpi="defective_repair">1</strong>', $defectiveCard);
+        $this->assertStringNotContainsString('Replaced', $defectiveCard);
+        $this->assertStringNotContainsString('Closed', $defectiveCard);
+
+        $inboundCard = Str::after($html, 'dash-kpi-label">Inbound Numbers</span>');
+        $this->assertStringContainsString('>Mobile</span>', $inboundCard);
+        $this->assertStringContainsString('>Landline</span>', $inboundCard);
+    }
+
     private function seedOverview(): void
     {
         $bpi = ChannelAllocationCampaign::create(['name' => 'BPI Collection']);
@@ -240,13 +310,15 @@ class DashboardOverviewTest extends TestCase
         ]);
         ChannelAllocation::create([
             'campaign_id' => $bpi->id,
-            'channel_allocation' => 'gsm_globe_bpi',
+            'channel_allocation' => 'PAS-DASH',
+            'media_gateway' => 'PAS-DASH',
             'network' => 'Globe SIM',
             'total_channel_allocated' => 20,
         ]);
         ChannelAllocation::create([
             'campaign_id' => $atome->id,
-            'channel_allocation' => 'gsm_globe_atome',
+            'channel_allocation' => 'PAS-ATOME',
+            'media_gateway' => 'PAS-ATOME',
             'network' => 'Globe SIM',
             'total_channel_allocated' => 220,
         ]);

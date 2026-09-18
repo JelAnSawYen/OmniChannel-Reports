@@ -249,6 +249,49 @@ class InventoryImportTest extends TestCase
             'sim_id' => $smart->id,
             'port' => 2,
         ]);
+        $this->assertSame('', (string) $gateway->network);
+    }
+
+    public function test_gsm_import_saves_typed_network_not_globe_or_smart_from_sims(): void
+    {
+        $this->actingAs($this->admin);
+        $globe = GlobeSim::create([
+            'imei' => '123456789012111',
+            'mobile_number' => '09170001111',
+            'plan' => 'Corporate',
+            'network' => 'Globe',
+            'status' => 'Active',
+        ]);
+
+        $path = $this->spreadsheet([
+            ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan'],
+            ['gsm-east-1', '10.24.50.10', 'EAST-100', '8', 'Inbound', 'Alcar', 'root', 'secret', '', '', '', 'Eastern', ''],
+            ['', '', '', '', '', '', '', '', '1', '123456789012111', '09170001111', 'Globe SIM', 'Corporate'],
+        ]);
+
+        $preview = $this->postJson('/gsm-gateways/import/preview', [
+            'file' => $this->upload($path),
+        ])->assertOk()->json();
+        $this->assertTrue($preview['valid'], $preview['rows'][1]['error'] ?? '');
+
+        $this->postJson('/gsm-gateways/import/confirm', ['token' => $preview['token']])
+            ->assertOk()
+            ->assertJson(['records' => 1]);
+
+        $gateway = MediaGateway::where('site_code', 'EAST-100')->firstOrFail();
+        $this->assertSame('Eastern', $gateway->network);
+        $this->assertDatabaseHas('gateway_sim_assignments', [
+            'media_gateway_id' => $gateway->id,
+            'sim_type' => 'globe',
+            'sim_id' => $globe->id,
+            'port' => 1,
+        ]);
+
+        $export = $this->get('/gsm-gateways/export')->assertOk();
+        [$headers, $rows] = app(XlsxService::class)->read($export->getFile()->getPathname());
+        $networkIndex = array_search('Network', $headers, true);
+        $this->assertNotFalse($networkIndex);
+        $this->assertSame('Eastern', $rows[0][$networkIndex]);
     }
 
     public function test_program_location_import_and_sample_template(): void
@@ -367,6 +410,7 @@ class InventoryImportTest extends TestCase
                 'Mobile Number',
                 'Plan',
                 'IP',
+                'Port',
                 'Account Number',
                 'Contract Start',
                 'Contract End',
@@ -374,9 +418,9 @@ class InventoryImportTest extends TestCase
             $this->assertNotContains('Id', $exportHeaders);
             $this->assertNotContains('Last Updated', $exportHeaders);
             $exported = collect($exportRows)->first(fn ($row) => ($row[0] ?? '') === '356938035643401');
-            $this->assertSame('1/15/2026', $exported[5] ?? null);
-            $this->assertSame('12/15/2026', $exported[6] ?? null);
-            $this->assertCount(7, $exported);
+            $this->assertSame('1/15/2026', $exported[6] ?? null);
+            $this->assertSame('12/15/2026', $exported[7] ?? null);
+            $this->assertCount(8, $exported);
         }
     }
 

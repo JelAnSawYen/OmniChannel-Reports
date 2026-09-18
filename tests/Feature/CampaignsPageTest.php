@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\ChannelAllocationCampaign;
+use App\Models\SipChannel;
+use App\Models\SipChannelNumber;
 use App\Models\User;
 use App\Models\UserType;
 use App\Services\XlsxService;
@@ -60,6 +62,9 @@ class CampaignsPageTest extends TestCase
             ->assertSee('class="plus-btn"', false)
             ->assertSee('id="transferButton"', false)
             ->assertSee('id="campaign_location"', false)
+            ->assertSee('>Site</th>', false)
+            ->assertSee('for="campaign_location">Site</label>', false)
+            ->assertSee('Select Site')
             ->assertDontSee('Hardcoded Location');
 
         $css = file_get_contents(resource_path('css/app.css'));
@@ -118,6 +123,33 @@ class CampaignsPageTest extends TestCase
 
         $this->delete('/campaigns/'.$campaign->id)->assertRedirect();
         $this->assertDatabaseMissing('channel_allocation_campaigns', ['id' => $campaign->id]);
+    }
+
+    public function test_deleting_a_campaign_still_uses_the_existing_campaign_delete_action(): void
+    {
+        $this->actingAs($this->admin);
+        $campaign = ChannelAllocationCampaign::create([
+            'name' => 'Range Owner',
+            'fte' => 2,
+            'location' => 'WFH',
+        ]);
+        $this->post('/sip-channels', [
+            'campaign_id' => $campaign->id,
+            'etpi_sip_name' => 'SIP_RANGE_OWNER',
+            'from' => '400',
+            'to' => '402',
+        ])->assertRedirect();
+        $sip = SipChannel::where('etpi_sip_name', 'SIP_RANGE_OWNER')->firstOrFail();
+        $this->assertSame(3, SipChannelNumber::where('sip_channel_id', $sip->id)->count());
+
+        $html = $this->get('/campaigns')->assertOk()->getContent();
+        $this->assertStringContainsString('action="'.url('/campaigns/'.$campaign->id).'"', $html);
+        $this->assertStringContainsString('data-confirm-title="Delete Campaign"', $html);
+
+        $this->delete('/campaigns/'.$campaign->id)->assertRedirect();
+        $this->assertDatabaseMissing('channel_allocation_campaigns', ['id' => $campaign->id]);
+        $this->assertDatabaseMissing('sip_channels', ['id' => $sip->id, 'etpi_sip_name' => 'SIP_RANGE_OWNER']);
+        $this->assertSame(0, SipChannelNumber::where('sip_channel_id', $sip->id)->count());
     }
 
     public function test_campaigns_are_the_master_source_for_dropdowns_and_fte(): void
@@ -206,10 +238,10 @@ class CampaignsPageTest extends TestCase
             ->assertOk()
             ->assertDownload('campaigns-template.xlsx');
         [$headers] = app(XlsxService::class)->read($template->getFile()->getPathname());
-        $this->assertSame(['Campaigns', 'FTE', 'Location'], $headers);
+        $this->assertSame(['Campaigns', 'FTE', 'Site'], $headers);
 
         $path = $this->spreadsheet([
-            ['Campaigns', 'FTE', 'Location'],
+            ['Campaigns', 'FTE', 'Site'],
             ['Mynt', '10', 'Moon Base'],
         ]);
         $preview = $this->postJson('/campaigns/import/preview', [
@@ -220,7 +252,7 @@ class CampaignsPageTest extends TestCase
         $this->assertStringContainsString('Program Location', $preview['rows'][0]['error']);
 
         $validPath = $this->spreadsheet([
-            ['Campaigns', 'FTE', 'Location'],
+            ['Campaigns', 'FTE', 'Site'],
             ['Mynt', '10', 'WFH'],
             ['Chinabank', '4', 'alcar'],
         ]);
@@ -237,7 +269,7 @@ class CampaignsPageTest extends TestCase
 
         $export = $this->get('/campaigns/export')->assertOk()->assertDownload('campaigns.xlsx');
         [$exportHeaders] = app(XlsxService::class)->read($export->getFile()->getPathname());
-        $this->assertSame(['Campaigns', 'FTE', 'Location'], $exportHeaders);
+        $this->assertSame(['Campaigns', 'FTE', 'Site'], $exportHeaders);
         $this->assertNotContains('Id', $exportHeaders);
     }
 

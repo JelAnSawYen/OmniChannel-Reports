@@ -9,6 +9,7 @@ use App\Models\ChannelAllocationCampaign;
 use App\Models\MediaGateway;
 use App\Services\Logs\AuditLogger;
 use App\Services\XlsxService;
+use App\Support\Gsm\GsmGatewayWriter;
 use App\Support\GsmSimInventory;
 use App\Support\Inbound\ProgramInboundNumberValidator;
 use App\Support\Inbound\ProgramInboundSimLookup;
@@ -70,6 +71,7 @@ class OperationsDataController extends Controller
     {
         $config = $this->config($module);
         $data = $request->validate($this->rules($module), $this->messages($module));
+        $simPort = OperationCatalog::isSim($module) ? ($data['port'] ?? null) : null;
         if (OperationCatalog::isSim($module)) {
             $data = $this->applySimDefaults($module, $data);
             $data = $this->parseSimDates($data);
@@ -90,6 +92,9 @@ class OperationsDataController extends Controller
         } catch (UniqueConstraintViolationException $exception) {
             throw $this->uniqueConstraintValidation($module, $exception);
         }
+        if (OperationCatalog::isSim($module)) {
+            $this->syncSimPort($record, $module, (string) $data['ip_address'], $simPort);
+        }
         AuditLogger::log('Created', $config['title'], $config['title'].' record added', $record->id, $request);
 
         return back()->with('success', $config['title'].' record added successfully.');
@@ -99,6 +104,7 @@ class OperationsDataController extends Controller
     {
         [$config, $module, $id, $record] = $this->resolveRecord($request);
         $data = $request->validate($this->rules($module, $id), $this->messages($module));
+        $simPort = OperationCatalog::isSim($module) ? ($data['port'] ?? null) : null;
         if (OperationCatalog::isSim($module)) {
             $data = $this->applySimDefaults($module, $data);
             $data = $this->parseSimDates($data);
@@ -118,6 +124,9 @@ class OperationsDataController extends Controller
             $record->update($data);
         } catch (UniqueConstraintViolationException $exception) {
             throw $this->uniqueConstraintValidation($module, $exception);
+        }
+        if (OperationCatalog::isSim($module)) {
+            $this->syncSimPort($record, $module, (string) $data['ip_address'], $simPort);
         }
         AuditLogger::log('Updated', $config['title'], $config['title'].' record updated', $record->id, $request);
 
@@ -161,6 +170,9 @@ class OperationsDataController extends Controller
             ProgramInboundSimLookup::flush();
             $query->with(['campaign:id,name']);
         }
+        if ($isSim) {
+            $query->with('gatewayAssignment');
+        }
         $headers = $isInbound
             ? array_values($config['table_columns'] ?? $config['columns'])
             : ($isSim
@@ -169,26 +181,19 @@ class OperationsDataController extends Controller
         $fields = array_keys($config['columns']);
         try {
             $sequence = 0;
-            $path = $xlsx->export(
-                $headers,
-                $query->latest()->get()->map(function ($record) use ($fields, $isSim, $isInbound, $isDefective, &$sequence) {
-                    if ($isInbound) {
-                        $rows = $record->mobileDisplayRows();
-
-                        return [
-                            $record->campaign?->name ?: $record->program ?: '',
-                            implode("\n", $record->mobileList()),
-                            implode("\n", $record->landlineList()),
-                            implode("\n", array_map(static fn (array $row) => $row['hostname'], $rows)),
-                            implode("\n", array_map(static fn (array $row) => $row['port'], $rows)),
-                            GsmSimInventory::canonicalNetwork($record->network) ?: trim((string) ($record->network ?? '')),
-                            trim((string) ($record->remarks ?? '')),
-                        ];
-                    }
-
+            $records = $query->latest()->get();
+            $rows = $isInbound
+                ? $records->flatMap(fn ($record) => $this->inboundExportRows($record))
+                : $records->map(function ($record) use ($fields, $isSim, $isDefective, &$sequence) {
                     $sequence++;
                     $exportFields = $isSim ? array_keys(OperationCatalog::simTransferColumns()) : $fields;
                     $values = collect($exportFields)->map(function ($field) use ($record, $isSim, $isDefective) {
+                        if ($isSim && $field === 'port') {
+                            $port = $record->gatewayAssignment?->port;
+
+                            return $port ? (string) $port : '';
+                        }
+
                         $value = $record->{$field};
                         if ($value instanceof \DateTimeInterface) {
                             return ($isSim || $isDefective)
@@ -204,7 +209,10 @@ class OperationsDataController extends Controller
                     }
 
                     return array_merge([$sequence], $values);
-                }),
+                });
+            $path = $xlsx->export(
+                $headers,
+                $rows,
                 $module.'.xlsx'
             );
         } catch (\Throwable $exception) {
@@ -290,6 +298,7 @@ class OperationsDataController extends Controller
             'mobile_number' => ['required', 'string', 'max:50', Rule::unique($table, 'mobile_number')->ignore($id)],
             'plan' => ['required', 'string', 'max:255'],
             'ip_address' => ['required', 'ipv4', Rule::exists('media_gateways', 'ip_address')],
+            'port' => ['nullable', 'integer', 'min:1', 'max:512'],
             'account_number' => ['required', 'string', 'max:255'],
             'contract_start' => ['required', 'string'],
             'contract_end' => ['required', 'string'],
@@ -325,6 +334,23 @@ class OperationsDataController extends Controller
         $data['network'] = $module === 'smart-sim' ? 'Smart' : 'Globe';
 
         return $data;
+    }
+
+    private function syncSimPort(mixed $record, string $module, string $ip, mixed $port): void
+    {
+        $simType = $module === 'smart-sim' ? 'smart' : 'globe';
+        $existingPort = (int) ($record->gatewayAssignment?->port ?? 0);
+        $portNumber = is_numeric($port) && (int) $port > 0 ? (int) $port : $existingPort;
+        if ($portNumber < 1) {
+            return;
+        }
+
+        $gateway = MediaGateway::query()->where('ip_address', $ip)->first();
+        if (! $gateway) {
+            return;
+        }
+
+        GsmGatewayWriter::syncSimPort($gateway, $simType, (int) $record->id, $portNumber);
     }
 
     /**
@@ -485,7 +511,7 @@ class OperationsDataController extends Controller
         $data['landline_numbers'] = $landlines === [] ? null : $landlines;
         $data['number'] = $mobiles[0] ?? $landlines[0] ?? '';
         $data['status'] = $data['status'] ?? 'Active';
-        unset($data['media_gateway_id'], $data['port']);
+        unset($data['media_gateway_id'], $data['port'], $data['mobile_gateways']);
 
         $messages = [];
         if ($data['number'] === '') {
@@ -520,6 +546,35 @@ class OperationsDataController extends Controller
         }
 
         return $data;
+    }
+
+    /**
+     * @return list<list<mixed>>
+     */
+    private function inboundExportRows(mixed $record): array
+    {
+        $mobiles = $record->mobileDisplayRows();
+        $landlines = $record->landlineList();
+        $campaign = $record->campaign?->name ?: $record->program ?: '';
+        $network = GsmSimInventory::canonicalNetwork($record->network) ?: trim((string) ($record->network ?? ''));
+        $remarks = trim((string) ($record->remarks ?? ''));
+        $count = max(count($mobiles), count($landlines), 1);
+        $rows = [];
+
+        for ($index = 0; $index < $count; $index++) {
+            $mobile = $mobiles[$index] ?? ['mobile' => '', 'hostname' => '', 'port' => ''];
+            $rows[] = [
+                $index === 0 ? $campaign : '',
+                $mobile['mobile'] ?? '',
+                $landlines[$index] ?? '',
+                $mobile['hostname'] ?? '',
+                $mobile['port'] ?? '',
+                $index === 0 ? $network : '',
+                $index === 0 ? $remarks : '',
+            ];
+        }
+
+        return $rows;
     }
 
     private function uniqueConstraintValidation(string $module, UniqueConstraintViolationException $exception): ValidationException

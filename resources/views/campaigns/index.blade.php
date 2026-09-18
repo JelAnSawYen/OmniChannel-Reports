@@ -40,7 +40,7 @@
     <th>Id</th>
     <th>Campaign</th>
     <th>FTE</th>
-    <th>Location</th>
+    <th>Site</th>
     <th class="actions-column">Actions</th>
 </tr>
 </thead>
@@ -119,9 +119,9 @@
                         <input class="form-control" id="campaign_fte" name="fte" type="number" min="0" step="1" required>
                     </div>
                     <div class="form-group">
-                        <label for="campaign_location">Location</label>
+                        <label for="campaign_location">Site</label>
                         <select class="form-control" id="campaign_location" name="location" required>
-                            <option value="" selected hidden>Select Location</option>
+                            <option value="" selected hidden>Select Site</option>
                             @foreach($locations as $slug => $name)
                                 <option value="{{ $name }}">{{ $name }}</option>
                             @endforeach

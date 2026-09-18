@@ -3,6 +3,7 @@
 namespace App\Services\ChannelAllocation;
 
 use App\Models\ChannelAllocationCampaign;
+use App\Support\ChannelAllocationResolver;
 use App\Services\XlsxService;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
@@ -21,15 +22,12 @@ class ChannelAllocationImportService
     {
         return [
             'Campaign',
-            'Media Gateway',
             'FTE',
             'Caller ID',
             'Prefix',
             'Remarks',
-            'Channel Allocation',
-            'Network',
+            'Channel',
             'Line Priority',
-            'Total Channel Allocated',
         ];
     }
 
@@ -59,7 +57,7 @@ class ChannelAllocationImportService
 
         [$headers, $rawRows] = $xlsx->read($file->getRealPath() ?: $file->getPathname());
         $map = $this->headerMap($headers);
-        if (! isset($map['campaign']) || ! isset($map['channel_allocation'])) {
+        if (! isset($map['campaign']) || ! isset($map['channel'])) {
             throw new RuntimeException('The file is missing required columns. Download the official Excel template and try again.');
         }
 
@@ -72,31 +70,24 @@ class ChannelAllocationImportService
         $payloadCampaigns = [];
 
         $carryCampaign = '';
-        $carryGateway = null;
         $carryCaller = null;
         $carryPrefix = null;
-        $carryNetwork = null;
         $carryRemarks = '';
 
         foreach ($rawRows as $offset => $raw) {
             $excelRow = $offset + 2;
             $campaignName = $this->cell($raw, $map, 'campaign');
-            $rawGateway = $this->cell($raw, $map, 'media_gateway');
             $rawCaller = $this->cell($raw, $map, 'caller_id');
             $rawPrefix = $this->cell($raw, $map, 'prefix');
             $remarks = $this->cell($raw, $map, 'remarks');
-            $channelAllocation = $this->cell($raw, $map, 'channel_allocation');
-            $rawNetwork = $this->cell($raw, $map, 'network');
+            $channel = $this->cell($raw, $map, 'channel');
             $linePriority = $this->cell($raw, $map, 'line_priority');
-            $totalAllocated = $this->cell($raw, $map, 'total_channel_allocated');
 
             if ($campaignName === '') {
                 $campaignName = $carryCampaign;
             }
-            $mediaGateway = $this->applyCarryForward($carryGateway, $rawGateway);
             $callerId = $this->applyCarryForward($carryCaller, $rawCaller);
             $prefix = $this->applyCarryForward($carryPrefix, $rawPrefix);
-            $network = $this->applyCarryForward($carryNetwork, $rawNetwork);
             if ($remarks === '' && $campaignName === $carryCampaign) {
                 $remarks = $carryRemarks;
             }
@@ -108,57 +99,45 @@ class ChannelAllocationImportService
                 $errors[] = 'Campaign must be 255 characters or fewer';
             }
 
-            if ($mediaGateway === '' && $rawGateway !== '-' && $carryGateway === null) {
-                $errors[] = 'Missing Media Gateway';
-            } elseif ($mediaGateway !== '') {
-                $this->validateMediaGateway($mediaGateway, $errors);
-            }
-
             $linePriorityValue = $this->parseInteger($linePriority, 'Line Priority', false, $errors);
-            $totalValue = $this->parseInteger($totalAllocated, 'Total Channel Allocated', true, $errors);
-
-            if ($channelAllocation === '') {
-                $errors[] = 'Channel Allocation is required';
-            } elseif ($channelAllocation === '-') {
-                $errors[] = 'Channel Allocation cannot be -';
-            } elseif (mb_strlen($channelAllocation) > 255) {
-                $errors[] = 'Channel Allocation must be 255 characters or fewer';
-            }
-
-            if (mb_strlen($network) > 255) {
-                $errors[] = 'Network must be 255 characters or fewer';
+            $resolved = ChannelAllocationResolver::resolve($channel);
+            if (! ($resolved['ok'] ?? false)) {
+                $errors[] = $resolved['error'] ?? 'Channel is invalid';
             }
 
             $campaignKey = mb_strtolower($campaignName);
-            $allocationKey = $campaignKey.'|'.mb_strtolower($channelAllocation);
-            if ($campaignName !== '' && $channelAllocation !== '') {
+            $allocationKey = $campaignKey.'|'.mb_strtolower($channel);
+            if ($campaignName !== '' && $channel !== '' && $channel !== '-') {
                 if (isset($fileAllocations[$allocationKey])) {
-                    $errors[] = 'Duplicate Channel Allocation in file';
+                    $errors[] = 'Duplicate Channel in file';
                 } else {
                     $fileAllocations[$allocationKey] = $excelRow;
                 }
 
                 $existing = $existingCampaigns->get($campaignKey);
-                if ($existing && $existing->allocations->contains(fn ($allocation) => strcasecmp((string) $allocation->channel_allocation, $channelAllocation) === 0)) {
-                    $errors[] = 'Channel Allocation already exists';
+                if ($existing && $existing->allocations->contains(function ($allocation) use ($channel) {
+                    return strcasecmp($allocation->channelLabel(), $channel) === 0;
+                })) {
+                    $errors[] = 'Channel already exists';
                 }
             }
 
             $existing = $campaignName !== '' ? $existingCampaigns->get($campaignKey) : null;
             $fteDisplay = ($existing && $existing->fte !== null) ? (string) $existing->fte : '';
+            $network = ($resolved['ok'] ?? false) ? (string) ($resolved['network'] ?? '') : '';
+            $channelCount = ($resolved['ok'] ?? false) ? $resolved['total_channel_allocated'] : null;
 
             $ok = $errors === [];
             $previewRows[] = [
                 'row' => $excelRow,
                 'campaign' => $campaignName,
-                'media_gateway' => $mediaGateway,
                 'fte' => $fteDisplay,
                 'caller_id' => $callerId,
                 'prefix' => $prefix,
-                'channel_allocation' => $channelAllocation,
+                'channel' => $channel,
                 'network' => $network,
                 'line_priority' => $linePriority,
-                'total_channel_allocated' => $totalAllocated,
+                'total_channel_allocated' => $channelCount === null ? '' : (string) $channelCount,
                 'status' => $ok ? 'Valid' : 'Error',
                 'error' => implode('; ', $errors),
                 'valid' => $ok,
@@ -168,7 +147,6 @@ class ChannelAllocationImportService
                 if (! isset($payloadCampaigns[$campaignKey])) {
                     $payloadCampaigns[$campaignKey] = [
                         'name' => $campaignName,
-                        'media_gateway' => $mediaGateway !== '' ? $mediaGateway : null,
                         'caller_id' => $callerId !== '' ? $callerId : null,
                         'prefix' => $prefix !== '' ? $prefix : null,
                         'remarks' => $remarks !== '' ? $remarks : null,
@@ -187,20 +165,18 @@ class ChannelAllocationImportService
                     }
                 }
                 $payloadCampaigns[$campaignKey]['allocations'][] = [
-                    'media_gateway' => $mediaGateway !== '' ? $mediaGateway : null,
-                    'channel_allocation' => $channelAllocation,
-                    'network' => $network !== '' ? $network : null,
+                    'media_gateway' => $resolved['media_gateway'],
+                    'channel_allocation' => $resolved['channel'],
+                    'network' => $resolved['network'],
                     'line_priority' => $linePriorityValue,
-                    'total_channel_allocated' => $totalValue,
+                    'total_channel_allocated' => $resolved['total_channel_allocated'],
                 ];
             }
 
             if ($campaignName !== '') {
                 $carryCampaign = $campaignName;
-                $carryGateway = $this->nextCarry($carryGateway, $rawGateway, $mediaGateway);
                 $carryCaller = $this->nextCarry($carryCaller, $rawCaller, $callerId);
                 $carryPrefix = $this->nextCarry($carryPrefix, $rawPrefix, $prefix);
-                $carryNetwork = $this->nextCarry($carryNetwork, $rawNetwork, $network);
                 $carryRemarks = $remarks;
             }
         }
@@ -218,7 +194,7 @@ class ChannelAllocationImportService
             'summary' => [
                 'total' => count($previewRows),
                 'campaigns' => count(array_unique(array_filter(array_column($previewRows, 'campaign')))),
-                'allocations' => count(array_filter($previewRows, fn ($row) => $row['channel_allocation'] !== '')),
+                'allocations' => count(array_filter($previewRows, fn ($row) => $row['channel'] !== '')),
                 'valid' => $validCount,
                 'errors' => $errorCount,
             ],
@@ -247,7 +223,6 @@ class ChannelAllocationImportService
                     try {
                         $campaign = ChannelAllocationCampaign::query()->create([
                             'name' => $item['name'],
-                            'media_gateway' => $item['media_gateway'],
                             'caller_id' => $item['caller_id'],
                             'prefix' => $item['prefix'],
                             'remarks' => $item['remarks'],
@@ -321,15 +296,13 @@ class ChannelAllocationImportService
     {
         $aliases = [
             'campaign' => 'campaign',
-            'media gateway' => 'media_gateway',
             'fte' => 'fte',
             'caller id' => 'caller_id',
             'prefix' => 'prefix',
             'remarks' => 'remarks',
-            'channel allocation' => 'channel_allocation',
-            'network' => 'network',
+            'channel' => 'channel',
+            'channel allocation' => 'channel',
             'line priority' => 'line_priority',
-            'total channel allocated' => 'total_channel_allocated',
         ];
 
         $map = [];
@@ -378,27 +351,6 @@ class ChannelAllocationImportService
         }
 
         return $carry;
-    }
-
-    /**
-     * @param  list<string>  $errors
-     */
-    private function validateMediaGateway(string $value, array &$errors): void
-    {
-        $parts = array_values(array_filter(array_map('trim', explode(',', $value)), fn (string $part) => $part !== ''));
-        if ($parts === [] || count($parts) > 2) {
-            $errors[] = 'Media Gateway must contain 1 or 2 IPv4 addresses';
-
-            return;
-        }
-
-        foreach ($parts as $part) {
-            if (filter_var($part, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
-                $errors[] = 'Media Gateway must be a valid IPv4 address';
-
-                return;
-            }
-        }
     }
 
     /**

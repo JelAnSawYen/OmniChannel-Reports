@@ -612,7 +612,7 @@ function initBulkSelection(){
     }
 
     function selectAll(){
-        const nested=document.body.dataset.page==='channel-range-list'?null:nestedScope();
+        const nested=nestedScope();
         const rows=nested?qsa('[data-bulk-row="nested"]',nested):qsa('[data-bulk-row="main"]');
         if(!rows.length)return;
         activePanel=nested||null;
@@ -732,7 +732,6 @@ function initBulkSelection(){
         if(!(event.ctrlKey||event.metaKey))return;
         if(event.key!=='a'&&event.key!=='A')return;
         if(event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]'))return;
-        if(qs('#gsmSimModal.visible'))return;
         if(!qsa('[data-bulk-row]').length)return;
         event.preventDefault();
         selectAll();
@@ -761,9 +760,7 @@ async function initMedia(){
         perPage:Number(initial.get('per_page')||10)
     };
     let deleteId=null;
-    let simDelete=null;
     const expandedIds=new Set();
-    const canCreate=!!qs('[data-open-modal="add-media-gateway"]');
 
     const transfer=qs('#transferButton');
 
@@ -807,19 +804,6 @@ async function initMedia(){
     const editIcon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>';
     const deleteIcon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="m6 7 1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>';
     const dotsIcon='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>';
-    let simCatalog=[];
-    let simPickedList=[];
-    let simFilter='';
-    let simPickedPort='';
-    let simAssignCapacity={channelCount:0,assignmentCount:0};
-
-    function isSimAddMode(){
-        return !qs('#gsmSimAssignmentId')?.value;
-    }
-
-    function simIsPicked(sim){
-        return simPickedList.some(item=>simKey(item)===simKey(sim));
-    }
 
     function passwordCell(g,canReveal){
         return `<span class="pdc-secret">
@@ -852,98 +836,6 @@ async function initMedia(){
         </div>`;
     }
 
-    function simKey(item){
-        return `${item.sim_type}:${item.id}`;
-    }
-
-    function renderSimList(){
-        const body=qs('#gsmSimRows');
-        if(!body)return;
-        const needle=simFilter.trim().toLowerCase();
-        const rows=(simCatalog||[]).filter(sim=>{
-            if(!needle)return true;
-            return String(sim.imei||'').toLowerCase().includes(needle) || String(sim.mobile_number||'').toLowerCase().includes(needle);
-        });
-        if(!qs('#gsmSimNetwork')?.value){
-            body.innerHTML='<tr><td colspan="4">Select a network to load SIM records.</td></tr>';
-            return;
-        }
-        if(!rows.length){
-            body.innerHTML='<tr><td colspan="4">No SIM records found.</td></tr>';
-            return;
-        }
-        body.innerHTML=rows.map(sim=>{
-            const selected=simIsPicked(sim);
-            return `<tr class="gsm-sim-row${selected?' is-selected':''}" data-sim-type="${escapeHtml(sim.sim_type)}" data-sim-id="${escapeHtml(sim.id)}">
-                <td>${escapeHtml(sim.imei||'—')}</td>
-                <td>${escapeHtml(sim.mobile_number||'—')}</td>
-                <td>${escapeHtml(sim.plan||'—')}</td>
-                <td>${selected && simPickedList.length===1 && simPickedPort?escapeHtml(simPickedPort):'—'}</td>
-            </tr>`;
-        }).join('');
-    }
-
-    function pickSim(sim, additive){
-        if(!additive || !isSimAddMode()){
-            simPickedList=[sim];
-            renderSimList();
-            return;
-        }
-        const idx=simPickedList.findIndex(item=>simKey(item)===simKey(sim));
-        if(idx>=0)simPickedList.splice(idx,1);
-        else simPickedList.push(sim);
-        renderSimList();
-    }
-
-    function selectVisibleSims(){
-        if(!isSimAddMode())return;
-        const needle=simFilter.trim().toLowerCase();
-        simPickedList=(simCatalog||[]).filter(sim=>{
-            if(!needle)return true;
-            return String(sim.imei||'').toLowerCase().includes(needle) || String(sim.mobile_number||'').toLowerCase().includes(needle);
-        });
-        renderSimList();
-    }
-
-    async function loadSims(network){
-        const body=qs('#gsmSimRows');
-        if(!body)return;
-        if(!network){
-            simCatalog=[];
-            renderSimList();
-            return;
-        }
-        body.innerHTML='<tr><td colspan="4">Loading SIM records...</td></tr>';
-        const params=new URLSearchParams({network});
-        const gatewayId=qs('#gsmSimGatewayId')?.value||'';
-        const assignmentId=qs('#gsmSimAssignmentId')?.value||'';
-        if(gatewayId)params.set('gateway_id',gatewayId);
-        if(assignmentId)params.set('assignment_id',assignmentId);
-        try{
-            const response=await fetch(base+'/sims?'+params.toString(),{
-                headers:{Accept:'application/json','X-Requested-With':'XMLHttpRequest'}
-            });
-            const data=await response.json().catch(()=>({}));
-            if(!response.ok)throw new Error(data.message||'Unable to load SIM records.');
-            simCatalog=data.records||[];
-            renderSimList();
-        }catch(error){
-            body.innerHTML=`<tr><td colspan="4">${escapeHtml(error.message||'Unable to load SIM records.')}</td></tr>`;
-        }
-    }
-
-    function resetSims(){
-        simCatalog=[];
-        simPickedList=[];
-        simPickedPort='';
-        simFilter='';
-        const search=qs('#gsmSimSearch');
-        if(search)search.value='';
-        const network=qs('#gsmSimNetwork');
-        if(network)network.value='';
-        renderSimList();
-    }
-
     function closeGsmMenus(except){
         qsa('#mediaGatewayRows .ca-menu.open').forEach(menu=>{
             if(menu===except)return;
@@ -962,30 +854,36 @@ async function initMedia(){
         </span>`;
     }
 
-    function nestedSimTable(g,canEdit,canDelete){
+    function nestedSimTable(g,canDelete){
         const assignments=g.assignments||[];
+        const bulkUrl=base+'/'+g.id+'/assignments/bulk';
         const rows=assignments.length
-            ? assignments.map(item=>`<tr${canDelete?` data-bulk-row="nested" data-bulk-id="${escapeHtml(item.assignment_id)}" data-bulk-url="${escapeHtml(base+'/'+g.id+'/assignments/bulk')}" data-bulk-ajax="1"`:''}>
+            ? assignments.map(item=>{
+                const assignmentId=Number(item.assignment_id||0);
+                const simType=String(item.sim_type||'').trim();
+                const simId=Number(item.id||0);
+                const bulkId=assignmentId?String(assignmentId):(simType && simId?`${simType}-${simId}`:'');
+                const bulk=canDelete && bulkId?` data-bulk-row="nested" data-bulk-id="${escapeHtml(bulkId)}" data-bulk-url="${escapeHtml(bulkUrl)}" data-bulk-ajax="1"`:'';
+                return `<tr${bulk}>
                 <td>${escapeHtml(item.imei||'—')}</td>
                 <td>${escapeHtml(item.mobile_number||'—')}</td>
                 <td>${escapeHtml(item.plan||'—')}</td>
                 <td>${escapeHtml(g.ip_address||'—')}</td>
                 <td>${escapeHtml(item.port||'—')}</td>
-                <td class="actions-column">
-                    <div class="row-actions">
-                        ${canEdit?`<button class="action-btn edit" type="button" data-gsm-sim-edit data-gateway-id="${escapeHtml(g.id)}" data-assignment-id="${escapeHtml(item.assignment_id)}" data-sim-type="${escapeHtml(item.sim_type)}" data-sim-id="${escapeHtml(item.id)}" data-network="${escapeHtml(item.network||'')}" data-port="${escapeHtml(item.port||'')}" title="Edit" aria-label="Edit">${editIcon}</button>`:''}
-                        ${canDelete?`<button class="action-btn delete" type="button" data-gsm-sim-delete data-gateway-id="${escapeHtml(g.id)}" data-assignment-id="${escapeHtml(item.assignment_id)}" title="Delete" aria-label="Delete">${deleteIcon}</button>`:''}
-                    </div>
-                </td>
-            </tr>`).join('')
-            : `<tr><td colspan="6"><div class="empty-state">No SIM assignments.</div></td></tr>`;
-        const plus=canCreate
-            ? `<button class="plus-btn" type="button" data-gsm-sim-add="${escapeHtml(g.id)}" data-channel-count="${escapeHtml(g.channel_count||'')}" data-assignment-count="${assignments.length}" title="Add SIM Assignment" aria-label="Add SIM Assignment">+</button>`
-            : '';
+            </tr>`;
+            }).join('')
+            : `<tr><td colspan="5"><div class="empty-state">No SIM assignments.</div></td></tr>`;
         return `<tr class="ca-nested-row" id="gsm-panel-${escapeHtml(g.id)}" hidden>
-            <td colspan="9">
+            <td colspan="10">
                 <div class="ca-nested">
                     <table class="gsm-sim-nested" aria-label="SIM assignments">
+                        <colgroup>
+                            <col class="gsm-sim-col-imei">
+                            <col class="gsm-sim-col-mobile">
+                            <col class="gsm-sim-col-plan">
+                            <col class="gsm-sim-col-ip">
+                            <col class="gsm-sim-col-port">
+                        </colgroup>
                         <thead>
                             <tr>
                                 <th>IMEI</th>
@@ -993,7 +891,6 @@ async function initMedia(){
                                 <th>Plan</th>
                                 <th>IP</th>
                                 <th>Port</th>
-                                <th class="actions-column"><span class="ca-actions-head">Actions${plus}</span></th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>
@@ -1014,15 +911,10 @@ async function initMedia(){
         });
     }
 
-    function setDeleteCopy(kind){
+    function setDeleteCopy(){
         const title=qs('#deleteModalTitle');
         const body=qs('#deleteModalBody');
         if(!title||!body)return;
-        if(kind==='sim'){
-            title.textContent='Delete SIM Assignment';
-            body.textContent='Are you sure you want to delete this SIM assignment?';
-            return;
-        }
         title.textContent='Delete '+entity;
         body.textContent='Are you sure you want to delete this '+entity+'?';
     }
@@ -1032,7 +924,7 @@ async function initMedia(){
         const canEdit=document.body.dataset.canEdit==='1';
         const canDelete=document.body.dataset.canDelete==='1';
         const canReveal=document.body.dataset.canRevealSecrets==='1';
-        const colspan=isGsm?9:10;
+        const colspan=10;
 
         closeGsmMenus();
         if(!dom.rows)return;
@@ -1044,12 +936,13 @@ async function initMedia(){
                 <td>${escapeHtml(g.ip_address)}</td>
                 <td>${escapeHtml(g.site_code)}</td>
                 <td>${escapeHtml(g.channel_count||'—')}</td>
+                <td>${escapeHtml(g.network||'—')}</td>
                 <td>${escapeHtml(g.device_function||'—')}</td>
                 <td>${escapeHtml(g.site_name)}</td>
                 <td>${escapeHtml(g.username)}</td>
                 <td>${passwordCell(g,canReveal)}</td>
                 <td class="actions-column">${actionsCell(g,canEdit,canDelete,canReveal)}</td>
-            </tr>${nestedSimTable(g,canEdit,canDelete)}`;
+            </tr>${nestedSimTable(g,canDelete)}`;
                 }
                 return `<tr${canDelete?` data-bulk-row="main" data-bulk-id="${escapeHtml(g.id)}" data-bulk-url="${escapeHtml(base+'/bulk')}" data-bulk-ajax="1"`:''}>
                 <td>${escapeHtml(g.ip_address)}</td>
@@ -1125,7 +1018,7 @@ async function initMedia(){
             const element=qs('#'+field);
             if(!element)return;
             const value=source[field]||'';
-            if((field==='site_name' || field==='device_function' || field==='network') && element.tagName==='SELECT' && value){
+            if((field==='site_name' || field==='device_function') && element.tagName==='SELECT' && value){
                 const exists=[...element.options].some((option)=>option.value===value);
                 if(!exists){
                     const option=document.createElement('option');
@@ -1194,139 +1087,7 @@ async function initMedia(){
         }
     }
 
-    async function postSimAssignment(gatewayId, assignmentId, network, sim){
-        const formData=new FormData();
-        formData.append('network', network);
-        formData.append('sim_type', sim.sim_type);
-        formData.append('sim_id', String(sim.id));
-        if(assignmentId)formData.append('_method','PUT');
-        const endpoint=assignmentId
-            ? base+'/'+encodeURIComponent(gatewayId)+'/assignments/'+encodeURIComponent(assignmentId)
-            : base+'/'+encodeURIComponent(gatewayId)+'/assignments';
-        const response=await fetch(endpoint,{
-            method:'POST',
-            headers:{
-                Accept:'application/json',
-                'X-CSRF-TOKEN':csrf(),
-                'X-Requested-With':'XMLHttpRequest'
-            },
-            body:formData
-        });
-        const data=await response.json().catch(()=>({}));
-        if(!response.ok){
-            const validation=Object.values(data.errors||{}).flat().join(' ');
-            throw new Error(data.message||validation||`Unable to save SIM assignment (${response.status})`);
-        }
-        return data;
-    }
-
-    async function saveSimAssignment(event){
-        event.preventDefault();
-        const gatewayId=qs('#gsmSimGatewayId')?.value;
-        const assignmentId=qs('#gsmSimAssignmentId')?.value;
-        const network=qs('#gsmSimNetwork')?.value||'';
-        const picked=simPickedList.slice();
-        if(!gatewayId)return;
-        if(!network || !picked.length){
-            flash('Select a network and a SIM record.','error');
-            return;
-        }
-        if(!assignmentId){
-            const remaining=Math.max(0, Number(simAssignCapacity.channelCount||0)-Number(simAssignCapacity.assignmentCount||0));
-            if(simAssignCapacity.channelCount>0 && picked.length>remaining){
-                flash('SIM assignments cannot exceed the Channel Count.','error');
-                return;
-            }
-        }
-        try{
-            let data=null;
-            if(assignmentId){
-                data=await postSimAssignment(gatewayId, assignmentId, network, picked[0]);
-            }else{
-                for(const sim of picked){
-                    data=await postSimAssignment(gatewayId, '', network, sim);
-                    simAssignCapacity.assignmentCount+=1;
-                }
-            }
-            hideModal('gsmSimModal');
-            expandedIds.add(String(gatewayId));
-            flash(assignmentId || picked.length===1
-                ? (data?.message||'Saved successfully.')
-                : 'SIM assignments added successfully.');
-            await load(state.page);
-        }catch(error){
-            expandedIds.add(String(gatewayId));
-            flash(error.message||'Unable to save SIM assignment.','error');
-            await load(state.page);
-        }
-    }
-
-    function openSimAdd(button){
-        const gatewayId=button.dataset.gsmSimAdd;
-        const channelCount=Number(button.dataset.channelCount||0);
-        const assignmentCount=Number(button.dataset.assignmentCount||0);
-        if(channelCount>0 && assignmentCount>=channelCount){
-            flash('SIM assignments cannot exceed the Channel Count.','error');
-            return;
-        }
-        qs('#gsmSimModalTitle').textContent='Add SIM Assignment';
-        qs('#gsmSimGatewayId').value=gatewayId;
-        qs('#gsmSimAssignmentId').value='';
-        simAssignCapacity={channelCount,assignmentCount};
-        resetSims();
-        showModal('gsmSimModal');
-    }
-
-    function openSimEdit(button){
-        qs('#gsmSimModalTitle').textContent='Edit SIM Assignment';
-        qs('#gsmSimGatewayId').value=button.dataset.gatewayId||'';
-        qs('#gsmSimAssignmentId').value=button.dataset.assignmentId||'';
-        simPickedList=[{
-            id:button.dataset.simId,
-            sim_type:button.dataset.simType
-        }];
-        simPickedPort=button.dataset.port||'';
-        simFilter='';
-        const search=qs('#gsmSimSearch');
-        if(search)search.value='';
-        const network=qs('#gsmSimNetwork');
-        if(network){
-            const value=button.dataset.network||'';
-            if(value && ![...network.options].some(option=>option.value===value)){
-                const option=document.createElement('option');
-                option.value=value;
-                option.textContent=value;
-                network.appendChild(option);
-            }
-            network.value=value;
-        }
-        loadSims(qs('#gsmSimNetwork')?.value||'');
-        showModal('gsmSimModal');
-    }
-
     async function remove(){
-        if(simDelete){
-            try{
-                const response=await fetch(base+'/'+encodeURIComponent(simDelete.gatewayId)+'/assignments/'+encodeURIComponent(simDelete.assignmentId),{
-                    method:'DELETE',
-                    headers:{
-                        Accept:'application/json',
-                        'X-CSRF-TOKEN':csrf(),
-                        'X-Requested-With':'XMLHttpRequest'
-                    }
-                });
-                const data=await response.json().catch(()=>({}));
-                if(!response.ok)throw new Error(data.message||`Unable to delete (${response.status})`);
-                hideModal('deleteModal');
-                expandedIds.add(String(simDelete.gatewayId));
-                simDelete=null;
-                flash(data.message||'Deleted successfully.');
-                await load(state.page);
-            }catch(error){
-                flash(error.message||'Unable to delete SIM assignment.','error');
-            }
-            return;
-        }
         if(!deleteId)return;
 
         try{
@@ -1376,30 +1137,8 @@ async function initMedia(){
             openEdit(button);
         });
         qsa('#mediaGatewayRows [data-delete-id]').forEach(button=>button.onclick=()=>{
-            simDelete=null;
             deleteId=button.dataset.deleteId;
-            setDeleteCopy('gateway');
-            showModal('deleteModal');
-        });
-        qsa('#mediaGatewayRows [data-gsm-sim-add]').forEach(button=>button.onclick=event=>{
-            event.preventDefault();
-            event.stopPropagation();
-            openSimAdd(button);
-        });
-        qsa('#mediaGatewayRows [data-gsm-sim-edit]').forEach(button=>button.onclick=event=>{
-            event.preventDefault();
-            event.stopPropagation();
-            openSimEdit(button);
-        });
-        qsa('#mediaGatewayRows [data-gsm-sim-delete]').forEach(button=>button.onclick=event=>{
-            event.preventDefault();
-            event.stopPropagation();
-            deleteId=null;
-            simDelete={
-                gatewayId:button.dataset.gatewayId,
-                assignmentId:button.dataset.assignmentId
-            };
-            setDeleteCopy('sim');
+            setDeleteCopy();
             showModal('deleteModal');
         });
         qsa('#paginationLinks [data-page]').forEach(button=>button.onclick=event=>{
@@ -1416,33 +1155,8 @@ async function initMedia(){
         input.type=input.type==='password'?'text':'password';
     });
     dom.form?.addEventListener('submit',save);
-    qs('#gsmSimForm')?.addEventListener('submit',saveSimAssignment);
     dom.deleteConfirm?.addEventListener('click',remove);
 
-    qs('#gsmSimNetwork')?.addEventListener('change',()=>{
-        simPickedList=[];
-        simPickedPort='';
-        loadSims(qs('#gsmSimNetwork').value);
-    });
-    qs('#gsmSimSearch')?.addEventListener('input',()=>{
-        simFilter=qs('#gsmSimSearch').value||'';
-        renderSimList();
-    });
-    qs('#gsmSimRows')?.addEventListener('click',event=>{
-        const row=event.target.closest('.gsm-sim-row');
-        if(!row)return;
-        if(event.ctrlKey||event.metaKey)event.preventDefault();
-        const sim=simCatalog.find(item=>String(item.id)===String(row.dataset.simId) && item.sim_type===row.dataset.simType);
-        if(sim)pickSim(sim, event.ctrlKey||event.metaKey);
-    });
-    document.addEventListener('keydown',event=>{
-        if(!(event.ctrlKey||event.metaKey))return;
-        if(event.key!=='a'&&event.key!=='A')return;
-        if(!qs('#gsmSimModal.visible') || !isSimAddMode())return;
-        if(event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]'))return;
-        event.preventDefault();
-        selectVisibleSims();
-    });
     if(isGsm && !document.body.dataset.gsmMenuBound){
         document.body.dataset.gsmMenuBound='1';
         document.addEventListener('click',event=>{
@@ -1554,7 +1268,7 @@ function initDashboard(){
         if(!slice.length){
             body='<tr><td colspan="4"><div class="empty-state">No campaigns match this search.</div></td></tr>';
         }else{
-            body=slice.map(row=>`<tr><td>${escapeHtml(row.name)}</td><td class="num">${escapeHtml(row.total_display||formatNumber(row.total))}</td><td class="num">${escapeHtml(row.sip_display||formatNumber(row.sip))}</td><td class="num">${escapeHtml(row.gsm_display||formatNumber(row.gsm))}</td></tr>`).join('');
+            body=slice.map(row=>`<tr><td><span class="campaigns-name">${escapeHtml(row.name)}</span></td><td class="num">${escapeHtml(row.total_display||formatNumber(row.total))}</td><td class="num">${escapeHtml(row.sip_display||formatNumber(row.sip))}</td><td class="num">${escapeHtml(row.gsm_display||formatNumber(row.gsm))}</td></tr>`).join('');
             body+=`<tr class="dash-total-row"><td>Total</td><td class="num">${formatNumber(sum('total'))}</td><td class="num">${formatNumber(sum('sip'))}</td><td class="num">${formatNumber(sum('gsm'))}</td></tr>`;
         }
         const pages=pagerMarkup(utilPage,lastPage,(page,label,active)=>active

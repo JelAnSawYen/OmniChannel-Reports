@@ -146,6 +146,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             ->assertSee('Hostname')
             ->assertSee('Serial Number')
             ->assertSee('Channel Count')
+            ->assertSee('data-sort="network"', false)
             ->assertSee('>Function<', false)
             ->assertSee('>Site<', false)
             ->assertSee('>User<', false)
@@ -457,11 +458,27 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         $page = $this->get('/gsm-gateways')->assertOk();
         $page->assertSee('123456789012345')
             ->assertSee('09181234567')
-            ->assertSee('class="action-btn edit"', false)
-            ->assertSee('class="action-btn delete"', false)
-            ->assertSee('data-gsm-sim-add="'.$gatewayId.'"', false)
+            ->assertSee('data-open-modal="add-media-gateway"', false)
+            ->assertSee('class="ca-menu-item edit"', false)
+            ->assertSee('class="ca-menu-item delete"', false)
+            ->assertDontSee('class="action-btn edit"', false)
+            ->assertDontSee('class="action-btn delete"', false)
+            ->assertDontSee('data-gsm-sim-add', false)
+            ->assertDontSee('data-gsm-sim-edit', false)
+            ->assertDontSee('data-gsm-sim-delete', false)
+            ->assertDontSee('id="gsmSimModal"', false)
+            ->assertDontSee('Add SIM Assignment', false)
             ->assertDontSee('SIM Assignments (', false)
             ->assertDontSee('type="radio"', false);
+
+        $nested = Str::betweenFirst($page->getContent(), 'class="gsm-sim-nested"', '</table>');
+        $this->assertStringContainsString('>IMEI</th>', $nested);
+        $this->assertStringContainsString('>Mobile Number</th>', $nested);
+        $this->assertStringContainsString('>Plan</th>', $nested);
+        $this->assertStringContainsString('>IP</th>', $nested);
+        $this->assertStringContainsString('>Port</th>', $nested);
+        $this->assertStringNotContainsString('Actions', $nested);
+        $this->assertStringNotContainsString('plus-btn', $nested);
 
         $this->actingAs($this->user($this->standardType));
         $this->postJson('/gsm-gateways/'.$gatewayId.'/assignments', [
@@ -519,6 +536,93 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         ])->assertUnprocessable();
 
         $this->assertSame(2, GatewaySimAssignment::query()->where('media_gateway_id', $gatewayId)->count());
+    }
+
+    public function test_gsm_gateway_automatically_displays_sims_by_matching_ip(): void
+    {
+        $this->actingAs($this->user($this->adminType));
+
+        $first = MediaGateway::create([
+            'hostname' => 'globe_globesib',
+            'site_name' => 'Alcar',
+            'site_code' => 'SNIP01',
+            'ip_address' => '192.168.1.1',
+            'channel_count' => 8,
+            'device_function' => 'Inbound',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+        ]);
+        $second = MediaGateway::create([
+            'hostname' => 'globe_other',
+            'site_name' => 'Alcar',
+            'site_code' => 'SNIP02',
+            'ip_address' => '192.168.1.10',
+            'channel_count' => 8,
+            'device_function' => 'Outbound',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+        ]);
+
+        $globeA = GlobeSim::create([
+            'imei' => 'IMEI0001',
+            'mobile_number' => '0963125501',
+            'plan' => 'Postpaid',
+            'ip_address' => '192.168.1.1',
+            'account_number' => 'ACC-0001',
+            'contract_start' => '2026-03-01',
+            'contract_end' => '2026-09-03',
+            'status' => 'Active',
+        ]);
+        GlobeSim::create([
+            'imei' => 'IMEI0002',
+            'mobile_number' => '0963125502',
+            'plan' => 'Postpaid',
+            'ip_address' => '192.168.1.1',
+            'account_number' => 'ACC-0002',
+            'contract_start' => '2026-03-01',
+            'contract_end' => '2026-09-03',
+            'status' => 'Active',
+        ]);
+        SmartSim::create([
+            'imei' => 'IMEI0003',
+            'mobile_number' => '0963125503',
+            'plan' => 'Prepaid',
+            'ip_address' => '192.168.1.10',
+            'account_number' => 'ACC-0003',
+            'contract_start' => '2026-03-01',
+            'contract_end' => '2026-09-03',
+            'status' => 'Active',
+        ]);
+
+        $this->assertSame(0, GatewaySimAssignment::count());
+
+        $records = collect($this->getJson('/gsm-gateways')->assertOk()->json('records'));
+        $firstRecord = $records->firstWhere('id', $first->id);
+        $secondRecord = $records->firstWhere('id', $second->id);
+
+        $this->assertSame(['IMEI0001', 'IMEI0002'], array_column($firstRecord['assignments'], 'imei'));
+        $this->assertSame(['IMEI0003'], array_column($secondRecord['assignments'], 'imei'));
+        $this->assertSame('192.168.1.1', $firstRecord['assignments'][0]['ip_address']);
+        $this->assertSame('Postpaid', $firstRecord['assignments'][0]['plan']);
+        $this->assertSame(0, GatewaySimAssignment::count());
+
+        $this->put('/globe-sim/'.$globeA->id, [
+            'imei' => 'IMEI0001',
+            'mobile_number' => '0963125501',
+            'plan' => 'Postpaid',
+            'ip_address' => '192.168.1.10',
+            'account_number' => 'ACC-0001',
+            'contract_start' => '3/1/2026',
+            'contract_end' => '9/3/2026',
+        ])->assertRedirect();
+
+        $this->assertSame(0, GatewaySimAssignment::count());
+
+        $moved = collect($this->getJson('/gsm-gateways')->assertOk()->json('records'));
+        $firstRecord = $moved->firstWhere('id', $first->id);
+        $secondRecord = $moved->firstWhere('id', $second->id);
+        $this->assertSame(['IMEI0002'], array_column($firstRecord['assignments'], 'imei'));
+        $this->assertEqualsCanonicalizing(['IMEI0001', 'IMEI0003'], array_column($secondRecord['assignments'], 'imei'));
     }
 
     public function test_sim_inventory_card_opens_a_selection_modal_for_globe_and_smart(): void

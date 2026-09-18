@@ -8,6 +8,7 @@
             'ip_address' => 'IP',
             'site_code' => 'Serial Number',
             'channel_count' => 'Channel Count',
+            'network' => 'Network',
             'device_function' => 'Function',
             'site_name' => 'Site',
             'username' => 'User',
@@ -94,6 +95,7 @@
     <td><?php echo e($gateway->ip_address); ?></td>
     <td><?php echo e($gateway->site_code); ?></td>
     <td><?php echo e($gateway->channel_count ?: '—'); ?></td>
+    <td><?php echo e($gateway->network ?: '—'); ?></td>
     <td><?php echo e($gateway->device_function ?: '—'); ?></td>
     <td><?php echo e($gateway->site_name); ?></td>
     <td><?php echo e($gateway->username); ?></td>
@@ -116,7 +118,7 @@
             </button>
             <div class="ca-menu-dropdown" role="menu" hidden>
                 <?php if(auth()->user()->hasPermission('media.edit') && auth()->user()->canMutateGateways()): ?>
-                    <button class="ca-menu-item edit" type="button" role="menuitem" data-edit-id="<?php echo e($gateway->id); ?>" data-edit-hostname="<?php echo e($gateway->hostname); ?>" data-edit-site_name="<?php echo e($gateway->site_name); ?>" data-edit-site_code="<?php echo e($gateway->site_code); ?>" data-edit-ip_address="<?php echo e($gateway->ip_address); ?>" data-edit-channel_count="<?php echo e($gateway->channel_count); ?>" data-edit-device_function="<?php echo e($gateway->device_function); ?>" data-edit-username="<?php echo e($gateway->username); ?>" <?php if($canRevealSecrets): ?> data-edit-password="<?php echo e($gateway->password); ?>" <?php endif; ?> title="Edit <?php echo e($resource['entity']); ?>" aria-label="Edit <?php echo e($resource['entity']); ?>">
+                    <button class="ca-menu-item edit" type="button" role="menuitem" data-edit-id="<?php echo e($gateway->id); ?>" data-edit-hostname="<?php echo e($gateway->hostname); ?>" data-edit-site_name="<?php echo e($gateway->site_name); ?>" data-edit-site_code="<?php echo e($gateway->site_code); ?>" data-edit-ip_address="<?php echo e($gateway->ip_address); ?>" data-edit-channel_count="<?php echo e($gateway->channel_count); ?>" data-edit-network="<?php echo e($gateway->network); ?>" data-edit-device_function="<?php echo e($gateway->device_function); ?>" data-edit-username="<?php echo e($gateway->username); ?>" <?php if($canRevealSecrets): ?> data-edit-password="<?php echo e($gateway->password); ?>" <?php endif; ?> title="Edit <?php echo e($resource['entity']); ?>" aria-label="Edit <?php echo e($resource['entity']); ?>">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
                         Edit
                     </button>
@@ -136,6 +138,13 @@
     <td colspan="<?php echo e($colspan); ?>">
         <div class="ca-nested">
             <table class="gsm-sim-nested" aria-label="SIM assignments">
+                <colgroup>
+                    <col class="gsm-sim-col-imei">
+                    <col class="gsm-sim-col-mobile">
+                    <col class="gsm-sim-col-plan">
+                    <col class="gsm-sim-col-ip">
+                    <col class="gsm-sim-col-port">
+                </colgroup>
                 <thead>
                     <tr>
                         <th>IMEI</th>
@@ -143,41 +152,24 @@
                         <th>Plan</th>
                         <th>IP</th>
                         <th>Port</th>
-                        <th class="actions-column">
-                            <span class="ca-actions-head">
-                                Actions
-                                <?php if(auth()->user()->hasPermission('media.create') && auth()->user()->canMutateGateways()): ?>
-                                    <button class="plus-btn" type="button" data-gsm-sim-add="<?php echo e($gateway->id); ?>" data-channel-count="<?php echo e($gateway->channel_count); ?>" data-assignment-count="<?php echo e(count($assignments)); ?>" title="Add SIM Assignment" aria-label="Add SIM Assignment">+</button>
-                                <?php endif; ?>
-                            </span>
-                        </th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php $__empty_2 = true; $__currentLoopData = $assignments; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $assignment): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_2 = false; ?>
-                    <tr <?php if(auth()->user()->hasPermission('media.delete') && auth()->user()->canMutateGateways()): ?> data-bulk-row="nested" data-bulk-id="<?php echo e($assignment['assignment_id']); ?>" data-bulk-url="<?php echo e(route('gsm-gateways.assignments.bulk-destroy', $gateway)); ?>" data-bulk-ajax="1" <?php endif; ?>>
+                    <?php
+                        $nestedBulkId = ! empty($assignment['assignment_id'])
+                            ? (string) $assignment['assignment_id']
+                            : ((string) ($assignment['sim_type'] ?? '').'-'.(string) ($assignment['id'] ?? ''));
+                    ?>
+                    <tr <?php if(auth()->user()->hasPermission('media.delete') && auth()->user()->canMutateGateways() && $nestedBulkId !== '-' && $nestedBulkId !== ''): ?> data-bulk-row="nested" data-bulk-id="<?php echo e($nestedBulkId); ?>" data-bulk-url="<?php echo e(route('gsm-gateways.assignments.bulk-destroy', $gateway)); ?>" data-bulk-ajax="1" <?php endif; ?>>
                         <td><?php echo e($assignment['imei'] ?: '—'); ?></td>
                         <td><?php echo e($assignment['mobile_number'] ?: '—'); ?></td>
                         <td><?php echo e($assignment['plan'] ?: '—'); ?></td>
                         <td><?php echo e($gateway->ip_address); ?></td>
-                        <td><?php echo e($assignment['port'] ?: '—'); ?></td>
-                        <td class="actions-column">
-                            <div class="row-actions">
-                                <?php if(auth()->user()->hasPermission('media.edit') && auth()->user()->canMutateGateways()): ?>
-                                    <button class="action-btn edit" type="button" data-gsm-sim-edit data-gateway-id="<?php echo e($gateway->id); ?>" data-assignment-id="<?php echo e($assignment['assignment_id']); ?>" data-sim-type="<?php echo e($assignment['sim_type']); ?>" data-sim-id="<?php echo e($assignment['id']); ?>" data-network="<?php echo e($assignment['network']); ?>" data-port="<?php echo e($assignment['port']); ?>" title="Edit" aria-label="Edit">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
-                                    </button>
-                                <?php endif; ?>
-                                <?php if(auth()->user()->hasPermission('media.delete') && auth()->user()->canMutateGateways()): ?>
-                                    <button class="action-btn delete" type="button" data-gsm-sim-delete data-gateway-id="<?php echo e($gateway->id); ?>" data-assignment-id="<?php echo e($assignment['assignment_id']); ?>" title="Delete" aria-label="Delete">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="m6 7 1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>
-                                    </button>
-                                <?php endif; ?>
-                            </div>
-                        </td>
+                        <td><?php echo e($assignment['port'] !== '' && $assignment['port'] !== null ? $assignment['port'] : '—'); ?></td>
                     </tr>
                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_2): ?>
-                    <tr><td colspan="6"><div class="empty-state">No SIM assignments.</div></td></tr>
+                    <tr><td colspan="5"><div class="empty-state">No SIM assignments.</div></td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
@@ -280,6 +272,7 @@
                         <div class="form-group"><label for="site_code">Serial Number</label><input class="form-control" id="site_code" name="site_code" required></div>
                         <div class="form-group"><label for="username">User</label><input class="form-control" id="username" name="username" required></div>
                         <div class="form-group"><label for="channel_count">Channel Count</label><input class="form-control" id="channel_count" name="channel_count" type="number" min="1" max="512" required></div>
+                        <div class="form-group"><label for="network">Network</label><input class="form-control" id="network" name="network"></div>
                         <div class="form-group">
                             <label for="password">Password</label>
                             <div class="pdc-password-field">
@@ -317,53 +310,6 @@
                 <?php endif; ?>
             </div>
             <div class="modal-footer"><button type="button" class="btn secondary" data-close="mediaGatewayModal">Cancel</button><button type="submit" class="btn primary">Save</button></div>
-        </form>
-    </div>
-</div>
-<?php endif; ?>
-
-<?php if($isGsm && auth()->user()->canMutateGateways() && (auth()->user()->hasPermission('media.create') || auth()->user()->hasPermission('media.edit'))): ?>
-<div class="modal-backdrop" id="gsmSimModal">
-    <div class="modal">
-        <div class="modal-header">
-            <h3 id="gsmSimModalTitle">Add SIM Assignment</h3>
-            <button type="button" class="close-btn" data-close="gsmSimModal">×</button>
-        </div>
-        <form id="gsmSimForm">
-            <input type="hidden" id="gsmSimGatewayId">
-            <input type="hidden" id="gsmSimAssignmentId">
-            <div class="modal-body">
-                <div id="gsmSimFormErrors"></div>
-                <div class="form-group">
-                    <label for="gsmSimNetwork">Network <span class="req">*</span></label>
-                    <select class="form-control" id="gsmSimNetwork" name="network" required>
-                        <option value="" selected hidden>Select Network</option>
-                        <?php $__currentLoopData = ($simNetworks ?? []); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $networkName): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                            <option value="<?php echo e($networkName); ?>"><?php echo e($networkName); ?></option>
-                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                    </select>
-                </div>
-                <div class="gsm-sim-block">
-                    <label for="gsmSimSearch">SIM Selection <span class="req">*</span></label>
-                    <input class="form-control" id="gsmSimSearch" type="search" placeholder="Search SIM (IMEI or Mobile Number)..." autocomplete="off">
-                    <div class="gsm-sim-list" id="gsmSimList">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>IMEI</th>
-                                    <th>Mobile Number</th>
-                                    <th>Plan</th>
-                                    <th>Port</th>
-                                </tr>
-                            </thead>
-                            <tbody id="gsmSimRows">
-                                <tr><td colspan="4">Select a network to load SIM records.</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer"><button type="button" class="btn secondary" data-close="gsmSimModal">Cancel</button><button type="submit" class="btn primary">Save</button></div>
         </form>
     </div>
 </div>

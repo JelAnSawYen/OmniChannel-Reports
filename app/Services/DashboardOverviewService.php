@@ -30,8 +30,8 @@ class DashboardOverviewService
     public function payload(): array
     {
         $allocations = ChannelAllocation::query()
-            ->select(['id', 'campaign_id', 'network', 'channel_allocation', 'total_channel_allocated', 'created_at'])
-            ->with(['campaign:id,name'])
+            ->select(['id', 'campaign_id', 'network', 'channel_allocation', 'media_gateway', 'total_channel_allocated', 'created_at'])
+            ->with(['campaign:id,name,total_channels_allocated'])
             ->get();
         $utilization = $this->utilization($allocations);
         $campaignRows = $this->campaignRows($allocations);
@@ -39,12 +39,12 @@ class DashboardOverviewService
         $trend = $this->trend($allocations);
 
         $campaignCount = ChannelAllocationCampaign::count();
-        $gatewayPorts = $this->sumGatewayPorts();
+        $gatewayCount = $this->countGateways();
         $sipChannels = (int) SipChannel::query()->sum('channel_count');
         $globeCount = GlobeSim::count();
         $smartCount = SmartSim::count();
         $simCount = $globeCount + $smartCount;
-        $defectiveCount = DefectiveGsm::count();
+        $defective = $this->defectiveGsmCounts();
         $inbound = $this->inboundNumberCounts();
 
         $kpis = [
@@ -53,8 +53,8 @@ class DashboardOverviewService
                 'display' => number_format($campaignCount),
             ],
             'gateways' => [
-                'value' => $gatewayPorts,
-                'display' => number_format($gatewayPorts),
+                'value' => $gatewayCount,
+                'display' => number_format($gatewayCount),
             ],
             'channels' => [
                 'value' => $sipChannels,
@@ -73,8 +73,16 @@ class DashboardOverviewService
                 'display' => number_format($smartCount),
             ],
             'defective' => [
-                'value' => $defectiveCount,
-                'display' => number_format($defectiveCount),
+                'value' => $defective['total'],
+                'display' => number_format($defective['total']),
+            ],
+            'defective_open' => [
+                'value' => $defective['open'],
+                'display' => number_format($defective['open']),
+            ],
+            'defective_repair' => [
+                'value' => $defective['repair'],
+                'display' => number_format($defective['repair']),
             ],
             'mobile' => [
                 'value' => $inbound['mobile'],
@@ -117,12 +125,46 @@ class DashboardOverviewService
         return $payload;
     }
 
-    private function sumGatewayPorts(): int
+    private function countGateways(): int
     {
-        return (int) MediaGateway::query()
-            ->toBase()
-            ->selectRaw('COALESCE(SUM(CAST(port AS INTEGER)), 0) as total')
-            ->value('total');
+        return MediaGateway::query()->count();
+    }
+
+    /**
+     * Sum Channel Allocation `total_channel_allocated` by ChannelAllocation::channelType().
+     *
+     * @param  Collection<int, ChannelAllocation>  $allocations
+     * @return array{sip: int, gsm: int}
+     */
+    private function summedChannelCountsByType(Collection $allocations): array
+    {
+        $sip = 0;
+        $gsm = 0;
+        foreach ($allocations as $row) {
+            $amount = (int) $row->total_channel_allocated;
+            if ($row->channelType() === 'gsm') {
+                $gsm += $amount;
+            } else {
+                $sip += $amount;
+            }
+        }
+
+        return ['sip' => $sip, 'gsm' => $gsm];
+    }
+
+    /**
+     * @return array{open: int, repair: int, total: int}
+     */
+    private function defectiveGsmCounts(): array
+    {
+        $open = DefectiveGsm::query()->where('status', 'Open')->count();
+        $repair = DefectiveGsm::query()->where('status', 'In Repair')->count();
+
+        return [
+            'open' => $open,
+            'repair' => $repair,
+            'total' => $open + $repair,
+        ];
     }
 
     /**
@@ -189,13 +231,14 @@ class DashboardOverviewService
         $sipCapacity = max($sipInventory, $sipAllocated);
         $total = $sipCapacity + $gsmAllocated + $otherAllocated;
         $available = max(0, $total - $allocated);
+        $typed = $this->summedChannelCountsByType($allocations);
 
         return [
             'total' => $total,
             'allocated' => $allocated,
             'available' => $available,
-            'sip' => $sipAllocated,
-            'gsm' => $gsmAllocated,
+            'sip' => $typed['sip'],
+            'gsm' => $typed['gsm'],
         ];
     }
 
@@ -209,22 +252,20 @@ class DashboardOverviewService
             ->groupBy('campaign_id')
             ->map(function (Collection $items) {
                 $campaign = $items->first()?->campaign;
-                $sip = (int) $items->filter(
-                    fn ($row) => ChannelTypeClassifier::isSip($row->network, $row->channel_allocation)
-                )->sum('total_channel_allocated');
-                $gsm = (int) $items->filter(
-                    fn ($row) => ChannelTypeClassifier::isGsm($row->network, $row->channel_allocation)
-                )->sum('total_channel_allocated');
-                $total = (int) $items->sum('total_channel_allocated');
+                $counts = $this->summedChannelCountsByType($items);
+                $headerTotal = $campaign?->total_channels_allocated;
+                $total = $headerTotal !== null
+                    ? (int) $headerTotal
+                    : (int) $items->sum('total_channel_allocated');
 
                 return [
                     'name' => (string) ($campaign?->name ?: 'Unassigned'),
                     'total' => $total,
-                    'sip' => $sip,
-                    'gsm' => $gsm,
+                    'sip' => $counts['sip'],
+                    'gsm' => $counts['gsm'],
                     'total_display' => number_format($total),
-                    'sip_display' => number_format($sip),
-                    'gsm_display' => number_format($gsm),
+                    'sip_display' => number_format($counts['sip']),
+                    'gsm_display' => number_format($counts['gsm']),
                 ];
             })
             ->filter(fn (array $row) => $row['total'] > 0)
@@ -256,7 +297,7 @@ class DashboardOverviewService
         $start = now()->subDays(self::TREND_DAYS - 1)->startOfDay();
         $sipRunning = 0;
         $gsmRunning = 0;
-        $otherRunning = 0;
+        $totalRunning = 0;
         $byDay = [];
 
         foreach ($allocations as $row) {
@@ -266,28 +307,22 @@ class DashboardOverviewService
             }
 
             $amount = (int) $row->total_channel_allocated;
-            $type = ChannelTypeClassifier::classify($row->network, $row->channel_allocation);
+            $isGsm = $row->channelType() === 'gsm';
+            $sip = $isGsm ? 0 : $amount;
+            $gsm = $isGsm ? $amount : 0;
             $bucket = $created->copy()->startOfDay()->toDateString();
-            $key = match ($type) {
-                ChannelTypeClassifier::SIP => 'sip',
-                ChannelTypeClassifier::GSM => 'gsm',
-                default => 'other',
-            };
 
             if ($created->lt($start)) {
-                if ($key === 'sip') {
-                    $sipRunning += $amount;
-                } elseif ($key === 'gsm') {
-                    $gsmRunning += $amount;
-                } else {
-                    $otherRunning += $amount;
-                }
-
+                $totalRunning += $amount;
+                $sipRunning += $sip;
+                $gsmRunning += $gsm;
                 continue;
             }
 
-            $byDay[$bucket] ??= ['sip' => 0, 'gsm' => 0, 'other' => 0];
-            $byDay[$bucket][$key] += $amount;
+            $byDay[$bucket] ??= ['total' => 0, 'sip' => 0, 'gsm' => 0];
+            $byDay[$bucket]['total'] += $amount;
+            $byDay[$bucket]['sip'] += $sip;
+            $byDay[$bucket]['gsm'] += $gsm;
         }
 
         $labels = [];
@@ -297,13 +332,13 @@ class DashboardOverviewService
         for ($i = 0; $i < self::TREND_DAYS; $i++) {
             $day = $start->copy()->addDays($i);
             $key = $day->toDateString();
+            $totalRunning += (int) ($byDay[$key]['total'] ?? 0);
             $sipRunning += (int) ($byDay[$key]['sip'] ?? 0);
             $gsmRunning += (int) ($byDay[$key]['gsm'] ?? 0);
-            $otherRunning += (int) ($byDay[$key]['other'] ?? 0);
             $labels[] = $day->format('M j');
             $sip[] = $sipRunning;
             $gsm[] = $gsmRunning;
-            $total[] = $sipRunning + $gsmRunning + $otherRunning;
+            $total[] = $totalRunning;
         }
 
         return [
@@ -400,7 +435,7 @@ class DashboardOverviewService
         } else {
             foreach ($slice as $row) {
                 $body .= '<tr>'
-                    .'<td>'.$this->e($row['name']).'</td>'
+                    .'<td><span class="campaigns-name">'.$this->e($row['name']).'</span></td>'
                     .'<td class="num">'.$this->e($row['total_display']).'</td>'
                     .'<td class="num">'.$this->e($row['sip_display']).'</td>'
                     .'<td class="num">'.$this->e($row['gsm_display']).'</td>'

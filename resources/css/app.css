@@ -1967,6 +1967,10 @@ td.actions-column .row-actions,
 }
 .dash-view-all-btn{min-height:40px;white-space:nowrap}
 .dash-util-table{border:0;box-shadow:none;border-radius:0}
+.dash-util-table table > thead > tr > th:first-child,
+.dash-util-table table > tbody > tr > td:first-child {
+    padding-left: 30px;
+}
 .dash-util-table table{width:100%}
 .dash-util-table th.num,.dash-util-table td.num{text-align:center}
 table[aria-label="Channel Utilization"]{
@@ -1982,6 +1986,7 @@ table[aria-label="Channel Utilization"] > tbody > tr > td{
 table[aria-label="Channel Utilization"] > thead > tr > th:first-child,
 table[aria-label="Channel Utilization"] > tbody > tr > td:first-child{
     text-align:left;
+    padding-left: 45px;
 }
 table[aria-label="Channel Utilization"] th.num-col,
 table[aria-label="Channel Utilization"] td.num-col{text-align:center}
@@ -2212,11 +2217,19 @@ table[aria-label="Channel Utilization"] td.num-col{text-align:center}
 }
 .ca-table .ca-nested thead th,
 .ca-table .ca-nested tbody td {
-    width: 17.6%;
+    width: 22%;
     padding-left: 15px;
     padding-right: 15px;
     box-sizing: border-box;
 }
+.ca-table .ca-nested thead th:first-child,
+.ca-table .ca-nested tbody td:first-child { width: 28%; }
+.ca-table .ca-nested thead th:nth-child(2),
+.ca-table .ca-nested tbody td:nth-child(2) { width: 22%; }
+.ca-table .ca-nested thead th:nth-child(3),
+.ca-table .ca-nested tbody td:nth-child(3) { width: 16%; }
+.ca-table .ca-nested thead th:nth-child(4),
+.ca-table .ca-nested tbody td:nth-child(4) { width: 22%; }
 .ca-table .ca-nested thead th:last-child,
 .ca-table .ca-nested tbody td:last-child,
 .ca-table .ca-nested .actions-column {
@@ -2266,6 +2279,49 @@ table[aria-label="Channel Utilization"] td.num-col{text-align:center}
 .btn.success:hover { background:#15803d; border-color:#15803d; }
 .btn.success:disabled { background:#e2e8f0; border-color:#e2e8f0; color:#94a3b8; }
 .modal.import-wide { width:min(1050px, calc(100% - 26.25px)); }
+#importPreviewModal.modal-backdrop.visible {
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+    padding:12px;
+    box-sizing:border-box;
+}
+#importPreviewModal .modal.import-wide {
+    display:flex;
+    flex-direction:column;
+    max-width:100%;
+    max-height:calc(100vh - 24px);
+    max-height:calc(100dvh - 24px);
+    max-height:calc(100svh - 24px);
+    min-width:0;
+    min-height:0;
+    overflow:hidden;
+}
+#importPreviewModal .modal-header,
+#importPreviewModal .modal-footer,
+#importPreviewModal .import-preview-footer,
+#importPreviewModal .import-stats,
+#importPreviewModal .import-banner {
+    flex-shrink:0;
+}
+#importPreviewModal .import-stats,
+#importPreviewModal .import-banner {
+    min-width:0;
+    overflow-wrap:anywhere;
+    word-break:break-word;
+}
+#importPreviewModal .import-banner {
+    max-height:6.5em;
+    overflow:auto;
+}
+#importPreviewModal .modal-body {
+    flex:1 1 auto;
+    min-height:0;
+    min-width:0;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+}
 .import-lead { margin:0 0 17.5px; color:#334155; font-size:13.75px; }
 .import-section { margin-bottom:17.5px; }
 .import-section h4 { margin:0 0 10px; font-size:13.75px; }
@@ -2299,8 +2355,37 @@ table[aria-label="Channel Utilization"] td.num-col{text-align:center}
 .import-banner.success { background:#dcfce7; color:#166534; }
 .import-banner.info { background:#dbeafe; color:#1d4ed8; }
 .import-preview-wrap { max-height:337.5px; overflow:auto; border:1.25px solid var(--border); border-radius:10px; }
+#importPreviewModal .import-preview-wrap {
+    flex:1 1 auto;
+    width:100%;
+    min-width:0;
+    min-height:0;
+    max-height:none;
+    overflow:auto;
+    overscroll-behavior:contain;
+}
 .import-preview-table { margin:0; }
+#importPreviewModal .import-preview-table {
+    width:max-content;
+    min-width:100%;
+}
 .import-preview-table th, .import-preview-table td { font-size:11.25px; padding:10px 11.25px; }
+#importPreviewModal .import-preview-table thead th {
+    position:sticky;
+    top:0;
+    z-index:1;
+    background:#fff;
+}
+#importPreviewModal .import-preview-table td {
+    white-space:normal;
+    overflow-wrap:anywhere;
+    word-break:break-word;
+    vertical-align:top;
+}
+#importPreviewModal .import-preview-table td:last-child {
+    min-width:140px;
+    max-width:280px;
+}
 .import-row-error td { color:#b91c1c; }
 .import-status-ok { color:#15803d; font-weight:700; }
 .import-status-bad { color:#b91c1c; font-weight:700; }
@@ -2470,25 +2555,23 @@ table[aria-label="Channel Utilization"] td.num-col{text-align:center}
     word-break: break-word;
 }
 .pdc-table .ca-nested .pdc-servers-nested thead th:nth-child(1),
-.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(1) { width: 5%; }
+.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(1) { width: 14%; }
 .pdc-table .ca-nested .pdc-servers-nested thead th:nth-child(2),
-.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(2) { width: 12%; }
+.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(2) { width: 11%; }
 .pdc-table .ca-nested .pdc-servers-nested thead th:nth-child(3),
-.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(3) { width: 10%; }
+.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(3) { width: 8%; }
 .pdc-table .ca-nested .pdc-servers-nested thead th:nth-child(4),
-.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(4) { width: 7%; }
+.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(4),
 .pdc-table .ca-nested .pdc-servers-nested thead th:nth-child(5),
-.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(5),
+.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(5) { width: 6%; }
 .pdc-table .ca-nested .pdc-servers-nested thead th:nth-child(6),
-.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(6) { width: 6%; }
+.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(6) { width: 8%; }
 .pdc-table .ca-nested .pdc-servers-nested thead th:nth-child(7),
-.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(7) { width: 7%; }
+.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(7) { width: 10%; }
 .pdc-table .ca-nested .pdc-servers-nested thead th:nth-child(8),
 .pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(8) { width: 10%; }
 .pdc-table .ca-nested .pdc-servers-nested thead th:nth-child(9),
-.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(9) { width: 10%; }
-.pdc-table .ca-nested .pdc-servers-nested thead th:nth-child(10),
-.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(10) { width: 11%; }
+.pdc-table .ca-nested .pdc-servers-nested tbody td:nth-child(9) { width: 11%; }
 .pdc-table .ca-nested .pdc-servers-nested thead th:last-child,
 .pdc-table .ca-nested .pdc-servers-nested tbody td:last-child,
 .pdc-table .ca-nested .pdc-servers-nested .actions-column {
@@ -2508,22 +2591,9 @@ body[data-page="channel-range-list"] .crl-nested {
     border-collapse: collapse;
 }
 body[data-page="channel-range-list"] .crl-table > thead > tr > th,
-body[data-page="channel-range-list"] .crl-table > tbody > tr > td,
-body[data-page="channel-range-list"] .crl-nested > thead > tr > th,
-body[data-page="channel-range-list"] .crl-nested > tbody > tr > td {
+body[data-page="channel-range-list"] .crl-table > tbody > tr > td {
     border: 0;
     border-bottom: 0;
-}
-body[data-page="channel-range-list"] .crl-nested > thead > tr > th {
-    background: transparent;
-}
-body[data-page="channel-range-list"] .crl-table > colgroup > .crl-col-toggle,
-body[data-page="channel-range-list"] .crl-nested > colgroup > .crl-col-toggle,
-body[data-page="channel-range-list"] .crl-table .crl-toggle-col,
-body[data-page="channel-range-list"] .crl-nested .crl-toggle-col {
-    width: 42px;
-    max-width: 42px;
-    min-width: 42px;
 }
 body[data-page="channel-range-list"] .crl-table > colgroup > .crl-col-campaign,
 body[data-page="channel-range-list"] .crl-nested > colgroup > .crl-col-campaign,
@@ -2549,20 +2619,20 @@ body[data-page="channel-range-list"] .crl-table .crl-actions-col,
 body[data-page="channel-range-list"] .crl-nested .crl-actions-col {
     width: 24%;
 }
-body[data-page="channel-range-list"] .crl-table > thead > tr > th.crl-toggle-col,
-body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td.crl-toggle-col,
-body[data-page="channel-range-list"] .crl-nested .crl-toggle-col {
-    padding-left: 8px;
-    padding-right: 0;
-    overflow: visible;
-    white-space: nowrap;
-}
 body[data-page="channel-range-list"] .crl-table > thead > tr > th.crl-campaign-col,
 body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td.crl-campaign-col {
     text-align: left;
     white-space: nowrap;
-    padding-left: 4px;
     padding-right: 8px;
+}
+body[data-page="channel-range-list"] .crl-table > thead > tr > th:first-child .ca-toggle {
+    visibility: hidden;
+    pointer-events: none;
+    height: 26.25px;
+    width: 26.25px;
+    flex: 0 0 26.25px;
+    overflow: hidden;
+    margin-right: 0;
 }
 body[data-page="channel-range-list"] .crl-table > thead > tr > th.crl-channel-col,
 body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td.crl-channel-col {
@@ -2583,17 +2653,8 @@ body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td.crl-action
     padding-left: 8px;
     padding-right: 8px;
 }
-body[data-page="channel-range-list"] .crl-table .ca-nested-row > td {
-    padding: 0;
-    background: #fff;
-    border: 0;
-}
-body[data-page="channel-range-list"] .crl-table .ca-nested {
-    border: 0;
-    border-radius: 0;
-    margin-top: 0;
-    background: transparent;
-    overflow: visible;
+body[data-page="channel-range-list"] .crl-table .ca-campaign-cell {
+    gap: 4px;
 }
 body[data-page="channel-range-list"] .crl-table .ca-toggle {
     margin-right: 0;
@@ -2616,21 +2677,11 @@ body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td 
     padding: 8px;
     box-sizing: border-box;
     vertical-align: middle;
-    border: 0;
-    border-bottom: 0;
-    background: transparent;
-}
-body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th.crl-toggle-col,
-body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td.crl-toggle-col {
-    width: 42px;
-    padding-left: 8px;
-    padding-right: 0;
 }
 body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th.crl-campaign-col,
 body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td.crl-campaign-col {
     width: 23%;
     text-align: left;
-    padding-left: 4px;
     padding-right: 8px;
 }
 body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th.crl-sip-col,
@@ -2671,6 +2722,10 @@ body[data-page="channel-range-list"] .crl-channel-number {
     cursor: not-allowed;
 }
 
+.sip-table {
+    table-layout: fixed;
+    width: 100%;
+}
 .sip-table > thead > tr > th,
 .sip-table > tbody > tr > td {
     text-align: center;
@@ -2679,9 +2734,24 @@ body[data-page="channel-range-list"] .crl-channel-number {
     white-space: nowrap;
     padding: 13.75px 12.5px;
 }
+.sip-table > thead > tr > th:nth-child(1),
+.sip-table > tbody > tr > td:nth-child(1) { width: 16%; }
+.sip-table > thead > tr > th:nth-child(2),
+.sip-table > tbody > tr > td:nth-child(2) { width: 14%; }
+.sip-table > thead > tr > th:nth-child(3),
+.sip-table > tbody > tr > td:nth-child(3) { width: 12%; }
+.sip-table > thead > tr > th:nth-child(4),
+.sip-table > tbody > tr > td:nth-child(4) { width: 16%; }
+.sip-table > thead > tr > th:nth-child(5),
+.sip-table > tbody > tr > td:nth-child(5) { width: 14%; }
+.sip-table > thead > tr > th:nth-child(6),
+.sip-table > tbody > tr > td:nth-child(6) { width: 14%; }
+.sip-table > thead > tr > th.actions-column,
+.sip-table > tbody > tr > td.actions-column { width: 14%; }
 .sip-table > thead > tr > th:first-child,
 .sip-table > tbody > tr > td:first-child {
     text-align: left;
+    padding-left: 32px;
 }
 .sim-table {
     table-layout: fixed;
@@ -2734,12 +2804,12 @@ body[data-page="smart-sim"] .page-container {
     vertical-align: middle;
     text-align: center;
 }
-.sip-campaign {
-    color: #0b70f7;
+.sip-name {
+    color: #0066FF;
     font-weight: 700;
 }
-.sip-table > tbody > tr > td .sip-campaign {
-    color: #0b70f7;
+.sip-table > tbody > tr > td .sip-name {
+    color: #0066FF;
     font-weight: 700;
     justify-content: flex-start;
     text-align: left;
@@ -4729,6 +4799,46 @@ body[data-page="defective-gsm"] #moduleModal .pdc-date-field {
     position: relative;
 }
 
+body[data-page="globe-sim"] #moduleModal.modal-backdrop.visible,
+body[data-page="smart-sim"] #moduleModal.modal-backdrop.visible {
+    align-items: flex-start;
+    justify-content: center;
+    overflow-y: auto;
+}
+body[data-page="globe-sim"] #moduleModal .modal,
+body[data-page="smart-sim"] #moduleModal .modal {
+    margin: 30px auto;
+    overflow: visible;
+}
+body[data-page="globe-sim"] #moduleModal .modal-body,
+body[data-page="smart-sim"] #moduleModal .modal-body {
+    overflow: visible;
+    position: relative;
+    z-index: 2;
+}
+body[data-page="globe-sim"] #moduleModal .modal-footer,
+body[data-page="smart-sim"] #moduleModal .modal-footer {
+    position: relative;
+    z-index: 1;
+}
+body[data-page="globe-sim"] #moduleModal .form-grid,
+body[data-page="globe-sim"] #moduleModal .form-group,
+body[data-page="smart-sim"] #moduleModal .form-grid,
+body[data-page="smart-sim"] #moduleModal .form-group {
+    overflow: visible;
+}
+body[data-page="globe-sim"] #moduleModal .pdc-date-field,
+body[data-page="smart-sim"] #moduleModal .pdc-date-field {
+    position: relative;
+    z-index: 3;
+    overflow: visible;
+}
+body[data-page="globe-sim"] #moduleModal .pdc-cal,
+body[data-page="smart-sim"] #moduleModal .pdc-cal {
+    overflow: visible;
+    z-index: 620;
+}
+
 body[data-page="sip-channels"] #sipModal.modal-backdrop.visible {
     align-items: flex-start;
     justify-content: center;
@@ -4768,6 +4878,88 @@ body[data-page="pdc-servers"] .table-wrap,
 body[data-page="gsm-gateways"] .table-card,
 body[data-page="gsm-gateways"] .table-wrap {
     overflow: visible;
+}
+body[data-page="channel-allocation"] .ca-table {
+    table-layout: fixed;
+    width: 100%;
+}
+body[data-page="channel-allocation"] .ca-table > thead > tr > th,
+body[data-page="channel-allocation"] .ca-table .ca-campaign-row > td {
+    text-align: center;
+}
+body[data-page="channel-allocation"] .ca-table > thead > tr > th:first-child,
+body[data-page="channel-allocation"] .ca-table .ca-campaign-row > td:first-child {
+    width: 22%;
+    max-width: none;
+    text-align: left;
+}
+body[data-page="channel-allocation"] .ca-table > thead > tr > th:nth-child(2),
+body[data-page="channel-allocation"] .ca-table .ca-campaign-row > td:nth-child(2) { width: 13%; }
+body[data-page="channel-allocation"] .ca-table > thead > tr > th:nth-child(3),
+body[data-page="channel-allocation"] .ca-table .ca-campaign-row > td:nth-child(3) { width: 11%; }
+body[data-page="channel-allocation"] .ca-table > thead > tr > th:nth-child(4),
+body[data-page="channel-allocation"] .ca-table .ca-campaign-row > td:nth-child(4),
+body[data-page="channel-allocation"] .ca-table > thead > tr > th:nth-child(5),
+body[data-page="channel-allocation"] .ca-table .ca-campaign-row > td:nth-child(5) { width: 13%; }
+body[data-page="channel-allocation"] .ca-table > thead > tr > th.ca-remarks,
+body[data-page="channel-allocation"] .ca-table .ca-campaign-row > td.ca-remarks {
+    width: 16%;
+    max-width: none;
+}
+body[data-page="channel-allocation"] .ca-table > thead > tr > th.actions-column,
+body[data-page="channel-allocation"] .ca-table .ca-campaign-row > td.actions-column { width: 12%; }
+body[data-page="channel-allocation"] .ca-table .ca-nested thead th,
+body[data-page="channel-allocation"] .ca-table .ca-nested tbody td {
+    text-align: center;
+    vertical-align: middle;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+body[data-page="channel-allocation"] .ca-table .ca-nested thead th:first-child,
+body[data-page="channel-allocation"] .ca-table .ca-nested tbody td:first-child { width: 24%; }
+body[data-page="channel-allocation"] .ca-table .ca-nested thead th:nth-child(2),
+body[data-page="channel-allocation"] .ca-table .ca-nested tbody td:nth-child(2) { width: 20%; }
+body[data-page="channel-allocation"] .ca-table .ca-nested thead th:nth-child(3),
+body[data-page="channel-allocation"] .ca-table .ca-nested tbody td:nth-child(3) { width: 18%; }
+body[data-page="channel-allocation"] .ca-table .ca-nested thead th:nth-child(4),
+body[data-page="channel-allocation"] .ca-table .ca-nested tbody td:nth-child(4) { width: 22%; }
+body[data-page="channel-allocation"] .ca-table .ca-nested thead th:last-child,
+body[data-page="channel-allocation"] .ca-table .ca-nested tbody td:last-child,
+body[data-page="channel-allocation"] .ca-table .ca-nested .actions-column {
+    width: 16%;
+}
+body[data-page="channel-allocation"] .ca-table .ca-nested .num-align {
+    width: 100%;
+    justify-items: center;
+}
+body[data-page="channel-allocation"] .ca-table .ca-nested .ca-actions-head,
+body[data-page="channel-allocation"] .ca-table .ca-nested .row-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    margin: 0;
+}
+body[data-page="channel-allocation"] #allocationModal .form-grid {
+    grid-template-columns: 1fr;
+}
+body[data-page="channel-allocation"] #allocationModal [data-alloc-campaign],
+body[data-page="channel-allocation"] #allocationModal [data-alloc-required-mark] {
+    display: none;
+}
+body[data-page="channel-allocation"] #allocationModal select.form-control {
+    width: 100%;
+    padding: 0 40px 0 15px;
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: #fff;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    background-size: 16px 16px;
+}
+body[data-page="channel-allocation"] #allocationModal select.form-control option {
+    padding: 10px 15px;
 }
 body[data-page="gsm-gateways"] .gsm-table .sortable-button {
     width: 100%;
@@ -4822,20 +5014,26 @@ body[data-page="gsm-gateways"] .gsm-host-cell {
 }
 body[data-page="gsm-gateways"] .gsm-host-cell > span {
     font-weight: 700;
+    color: #0066FF;
 }
 body[data-page="gsm-gateways"] .gsm-sim-nested {
     width: 100%;
     table-layout: fixed;
     margin: 0;
 }
+body[data-page="gsm-gateways"] .gsm-sim-nested > colgroup > col {
+    width: 20%;
+}
 body[data-page="gsm-gateways"] .gsm-sim-nested thead th,
-body[data-page="gsm-gateways"] .gsm-sim-nested tbody td {
+body[data-page="gsm-gateways"] .gsm-sim-nested tbody td,
+body[data-page="gsm-gateways"] .gsm-sim-nested thead th:last-child,
+body[data-page="gsm-gateways"] .gsm-sim-nested tbody td:last-child {
+    width: 20%;
+    min-width: 0;
     text-align: center;
     vertical-align: middle;
-}
-body[data-page="gsm-gateways"] .gsm-sim-nested .ca-actions-head,
-body[data-page="gsm-gateways"] .gsm-sim-nested .row-actions {
-    justify-content: center;
+    box-sizing: border-box;
+    padding: 18.75px 15px;
 }
 .req {
     color: #ef4444;

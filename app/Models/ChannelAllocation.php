@@ -31,4 +31,27 @@ class ChannelAllocation extends Model
     {
         return $this->belongsTo(ChannelAllocationCampaign::class, 'campaign_id');
     }
+
+    public function channelLabel(): string
+    {
+        $channel = trim((string) $this->channel_allocation);
+        if ($channel !== '') {
+            return $channel;
+        }
+
+        $gateway = trim((string) $this->media_gateway);
+
+        return $gateway !== '' ? $gateway : '—';
+    }
+
+    public function channelType(): string
+    {
+        $channel = trim((string) $this->channel_allocation);
+        $gateway = trim((string) $this->media_gateway);
+        if ($gateway !== '' && ($channel === '' || strcasecmp($channel, $gateway) === 0)) {
+            return 'gsm';
+        }
+
+        return 'sip';
+    }
 }

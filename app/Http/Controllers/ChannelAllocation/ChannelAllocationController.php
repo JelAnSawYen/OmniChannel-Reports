@@ -11,6 +11,7 @@ use App\Models\SipChannel;
 use App\Services\ChannelAllocation\ChannelAllocationImportService;
 use App\Services\Logs\AuditLogger;
 use App\Services\XlsxService;
+use App\Support\ChannelAllocationResolver;
 use App\Support\PublicError;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -51,20 +52,34 @@ class ChannelAllocationController extends Controller
 
         $campaigns = $query->paginate($perPage)->withQueryString();
         $masterCampaigns = ChannelAllocationCampaign::optionsForDropdown();
-        $sipChannels = SipChannel::query()
+        $sipChannelOptions = SipChannel::query()
             ->whereNotNull('etpi_sip_name')
             ->where('etpi_sip_name', '!=', '')
             ->orderBy('etpi_sip_name')
-            ->get(['etpi_sip_name', 'network', 'channel_count']);
-        $gsmGateways = MediaGateway::query()
-            ->orderBy('site_code')
-            ->get(['site_code', 'site_name']);
+            ->get(['etpi_sip_name', 'network', 'channel_count'])
+            ->map(fn (SipChannel $sip) => [
+                'value' => $sip->etpi_sip_name,
+                'network' => $sip->network,
+                'count' => $sip->channel_count,
+            ])
+            ->values();
+        $gsmChannelOptions = MediaGateway::query()
+            ->whereNotNull('hostname')
+            ->where('hostname', '!=', '')
+            ->orderBy('hostname')
+            ->get(['hostname', 'network', 'channel_count'])
+            ->map(fn (MediaGateway $gateway) => [
+                'value' => $gateway->hostname,
+                'network' => $gateway->network,
+                'count' => $gateway->channel_count,
+            ])
+            ->values();
 
         return view('channel-allocations.index', [
             'campaigns' => $campaigns,
             'masterCampaigns' => $masterCampaigns,
-            'sipChannels' => $sipChannels,
-            'gsmGateways' => $gsmGateways,
+            'sipChannelOptions' => $sipChannelOptions,
+            'gsmChannelOptions' => $gsmChannelOptions,
             'search' => $search,
             'perPage' => $perPage,
         ]);
@@ -89,7 +104,6 @@ class ChannelAllocationController extends Controller
 
                 $campaign->update([
                     'media_gateway' => $data['media_gateway'] ?? null,
-                    'total_channels_allocated' => $data['total_channels_allocated'] ?? $campaign->total_channels_allocated,
                     'caller_id' => $data['caller_id'] ?? null,
                     'prefix' => $data['prefix'] ?? null,
                     'remarks' => $data['remarks'] ?? null,
@@ -122,7 +136,6 @@ class ChannelAllocationController extends Controller
             DB::transaction(function () use ($campaign, $data) {
                 $locked = ChannelAllocationCampaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
                 $payload = [
-                    'total_channels_allocated' => $data['total_channels_allocated'] ?? null,
                     'caller_id' => $data['caller_id'] ?? null,
                     'prefix' => $data['prefix'] ?? null,
                     'remarks' => $data['remarks'] ?? null,
@@ -172,7 +185,6 @@ class ChannelAllocationController extends Controller
         try {
             DB::transaction(function () use ($campaign, $data) {
                 $locked = ChannelAllocationCampaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
-                $data['media_gateway'] = ($data['media_gateway'] ?? null) ?: $locked->media_gateway;
                 $data['sort_order'] = (int) $locked->allocations()->lockForUpdate()->max('sort_order') + 1;
                 $locked->allocations()->create($data);
                 $locked->refreshTotalChannelsAllocated();
@@ -304,12 +316,11 @@ class ChannelAllocationController extends Controller
 
         $headers = [
             'Campaign',
-            'Media Gateway',
-            'Channel Allocation',
+            'Channel',
             'Network',
             'Line Priority',
-            'Total Channel Allocated',
-            'Total Channels Allocated',
+            'Channel Count',
+            'Total Channels',
             'FTE',
             'Caller ID',
             'Prefix',
@@ -321,7 +332,6 @@ class ChannelAllocationController extends Controller
             if ($campaign->allocations->isEmpty()) {
                 $rows[] = [
                     $campaign->name,
-                    $campaign->media_gateway,
                     '',
                     '',
                     '',
@@ -339,8 +349,7 @@ class ChannelAllocationController extends Controller
             foreach ($campaign->allocations as $index => $allocation) {
                 $rows[] = [
                     $index === 0 ? $campaign->name : '',
-                    $allocation->media_gateway,
-                    $allocation->channel_allocation,
+                    $allocation->channelLabel() === '—' ? '' : $allocation->channelLabel(),
                     $allocation->network,
                     $allocation->line_priority,
                     $allocation->total_channel_allocated,
@@ -457,7 +466,7 @@ class ChannelAllocationController extends Controller
             return back()->with('error', 'No import preview is available. Upload and validate the file again.');
         }
 
-        $headers = ['Row #', 'Campaign', 'Media Gateway', 'FTE', 'Caller ID', 'Prefix', 'Channel Allocation', 'Network', 'Line Priority', 'Total Channel Allocated', 'Status', 'Error Reason'];
+        $headers = ['Row #', 'Campaign', 'FTE', 'Caller ID', 'Prefix', 'Channel', 'Network', 'Line Priority', 'Channel Count', 'Status', 'Error Reason'];
         $rows = [];
         foreach ($stored['rows'] as $row) {
             if ($row['valid']) {
@@ -466,11 +475,10 @@ class ChannelAllocationController extends Controller
             $rows[] = [
                 $row['row'],
                 $row['campaign'],
-                $row['media_gateway'],
                 $row['fte'],
                 $row['caller_id'],
                 $row['prefix'],
-                $row['channel_allocation'],
+                $row['channel'],
                 $row['network'],
                 $row['line_priority'],
                 $row['total_channel_allocated'],
@@ -495,7 +503,6 @@ class ChannelAllocationController extends Controller
     {
         $rules = [
             'media_gateway' => 'nullable|string|max:255',
-            'total_channels_allocated' => 'nullable|integer|min:0',
             'caller_id' => 'nullable|string|max:255',
             'prefix' => 'nullable|string|max:100',
             'remarks' => 'nullable|string|max:2000',
@@ -514,11 +521,9 @@ class ChannelAllocationController extends Controller
     private function allocationRules(): array
     {
         return [
-            'media_gateway' => 'nullable|string|max:255',
-            'channel_allocation' => 'required|string|max:255',
-            'network' => 'nullable|string|max:255',
+            'channel_type' => 'nullable|in:sip,gsm',
+            'channel' => 'required|string|max:255',
             'line_priority' => 'nullable|integer|min:0',
-            'total_channel_allocated' => 'nullable|integer|min:0',
             'remarks' => 'nullable|string|max:2000',
         ];
     }
@@ -528,20 +533,28 @@ class ChannelAllocationController extends Controller
      */
     private function validatedAllocationFromSip(Request $request): array
     {
-        $data = $request->validate([
-            'media_gateway' => 'nullable|string|max:255',
-            'channel_allocation' => ['required', 'string', 'max:255', Rule::exists('sip_channels', 'etpi_sip_name')],
-            'line_priority' => 'nullable|integer|min:0',
-        ]);
+        if (! $request->filled('channel') && $request->filled('channel_allocation')) {
+            $request->merge(['channel' => $request->input('channel_allocation')]);
+        }
+        $data = $request->validate($this->allocationRules());
+        $resolved = ChannelAllocationResolver::resolve(
+            (string) $data['channel'],
+            $data['channel_type'] ?? null
+        );
+        if (! ($resolved['ok'] ?? false)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'channel' => [$resolved['error'] ?? 'Channel is invalid'],
+            ]);
+        }
 
-        $sip = SipChannel::query()
-            ->where('etpi_sip_name', $data['channel_allocation'])
-            ->first();
-
-        $data['network'] = $sip?->network ?: null;
-        $data['total_channel_allocated'] = $sip?->channel_count;
-
-        return $data;
+        return [
+            'channel_allocation' => $resolved['channel'],
+            'media_gateway' => $resolved['media_gateway'],
+            'network' => $resolved['network'],
+            'line_priority' => $data['line_priority'] ?? null,
+            'total_channel_allocated' => $resolved['total_channel_allocated'],
+            'remarks' => $data['remarks'] ?? null,
+        ];
     }
 
     /**
@@ -549,7 +562,8 @@ class ChannelAllocationController extends Controller
      */
     private function optionalAllocation(Request $request): ?array
     {
-        if (trim((string) $request->input('channel_allocation')) === '') {
+        $channel = trim((string) ($request->input('channel') ?: $request->input('channel_allocation')));
+        if ($channel === '') {
             return null;
         }
 

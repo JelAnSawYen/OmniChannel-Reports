@@ -43,11 +43,11 @@ class ChannelRangeListPageTest extends TestCase
             'campaign_id' => $atome->id,
             'etpi_sip_name' => 'SIP_ATOME_01',
         ]);
-        SipChannelNumber::create([
+        $firstNumber = SipChannelNumber::create([
             'sip_channel_id' => $sip->id,
             'channel_number' => '24556',
         ]);
-        SipChannelNumber::create([
+        $secondNumber = SipChannelNumber::create([
             'sip_channel_id' => $sip->id,
             'channel_number' => '457864',
         ]);
@@ -63,11 +63,11 @@ class ChannelRangeListPageTest extends TestCase
 
         $page->assertSee('<h1 class="page-title">Channel Range</h1>', false)
             ->assertSee('Manage channel numbers for each SIP channel.')
-            ->assertSee('>Campaign</th>', false)
+            ->assertSee('ca-campaign-identity">Campaign</span>', false)
             ->assertSee('>Channel Range</th>', false)
             ->assertSee('>SIP Name</th>', false)
             ->assertSee('>Actions</th>', false)
-            ->assertSee('class="crl-toggle-col"', false)
+            ->assertSee('class="ca-campaign-cell"', false)
             ->assertSee('data-ca-toggle="'.$sip->id.'"', false)
             ->assertSee('SIP_ATOME_01')
             ->assertSee('Atome')
@@ -77,31 +77,29 @@ class ChannelRangeListPageTest extends TestCase
             ->assertSee('457864')
             ->assertDontSee('class="action-btn edit"', false)
             ->assertSee('class="action-btn delete"', false)
-            ->assertSee('id="crl_sip_channel_id"', false)
-            ->assertSee('id="crl_sip_name"', false)
-            ->assertSee('readonly', false)
-            ->assertSee('disabled', false)
-            ->assertSee('id="crl_from"', false)
-            ->assertSee('id="crl_to"', false)
-            ->assertSee('data-sip-name="SIP_ATOME_01"', false)
             ->assertSee('data-confirm-title="Delete Record"', false)
             ->assertSee('data-bulk-row="main"', false)
-            ->assertSee('data-from="24556"', false)
-            ->assertSee('data-to="457864"', false)
-            ->assertSee('data-from="30001"', false)
-            ->assertSee('data-to="30500"', false)
-            ->assertSee('id="crl_from"', false)
-            ->assertSee('id="crl_to"', false)
+            ->assertDontSee('id="crlAddButton"', false)
+            ->assertDontSee('id="crlAddModal"', false)
+            ->assertDontSee('id="crl_sip_channel_id"', false)
+            ->assertDontSee('id="crl_from"', false)
+            ->assertDontSee('id="crl_to"', false)
             ->assertDontSee('data-ca-toggle="'.$emptySip->id.'"', false)
-            ->assertDontSee('data-bulk-row="nested"', false)
+            ->assertSee('data-bulk-row="nested"', false)
+            ->assertSee('data-bulk-id="'.$firstNumber->id.'"', false)
+            ->assertSee('data-bulk-id="'.$secondNumber->id.'"', false)
+            ->assertSee('data-bulk-url="'.url('/channel-range-list/bulk').'"', false)
             ->assertDontSee('required-asterisk')
             ->assertDontSee('class="ca-menu-btn"', false);
 
-        $this->assertStringContainsString('class="crl-toggle-col"', $html);
+        $this->assertStringContainsString('class="ca-campaign-cell"', $html);
         $this->assertStringContainsString('campaigns-name', $html);
         $mainHead = Str::betweenFirst($html, 'class="ca-table crl-table"', '</thead>');
-        $this->assertTrue(strpos($mainHead, 'class="crl-toggle-col"') < strpos($mainHead, '>Campaign</th>'));
-        $this->assertTrue(strpos($mainHead, '>Campaign</th>') < strpos($mainHead, '>Channel Range</th>'));
+        $this->assertStringContainsString('class="ca-campaign-cell"', $mainHead);
+        $this->assertStringContainsString('class="ca-toggle" aria-hidden="true"', $mainHead);
+        $this->assertStringContainsString('ca-campaign-identity">Campaign</span>', $mainHead);
+        $this->assertStringNotContainsString('class="crl-toggle-col"', $mainHead);
+        $this->assertTrue(strpos($mainHead, 'ca-campaign-identity">Campaign</span>') < strpos($mainHead, '>Channel Range</th>'));
         $this->assertTrue(strpos($mainHead, '>Channel Range</th>') < strpos($mainHead, '>SIP Name</th>'));
         $this->assertTrue(strpos($mainHead, '>SIP Name</th>') < strpos($mainHead, '>Actions</th>'));
         $this->assertStringContainsString('crl-campaign-col', $mainHead);
@@ -117,27 +115,30 @@ class ChannelRangeListPageTest extends TestCase
         $this->assertStringContainsString('>Channel Range</span></a>', $html);
         $this->assertStringContainsString('href="'.url('/sip-channels').'"', $html);
         $this->assertDoesNotMatchRegularExpression('/id="sipChannelsSub"[^>]*>[\s\S]*?<span>SIP Channels<\/span>/', $html);
-        $this->assertStringContainsString('id="crl_sip_name" readonly disabled', $html);
+        $this->assertStringNotContainsString('id="crlAddButton"', $html);
+        $this->assertStringNotContainsString('id="crl_from"', $html);
 
         $campaignRow = Str::betweenFirst($html, 'class="ca-campaign-row"', 'class="ca-nested-row"');
+        $this->assertStringContainsString('class="ca-campaign-cell"', $campaignRow);
+        $this->assertTrue(strpos($campaignRow, 'class="ca-toggle"') < strpos($campaignRow, 'campaigns-name'));
         $this->assertStringContainsString('24556 - 457864', $campaignRow);
         $this->assertStringContainsString('class="action-btn delete"', $campaignRow);
         $this->assertStringNotContainsString('class="action-btn edit"', $campaignRow);
         $this->assertSame(1, substr_count($html, 'class="action-btn delete"'));
         $this->assertStringNotContainsString('data-ca-toggle="'.$emptySip->id.'"', $campaignRow);
         $this->assertStringNotContainsString('PNB Collection/ Telesales', $campaignRow);
-        $this->assertStringContainsString("fromInput.value = option?.getAttribute('data-from') || ''", $html);
-        $this->assertStringContainsString("toInput.value = option?.getAttribute('data-to') || ''", $html);
-        $this->assertStringContainsString('id="crl_from"', $html);
-        $this->assertStringContainsString('id="crl_to"', $html);
-        $this->assertMatchesRegularExpression('/id="crl_from"[^>]*readonly/', $html);
-        $this->assertMatchesRegularExpression('/id="crl_to"[^>]*readonly/', $html);
-        $this->assertStringContainsString('channel-range-list\'?null:nestedScope()', file_get_contents(resource_path('js/app.js')));
+        $this->assertStringNotContainsString('id="crlAddButton"', $html);
+        $this->assertStringNotContainsString('id="crlAddModal"', $html);
+        $js = file_get_contents(resource_path('js/app.js'));
+        $this->assertStringContainsString('const nested=nestedScope();', $js);
+        $this->assertStringNotContainsString("channel-range-list'?null:nestedScope()", $js);
 
         $nested = Str::betweenFirst($html, 'class="crl-nested"', '</table>');
         $this->assertStringContainsString('Channel Number', $nested);
         $this->assertStringNotContainsString('>Actions</th>', $nested);
         $this->assertStringContainsString('crl-channel-col', $nested);
+        $this->assertStringContainsString('data-bulk-row="nested" data-bulk-id="'.$firstNumber->id.'" data-bulk-url="'.url('/channel-range-list/bulk').'"', $nested);
+        $this->assertStringContainsString('data-bulk-row="nested" data-bulk-id="'.$secondNumber->id.'" data-bulk-url="'.url('/channel-range-list/bulk').'"', $nested);
         $this->assertStringNotContainsString('class="action-btn', $nested);
         $this->assertStringNotContainsString('SIP Name', $nested);
         $this->assertStringNotContainsString('SIP_ATOME_01', $nested);
@@ -178,42 +179,57 @@ class ChannelRangeListPageTest extends TestCase
             $css
         );
         $this->assertMatchesRegularExpression(
-            '/body\[data-page="channel-range-list"\] \.crl-table > thead > tr > th,\s*body\[data-page="channel-range-list"\] \.crl-table > tbody > tr > td,\s*body\[data-page="channel-range-list"\] \.crl-nested > thead > tr > th,\s*body\[data-page="channel-range-list"\] \.crl-nested > tbody > tr > td \{\s*border: 0;\s*border-bottom: 0;/',
+            '/body\[data-page="channel-range-list"\] \.crl-table > thead > tr > th,\s*body\[data-page="channel-range-list"\] \.crl-table > tbody > tr > td \{\s*border: 0;\s*border-bottom: 0;/',
             $css
         );
+        $this->assertDoesNotMatchRegularExpression(
+            '/body\[data-page="channel-range-list"\] \.crl-table \.ca-nested \{\s*border: 0;/',
+            $css
+        );
+        $this->assertStringContainsString('.ca-nested { border: 1.25px solid var(--border); border-radius: 10px;', $css);
         $this->assertDoesNotMatchRegularExpression(
             '/body\[data-page="channel-range-list"\] \.crl-table > thead > tr > th\.crl-campaign-col[\s\S]{0,180}padding-left: 16px;/',
             $css
         );
+        $this->assertMatchesRegularExpression(
+            '/body\[data-page="channel-range-list"\] \.crl-table > thead > tr > th:first-child \.ca-toggle \{\s*visibility: hidden;[\s\S]*?width: 26\.25px;/',
+            $css
+        );
+        $this->assertMatchesRegularExpression(
+            '/body\[data-page="channel-range-list"\] \.crl-table \.ca-campaign-cell \{\s*gap: 4px;/',
+            $css
+        );
+        $this->assertStringNotContainsString('crl-toggle-col', $css);
     }
 
     public function test_from_to_creates_actual_channel_records_and_blocks_duplicates(): void
     {
         $this->actingAs($this->admin);
         $campaign = ChannelAllocationCampaign::create(['name' => 'Atome']);
-        $sip = SipChannel::create([
+
+        $this->post('/sip-channels', [
             'campaign_id' => $campaign->id,
             'etpi_sip_name' => 'SIP_ATOME_01',
-        ]);
-
-        $this->post('/channel-range-list', [
-            'sip_channel_id' => $sip->id,
             'from' => '253235320',
             'to' => '253235333',
         ])->assertRedirect();
 
+        $sip = SipChannel::where('etpi_sip_name', 'SIP_ATOME_01')->firstOrFail();
         $this->assertSame(14, SipChannelNumber::count());
         $this->assertSame('253235320', SipChannelNumber::orderBy('channel_number')->value('channel_number'));
         $this->assertTrue(SipChannelNumber::where('channel_number', '253235333')->where('sip_channel_id', $sip->id)->exists());
         $this->assertSame(14, SipChannelNumber::where('sip_channel_id', $sip->id)->count());
+        $this->assertSame('253235320 - 253235333', $sip->channel_range);
 
-        $this->from('/channel-range-list')->post('/channel-range-list', [
-            'sip_channel_id' => $sip->id,
+        $this->from('/sip-channels')->post('/sip-channels', [
+            'campaign_id' => $campaign->id,
+            'etpi_sip_name' => 'SIP_ATOME_02',
             'from' => '253235333',
             'to' => '253235334',
-        ])->assertRedirect('/channel-range-list')->assertSessionHasErrors('from');
+        ])->assertRedirect('/sip-channels')->assertSessionHasErrors('from');
 
         $this->assertSame(14, SipChannelNumber::count());
+        $this->assertDatabaseMissing('sip_channels', ['etpi_sip_name' => 'SIP_ATOME_02']);
     }
 
     public function test_edit_and_delete_actual_channel_number(): void
@@ -310,7 +326,7 @@ class ChannelRangeListPageTest extends TestCase
 
         $html = $this->get('/channel-range-list')->assertOk()->getContent();
         $this->assertStringNotContainsString('data-ca-toggle="'.$sip->id.'"', $html);
-        $this->assertStringContainsString('data-sip-name="SIP_ATOME_01"', $html);
+        $this->assertStringNotContainsString('id="crlAddModal"', $html);
     }
 
     public function test_sip_channel_edits_reflect_on_channel_range_list(): void
@@ -333,7 +349,8 @@ class ChannelRangeListPageTest extends TestCase
         $this->from('/sip-channels')->put('/sip-channels/'.$sip->id, [
             'campaign_id' => $bpi->id,
             'etpi_sip_name' => 'SIP_BPI_01',
-            'channel_range' => '200 - 202',
+            'from' => '200',
+            'to' => '202',
         ])->assertRedirect('/sip-channels')->assertSessionMissing('sip_edit');
 
         $this->assertDatabaseHas('sip_channels', [
@@ -358,24 +375,25 @@ class ChannelRangeListPageTest extends TestCase
         $this->assertStringNotContainsString('100 - 102', $html);
     }
 
-    public function test_saving_a_sip_channel_does_not_create_a_channel_range_row(): void
+    public function test_saving_a_sip_channel_creates_its_channel_range_row(): void
     {
         $this->actingAs($this->admin);
         $campaign = ChannelAllocationCampaign::create(['name' => 'Atome']);
         $this->post('/sip-channels', [
             'campaign_id' => $campaign->id,
             'etpi_sip_name' => 'SIP_ATOME_01',
-            'channel_range' => '30001 - 30500',
+            'from' => '30001',
+            'to' => '30005',
         ])->assertRedirect();
 
         $sip = SipChannel::where('etpi_sip_name', 'SIP_ATOME_01')->firstOrFail();
-        $this->assertSame(0, SipChannelNumber::where('sip_channel_id', $sip->id)->count());
+        $this->assertSame(5, SipChannelNumber::where('sip_channel_id', $sip->id)->count());
+        $this->assertSame('30001 - 30005', $sip->channel_range);
 
         $html = $this->get('/channel-range-list')->assertOk()->getContent();
-        $this->assertStringNotContainsString('data-ca-toggle="'.$sip->id.'"', $html);
-        $this->assertStringContainsString('data-sip-name="SIP_ATOME_01"', $html);
-        $this->assertStringContainsString('data-from="30001"', $html);
-        $this->assertStringContainsString('data-to="30500"', $html);
+        $this->assertStringContainsString('data-ca-toggle="'.$sip->id.'"', $html);
+        $this->assertStringContainsString('30001 - 30005', $html);
+        $this->assertStringNotContainsString('id="crlAddButton"', $html);
     }
 
     public function test_import_export_and_template_use_actual_channel_records(): void
@@ -455,6 +473,7 @@ class ChannelRangeListPageTest extends TestCase
         [$exportHeaders, $exportRows] = app(XlsxService::class)->read($export->getFile()->getPathname());
         $this->assertSame(['Campaign', 'SIP Name', 'Channel Number'], $exportHeaders);
         $this->assertContains(['Atome', 'SIP_ATOME_01', '253235320'], $exportRows);
+        $this->assertContains(['', '', '253235321'], $exportRows);
     }
 
     public function test_standard_user_cannot_access_channel_range_list(): void

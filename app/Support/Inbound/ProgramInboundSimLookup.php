@@ -124,28 +124,54 @@ class ProgramInboundSimLookup
         }
 
         $indexed = [];
-        $model::query()
-            ->with(['gatewayAssignment.gateway:id,hostname'])
+        $sims = $model::query()
+            ->with(['gatewayAssignment.gateway:id,hostname,ip_address'])
             ->orderBy('mobile_number')
-            ->get()
-            ->each(function (Model $sim) use (&$indexed) {
-                $mobile = trim((string) ($sim->mobile_number ?? ''));
-                if ($mobile === '' || isset($indexed[$mobile])) {
-                    return;
-                }
+            ->get();
 
-                $assignment = $sim->gatewayAssignment;
-                $gateway = $assignment?->gateway;
-                $hostname = trim((string) ($gateway?->hostname ?? ''));
-                $port = $assignment?->port;
+        $missingIps = [];
+        foreach ($sims as $sim) {
+            if ($sim->gatewayAssignment?->gateway) {
+                continue;
+            }
+            $ip = strtolower(trim((string) ($sim->ip_address ?? '')));
+            if ($ip !== '') {
+                $missingIps[$ip] = true;
+            }
+        }
 
-                $indexed[$mobile] = [
-                    'mobile' => $mobile,
-                    'hostname' => $hostname,
-                    'port' => $port ? (string) $port : '',
-                    'media_gateway_id' => $gateway?->id,
-                ];
-            });
+        $gatewaysByIp = collect();
+        if ($missingIps !== []) {
+            $gatewaysByIp = MediaGateway::query()
+                ->whereNotNull('hostname')
+                ->where('hostname', '!=', '')
+                ->whereNotNull('ip_address')
+                ->get(['id', 'hostname', 'ip_address'])
+                ->filter(fn (MediaGateway $gateway) => isset($missingIps[strtolower(trim((string) $gateway->ip_address))]))
+                ->keyBy(fn (MediaGateway $gateway) => strtolower(trim((string) $gateway->ip_address)));
+        }
+
+        foreach ($sims as $sim) {
+            $mobile = trim((string) ($sim->mobile_number ?? ''));
+            if ($mobile === '' || isset($indexed[$mobile])) {
+                continue;
+            }
+
+            $assignment = $sim->gatewayAssignment;
+            $gateway = $assignment?->gateway;
+            if (! $gateway) {
+                $ip = strtolower(trim((string) ($sim->ip_address ?? '')));
+                $gateway = $ip !== '' ? $gatewaysByIp->get($ip) : null;
+            }
+            $port = $assignment?->port;
+
+            $indexed[$mobile] = [
+                'mobile' => $mobile,
+                'hostname' => trim((string) ($gateway?->hostname ?? '')),
+                'port' => $port ? (string) $port : '',
+                'media_gateway_id' => $gateway?->id,
+            ];
+        }
 
         self::$indexes[$network] = $indexed;
 

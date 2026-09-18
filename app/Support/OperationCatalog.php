@@ -44,6 +44,25 @@ class OperationCatalog
     }
 
     /**
+     * Site names for PDC Servers only. Campaigns and other modules keep locations().
+     *
+     * @return list<string>
+     */
+    public static function pdcSiteNames(): array
+    {
+        return [
+            'Alcar',
+            'CG3',
+            'CTN',
+            'Estancia',
+            'PDC',
+            'SC5',
+            'Skyrise',
+            'WFH',
+        ];
+    }
+
+    /**
      * Map markers for Program Location. Coordinates come from published building
      * listings / OpenStreetMap for each SSG site; the database has no lat/lng columns.
      *
@@ -181,7 +200,7 @@ class OperationCatalog
                 'title' => 'PDC Servers',
                 'description' => 'Manage PDC server inventory grouped by campaign.',
                 'model' => PdcServer::class,
-                'columns' => ['hostname' => 'Hostname', 'ip_address' => 'IP Address', 'location' => 'Location', 'role' => 'Role', 'status' => 'Status'],
+                'columns' => ['hostname' => 'Hostname', 'ip_address' => 'IP Address', 'location' => 'Site', 'role' => 'Role', 'status' => 'Status'],
                 'fields' => ['hostname', 'ip_address', 'location', 'role', 'status'],
             ],
             'sip-channels' => [
@@ -311,7 +330,7 @@ class OperationCatalog
     }
 
     /**
-     * Globe / Smart SIM add/edit and Data Transfer fields. Port comes from GSM Gateway assignments.
+     * Globe / Smart SIM add/edit fields. Port is stored on GSM Gateway assignments.
      *
      * @return array<string, string>
      */
@@ -322,10 +341,24 @@ class OperationCatalog
             'mobile_number' => 'Mobile Number',
             'plan' => 'Plan',
             'ip_address' => 'IP',
+            'port' => 'Port',
             'account_number' => 'Account Number',
             'contract_start' => 'Contract Start',
             'contract_end' => 'Contract End',
         ];
+    }
+
+    /**
+     * Globe / Smart SIM import fields. Port is export-only.
+     *
+     * @return array<string, string>
+     */
+    public static function simImportFields(): array
+    {
+        $fields = self::simFormFields();
+        unset($fields['port']);
+
+        return $fields;
     }
 
     public static function isSim(string $module): bool
@@ -349,7 +382,7 @@ class OperationCatalog
     }
 
     /**
-     * Data Transfer columns match the table fields. No Id and no Last Updated.
+     * Excel export columns include Port from the GSM Gateway assignment.
      *
      * @return array<string, string>
      */

@@ -39,7 +39,7 @@
     <th>Id</th>
     <th>Campaign</th>
     <th>FTE</th>
-    <th>Location</th>
+    <th>Site</th>
     <th class="actions-column">Actions</th>
 </tr>
 </thead>
@@ -118,9 +118,9 @@
                         <input class="form-control" id="campaign_fte" name="fte" type="number" min="0" step="1" required>
                     </div>
                     <div class="form-group">
-                        <label for="campaign_location">Location</label>
+                        <label for="campaign_location">Site</label>
                         <select class="form-control" id="campaign_location" name="location" required>
-                            <option value="" selected hidden>Select Location</option>
+                            <option value="" selected hidden>Select Site</option>
                             <?php $__currentLoopData = $locations; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $slug => $name): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                 <option value="<?php echo e($name); ?>"><?php echo e($name); ?></option>
                             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>

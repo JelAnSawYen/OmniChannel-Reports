@@ -42,7 +42,7 @@
             <span class="ca-campaign-identity">Campaign</span>
         </span>
     </th>
-    <th>Location</th>
+    <th>Site</th>
     <th>Date Endorse</th>
     <th>DNS</th>
     <th class="actions-column">Actions</th>
@@ -51,7 +51,6 @@
 <tbody>
 <?php $__empty_1 = true; $__currentLoopData = $groups; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $group): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
 <?php
-    $pdcServerDisplayId = 0;
     $serverCount = $group->servers->count();
     $campaignName = $group->campaign?->name ?: '—';
     $dateDisplay = $group->date_endorse ? \App\Support\PdcEndorseDate::display($group->date_endorse->format('Y-m-d')) : '—';
@@ -126,7 +125,6 @@
             <table class="pdc-servers-nested" aria-label="<?php echo e($campaignName); ?> servers">
                 <thead>
                     <tr>
-                        <th>ID</th>
                         <th>Hostname</th>
                         <th>Source IP</th>
                         <th>OS</th>
@@ -164,8 +162,6 @@
                         }
                     ?>
                     <tr <?php if(auth()->user()->hasPermission('media.delete')): ?> data-bulk-row="nested" data-bulk-id="<?php echo e($server->id); ?>" data-bulk-url="<?php echo e(route('pdc-servers.servers.bulk-destroy', $group)); ?>" <?php endif; ?>>
-                        <?php $pdcServerDisplayId++; ?>
-                        <td><span class="pdc-cell-group pdc-server-id"><?php echo e($pdcServerDisplayId); ?></span></td>
                         <td><span class="pdc-cell-group"><?php echo e($server->hostname); ?></span></td>
                         <td><span class="pdc-cell-group"><?php echo e($server->ip_address); ?></span></td>
                         <td><span class="pdc-cell-group"><?php echo e($server->os ?: '—'); ?></span></td>
@@ -215,7 +211,7 @@
                         </td>
                     </tr>
                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_2): ?>
-                    <tr><td colspan="11"><div class="empty-state">No servers for this campaign.</div></td></tr>
+                    <tr><td colspan="10"><div class="empty-state">No servers for this campaign.</div></td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
@@ -265,11 +261,11 @@
                         ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
                     </div>
                     <div class="form-group">
-                        <label for="pdc_location">Location</label>
+                        <label for="pdc_location">Site</label>
                         <select class="form-control" name="location" id="pdc_location">
-                            <option value="" selected hidden>Select Location</option>
+                            <option value="" hidden>Select Site</option>
                             <?php $__currentLoopData = $locations; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $name): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                                <option value="<?php echo e($name); ?>"><?php echo e($name); ?></option>
+                                <option value="<?php echo e($name); ?>" <?php if($name === 'PDC'): echo 'selected'; endif; ?>><?php echo e($name); ?></option>
                             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                         </select>
                     </div>

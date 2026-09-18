@@ -231,6 +231,7 @@ class OperationsCrudSearchTest extends TestCase
             'ip_address' => '10.2.2.3',
             'username' => 'root',
             'database' => 'asteriskcdrdb',
+            'network' => 'Smart SIM',
         ]);
 
         $page = $this->get('/gsm-gateways')->assertOk();
@@ -240,15 +241,25 @@ class OperationsCrudSearchTest extends TestCase
             ->assertSee('<select class="form-control" id="site_name" name="site_name" required>', false)
             ->assertDontSee('<input class="form-control" id="site_name" name="site_name" required>', false)
             ->assertSee('data-ca-toggle="'.$target->id.'"', false)
-            ->assertSee('Add SIM Assignment', false)
-            ->assertSee('id="gsmSimNetwork"', false)
-            ->assertSee('Search SIM (IMEI or Mobile Number)...', false)
-            ->assertSee('data-gsm-sim-add="'.$target->id.'"', false)
+            ->assertSee('data-open-modal="add-media-gateway"', false)
+            ->assertDontSee('Add SIM Assignment', false)
+            ->assertDontSee('id="gsmSimNetwork"', false)
+            ->assertDontSee('id="gsmSimModal"', false)
+            ->assertDontSee('Search SIM (IMEI or Mobile Number)...', false)
+            ->assertDontSee('data-gsm-sim-add', false)
             ->assertDontSee('<select class="form-control" id="network" name="network" required>', false)
+            ->assertDontSee('<select class="form-control" id="network" name="network">', false)
+            ->assertDontSee('<option value="" selected hidden>Select Network</option>', false)
+            ->assertDontSee('<option value="Globe SIM">Globe SIM</option>', false)
+            ->assertDontSee('<option value="Smart SIM">Smart SIM</option>', false)
+            ->assertSee('<input class="form-control" id="network" name="network">', false)
+            ->assertSee('data-sort="network"', false)
+            ->assertSee('data-edit-network="Smart SIM"', false)
+            ->assertSee('>Network</label>', false)
+            ->assertDontSee('Network <span class="req">*</span>', false)
             ->assertDontSee('SIM Assignments (', false)
             ->assertSee('<option value="" selected hidden>Select Function</option>', false)
             ->assertSee('<option value="" selected hidden>Select Site</option>', false)
-            ->assertSee('<option value="" selected hidden>Select Network</option>', false)
             ->assertSee('<option value="Inbound">Inbound</option>', false)
             ->assertSee('<option value="Outbound">Outbound</option>', false)
             ->assertDontSee('placeholder="Enter hostname"', false)
@@ -266,6 +277,10 @@ class OperationsCrudSearchTest extends TestCase
             ->assertDontSee('Serial Number <span class="req">*</span>', false)
             ->assertDontSee('User <span class="req">*</span>', false)
             ->assertDontSee('Channel Count <span class="req">*</span>', false);
+        $this->assertMatchesRegularExpression(
+            '/data-sort="channel_count"[\s\S]*data-sort="network"[\s\S]*data-sort="device_function"/',
+            $page->getContent()
+        );
 
         $css = file_get_contents(resource_path('css/app.css'));
         $this->assertStringContainsString('body[data-page="gsm-gateways"] .gsm-host-cell > span', $css);
@@ -285,7 +300,7 @@ class OperationsCrudSearchTest extends TestCase
             'ip_address' => '10.2.2.3',
             'channel_count' => 8,
             'device_function' => 'Inbound',
-            'network' => 'Globe SIM',
+            'network' => 'Eastern',
             'username' => 'root',
             'database' => 'asteriskcdrdb',
         ])->assertOk();
@@ -293,6 +308,7 @@ class OperationsCrudSearchTest extends TestCase
         $this->assertDatabaseHas('media_gateways', [
             'id' => $target->id,
             'site_name' => 'CTN',
+            'network' => 'Eastern',
         ]);
         $this->assertDatabaseHas('media_gateways', [
             'id' => $keep->id,
@@ -302,6 +318,21 @@ class OperationsCrudSearchTest extends TestCase
         $this->deleteJson('/gsm-gateways/'.$target->id)->assertOk();
         $this->assertDatabaseMissing('media_gateways', ['id' => $target->id]);
         $this->assertDatabaseHas('media_gateways', ['id' => $keep->id]);
+
+        $this->postJson('/gsm-gateways', [
+            'hostname' => 'gsm-new-001',
+            'site_name' => 'Alcar',
+            'site_code' => 'NEW001',
+            'ip_address' => '10.2.2.8',
+            'channel_count' => 16,
+            'device_function' => 'Outbound',
+            'network' => 'Smart SIM',
+            'username' => 'root',
+        ])->assertCreated();
+        $this->assertDatabaseHas('media_gateways', [
+            'site_code' => 'NEW001',
+            'network' => 'Smart SIM',
+        ]);
 
         $this->postJson('/gsm-gateways', [
             'hostname' => 'bad-host',
@@ -360,7 +391,15 @@ class OperationsCrudSearchTest extends TestCase
             ->assertDontSee('class="action-btn edit"', false)
             ->assertDontSee('class="action-btn delete"', false)
             ->assertSee('gsm-sim-nested', false)
-            ->assertSee('ca-actions-head', false);
+            ->assertDontSee('ca-actions-head', false)
+            ->assertDontSee('data-gsm-sim-add', false)
+            ->assertDontSee('id="gsmSimModal"', false);
+
+        $this->assertMatchesRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-sim-nested \{\s*width: 100%;\s*table-layout: fixed;/', $css);
+        $this->assertStringContainsString('body[data-page="gsm-gateways"] .gsm-sim-nested > colgroup > col', $css);
+        $this->assertStringContainsString('body[data-page="gsm-gateways"] .gsm-sim-nested thead th:last-child', $css);
+        $this->assertMatchesRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-sim-nested tbody td:last-child \{\s*width: 20%;\s*min-width: 0;/', $css);
+        $this->assertMatchesRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-sim-nested tbody td:last-child \{[\s\S]*?padding: 18\.75px 15px;/', $css);
 
         $this->actingAs($this->admin)->get('/program-location/estancia')
             ->assertOk()

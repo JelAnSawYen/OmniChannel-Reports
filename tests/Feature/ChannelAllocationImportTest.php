@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\ChannelAllocation;
 use App\Models\ChannelAllocationCampaign;
+use App\Models\MediaGateway;
+use App\Models\SipChannel;
 use App\Models\User;
 use App\Models\UserType;
 use App\Services\XlsxService;
@@ -35,8 +37,11 @@ class ChannelAllocationImportTest extends TestCase
         [$headers, $rows] = app(XlsxService::class)->read($path);
 
         $this->assertContains('Campaign', $headers);
-        $this->assertContains('Channel Allocation', $headers);
-        $this->assertContains('Total Channel Allocated', $headers);
+        $this->assertContains('Channel', $headers);
+        $this->assertContains('Line Priority', $headers);
+        $this->assertNotContains('Channel Allocation', $headers);
+        $this->assertNotContains('Media Gateway', $headers);
+        $this->assertNotContains('Total Channel Allocated', $headers);
         $this->assertNotContains('Total Channels Allocated', $headers);
         $this->assertSame([], $rows);
 
@@ -52,10 +57,11 @@ class ChannelAllocationImportTest extends TestCase
     public function test_preview_shows_row_errors_and_does_not_save(): void
     {
         $this->actingAs($this->admin);
+        $this->sip('CH-3', 'Globe SIM', 8);
         $path = $this->makeSpreadsheet([
-            ['Broken', '', '', '123', '100', '', 'CH-1', 'Globe SIM', '1', '10'],
-            ['Broken', '10.0.0.2', '', '123', '100', '', 'CH-2', 'Globe SIM', '1', ''],
-            ['Broken', '10.0.0.2', '2', '123', '100', '', 'CH-3', 'InvalidNet', '1', '8'],
+            ['Broken', '', '123', '100', '', '', '1'],
+            ['Broken', '', '123', '100', '', 'UNKNOWN-CH', '1'],
+            ['Broken', '2', '123', '100', '', 'CH-3', '1'],
         ]);
 
         $preview = $this->postJson('/channel-allocation/import/preview', [
@@ -64,10 +70,11 @@ class ChannelAllocationImportTest extends TestCase
 
         $this->assertFalse($preview['valid']);
         $this->assertSame(2, $preview['summary']['errors']);
-        $this->assertStringContainsString('Missing Media Gateway', $preview['rows'][0]['error']);
-        $this->assertStringContainsString('Total Channel Allocated is required', $preview['rows'][1]['error']);
+        $this->assertStringContainsString('Channel is required', $preview['rows'][0]['error']);
+        $this->assertStringContainsString('Channel must match an existing SIP Name or GSM Hostname', $preview['rows'][1]['error']);
         $this->assertTrue($preview['rows'][2]['valid']);
-        $this->assertSame('InvalidNet', $preview['rows'][2]['network']);
+        $this->assertSame('Globe SIM', $preview['rows'][2]['network']);
+        $this->assertSame('8', $preview['rows'][2]['total_channel_allocated']);
         $this->assertSame(0, ChannelAllocationCampaign::count());
         $this->assertSame(0, ChannelAllocation::count());
 
@@ -79,10 +86,13 @@ class ChannelAllocationImportTest extends TestCase
     public function test_valid_import_groups_campaigns_calculates_totals_and_keeps_export(): void
     {
         $this->actingAs($this->admin);
+        $this->sip('CH-A1', 'Globe SIM', 20);
+        $this->sip('CH-A2', 'Smart SIM', 12);
+        $this->sip('CH-B1', 'Eastern SIP', 8);
         $path = $this->makeSpreadsheet([
-            ['Alpha Import', '10.1.1.1', '4', '555', '200', 'note', 'CH-A1', 'Globe SIM', '1', '20'],
-            ['Alpha Import', '10.1.1.1', '4', '555', '200', '', 'CH-A2', 'Smart SIM', '2', '12'],
-            ['Beta Import', '10.1.1.2', '3', 'N/A', '201', '', 'CH-B1', 'Eastern SIP', '1', '8'],
+            ['Alpha Import', '4', '555', '200', 'note', 'CH-A1', '1'],
+            ['Alpha Import', '4', '555', '200', '', 'CH-A2', '2'],
+            ['Beta Import', '3', 'N/A', '201', '', 'CH-B1', '1'],
         ]);
 
         $preview = $this->postJson('/channel-allocation/import/preview', [
@@ -113,27 +123,45 @@ class ChannelAllocationImportTest extends TestCase
         $this->get('/channel-allocation')
             ->assertOk()
             ->assertSee('Alpha Import')
-            ->assertSee('data-label="Allocations">2', false)
-            ->assertDontSee('2 allocations')
+            ->assertSee('class="ca-count">2 allocations', false)
+            ->assertDontSee('data-label="Allocations"', false)
             ->assertSee('Beta Import');
 
-        $this->get('/channel-allocation/export')->assertOk()->assertDownload('channel-allocation.xlsx');
+        $export = $this->get('/channel-allocation/export')->assertOk()->assertDownload('channel-allocation.xlsx');
+        [$exportHeaders] = app(XlsxService::class)->read($export->getFile()->getPathname());
+        $this->assertSame([
+            'Campaign',
+            'Channel',
+            'Network',
+            'Line Priority',
+            'Channel Count',
+            'Total Channels',
+            'FTE',
+            'Caller ID',
+            'Prefix',
+            'Remarks',
+        ], $exportHeaders);
+        $this->assertNotContains('SIP Channel', $exportHeaders);
+        $this->assertNotContains('GSM Gateway', $exportHeaders);
+        $this->assertNotContains('Total Channel Allocated', $exportHeaders);
     }
 
     public function test_excel_shared_string_file_with_edited_values_is_parsed_and_previewed(): void
     {
         $this->actingAs($this->admin);
+        $this->sip('CH-EDIT-1', 'Globe SIM', 15);
+        $this->sip('CH-EDIT-2', 'Smart SIM', 9);
         $path = $this->makeExcelSharedStringSpreadsheet([
-            ['Campaign', 'Media Gateway', 'FTE', 'Caller ID', 'Prefix', 'Remarks', 'Channel Allocation', 'Network', 'Line Priority', 'Total Channel Allocated'],
-            ['Edited Campaign', '10.2.2.2', '5', '888', '400', 'edited', 'CH-EDIT-1', 'Globe SIM', '1', '15'],
-            ['Edited Campaign', '10.2.2.2', '5', '888', '400', '', 'CH-EDIT-2', 'Smart SIM', '2', '9'],
+            ['Campaign', 'FTE', 'Caller ID', 'Prefix', 'Remarks', 'Channel', 'Line Priority'],
+            ['Edited Campaign', '5', '888', '400', 'edited', 'CH-EDIT-1', '1'],
+            ['Edited Campaign', '5', '888', '400', '', 'CH-EDIT-2', '2'],
         ]);
 
         [$headers, $rows] = app(XlsxService::class)->read($path);
         $this->assertSame('Campaign', $headers[0]);
-        $this->assertSame('Channel Allocation', $headers[6]);
+        $this->assertSame('Channel', $headers[5]);
         $this->assertSame('Edited Campaign', trim((string) $rows[0][0]));
-        $this->assertSame('CH-EDIT-2', trim((string) $rows[1][6]));
+        $this->assertSame('CH-EDIT-2', trim((string) $rows[1][5]));
 
         $preview = $this->postJson('/channel-allocation/import/preview', [
             'file' => $this->upload($path, 'edited-template.xlsx'),
@@ -150,10 +178,11 @@ class ChannelAllocationImportTest extends TestCase
     public function test_excel_shared_string_file_with_errors_returns_preview_and_blocks_confirm(): void
     {
         $this->actingAs($this->admin);
+        $this->sip('CH-2', 'Globe SIM', 8);
         $path = $this->makeExcelSharedStringSpreadsheet([
-            ['Campaign', 'Media Gateway', 'FTE', 'Caller ID', 'Prefix', 'Remarks', 'Channel Allocation', 'Network', 'Line Priority', 'Total Channel Allocated'],
-            ['Broken Edit', '', '2', '123', '100', '', 'CH-1', 'Globe SIM', '1', '10'],
-            ['Broken Edit', '10.0.0.2', '', '123', '100', '', 'CH-2', 'InvalidNet', '1', '8'],
+            ['Campaign', 'FTE', 'Caller ID', 'Prefix', 'Remarks', 'Channel', 'Line Priority'],
+            ['Broken Edit', '2', '123', '100', '', '', '1'],
+            ['Broken Edit', '', '123', '100', '', 'CH-2', '1'],
         ]);
 
         $preview = $this->postJson('/channel-allocation/import/preview', [
@@ -162,9 +191,9 @@ class ChannelAllocationImportTest extends TestCase
 
         $this->assertFalse($preview['valid']);
         $this->assertGreaterThan(0, $preview['summary']['errors']);
-        $this->assertStringContainsString('Missing Media Gateway', $preview['rows'][0]['error']);
+        $this->assertStringContainsString('Channel is required', $preview['rows'][0]['error']);
         $this->assertTrue($preview['rows'][1]['valid']);
-        $this->assertSame('InvalidNet', $preview['rows'][1]['network']);
+        $this->assertSame('Globe SIM', $preview['rows'][1]['network']);
         $this->postJson('/channel-allocation/import/confirm', ['token' => $preview['token']])->assertStatus(422);
         $this->assertSame(0, ChannelAllocation::count());
     }
@@ -186,8 +215,9 @@ class ChannelAllocationImportTest extends TestCase
         ]);
         $campaign->refreshTotalChannelsAllocated();
 
+        $this->sip('CH-NEW', 'Globe SIM', 7);
         $path = $this->makeSpreadsheet([
-            ['Alpha Import', '10.1.1.1', '4', '555', '200', '', 'CH-NEW', 'Globe SIM', '2', '7'],
+            ['Alpha Import', '4', '555', '200', '', 'CH-NEW', '2'],
         ]);
         $preview = $this->postJson('/channel-allocation/import/preview', [
             'file' => $this->upload($path),
@@ -200,14 +230,18 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertSame(12, $campaign->fresh()->total_channels_allocated);
     }
 
-    public function test_preview_accepts_arbitrary_network_values_and_inherits_blank_network(): void
+    public function test_preview_accepts_network_from_sip_or_gsm_source_records(): void
     {
         $this->actingAs($this->admin);
+        $this->sip('CH-N1', 'DITO SIM', 5);
+        $this->sip('CH-N2', 'TNT', 6);
+        $this->sip('CH-N3', 'Custom Carrier X', 7);
+        $this->sip('CH-N4', 'Custom Carrier X', 8);
         $path = $this->makeSpreadsheet([
-            ['Net Import', '10.3.3.3', '2', '111', '300', '', 'CH-N1', 'DITO SIM', '1', '5'],
-            ['Net Import', '10.3.3.3', '2', '111', '300', '', 'CH-N2', 'TNT', '2', '6'],
-            ['Net Import', '10.3.3.3', '2', '111', '300', '', 'CH-N3', 'Custom Carrier X', '3', '7'],
-            ['Net Import', '10.3.3.3', '2', '111', '300', '', 'CH-N4', '', '4', '8'],
+            ['Net Import', '2', '111', '300', '', 'CH-N1', '1'],
+            ['Net Import', '2', '111', '300', '', 'CH-N2', '2'],
+            ['Net Import', '2', '111', '300', '', 'CH-N3', '3'],
+            ['Net Import', '2', '111', '300', '', 'CH-N4', '4'],
         ]);
 
         $preview = $this->postJson('/channel-allocation/import/preview', [
@@ -220,6 +254,8 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertSame('TNT', $preview['rows'][1]['network']);
         $this->assertSame('Custom Carrier X', $preview['rows'][2]['network']);
         $this->assertSame('Custom Carrier X', $preview['rows'][3]['network']);
+        $this->assertSame('5', $preview['rows'][0]['total_channel_allocated']);
+        $this->assertSame('8', $preview['rows'][3]['total_channel_allocated']);
 
         $this->postJson('/channel-allocation/import/confirm', ['token' => $preview['token']])
             ->assertOk()
@@ -232,15 +268,20 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertSame('Custom Carrier X', $campaign->allocations()->where('channel_allocation', 'CH-N4')->value('network'));
     }
 
-    public function test_media_gateway_accepts_one_or_two_ipv4_addresses_and_rejects_invalid(): void
+    public function test_channel_must_match_sip_name_or_gsm_hostname_and_rejects_clash(): void
     {
         $this->actingAs($this->admin);
+        $this->sip('CH-G1', 'DITO SIM', 5);
+        $this->sip('CH-G2', 'TNT', 6);
+        $this->gsm('GSM-HOST-1', 'Globe SIM', 12);
+        $this->sip('SHARED-NAME', 'ETPI', 14);
+        $this->gsm('SHARED-NAME', 'Globe SIM', 9);
+
         $path = $this->makeSpreadsheet([
-            ['Gw Import', '10.24.28.38', '2', '111', '300', '', 'CH-G1', 'DITO SIM', '1', '5'],
-            ['Gw Import', '10.24.28.38, 10.24.28.39', '2', '111', '300', '', 'CH-G2', 'TNT', '2', '6'],
-            ['Gw Import', '', '2', '111', '300', '', 'CH-G3', 'Globe SIM', '3', '7'],
-            ['Gw Import', 'not-an-ip', '2', '111', '300', '', 'CH-G4', 'Globe SIM', '4', '8'],
-            ['Gw Import', '10.24.28.38, 10.24.28.39, 10.24.28.40', '2', '111', '300', '', 'CH-G5', 'Globe SIM', '5', '9'],
+            ['Gw Import', '2', '111', '300', '', 'CH-G1', '1'],
+            ['Gw Import', '2', '111', '300', '', 'GSM-HOST-1', '2'],
+            ['Gw Import', '2', '111', '300', '', 'UNKNOWN', '3'],
+            ['Gw Import', '2', '111', '300', '', 'SHARED-NAME', '4'],
         ]);
 
         $preview = $this->postJson('/channel-allocation/import/preview', [
@@ -250,12 +291,11 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertFalse($preview['valid']);
         $this->assertTrue($preview['rows'][0]['valid']);
         $this->assertTrue($preview['rows'][1]['valid']);
-        $this->assertTrue($preview['rows'][2]['valid']);
-        $this->assertSame('10.24.28.38', $preview['rows'][0]['media_gateway']);
-        $this->assertSame('10.24.28.38, 10.24.28.39', $preview['rows'][1]['media_gateway']);
-        $this->assertSame('10.24.28.38, 10.24.28.39', $preview['rows'][2]['media_gateway']);
-        $this->assertStringContainsString('Media Gateway must be a valid IPv4 address', $preview['rows'][3]['error']);
-        $this->assertStringContainsString('Media Gateway must contain 1 or 2 IPv4 addresses', $preview['rows'][4]['error']);
+        $this->assertSame('DITO SIM', $preview['rows'][0]['network']);
+        $this->assertSame('Globe SIM', $preview['rows'][1]['network']);
+        $this->assertSame('12', $preview['rows'][1]['total_channel_allocated']);
+        $this->assertStringContainsString('Channel must match an existing SIP Name or GSM Hostname', $preview['rows'][2]['error']);
+        $this->assertStringContainsString('Channel matches both a SIP Channel and a GSM Gateway', $preview['rows'][3]['error']);
     }
 
     public function test_import_uses_master_campaign_fte_and_ignores_file_fte(): void
@@ -267,11 +307,16 @@ class ChannelAllocationImportTest extends TestCase
             'sort_order' => 1,
         ]);
 
+        $this->sip('CH-F1', 'DITO SIM', 5);
+        $this->sip('CH-F2', 'DITO SIM', 6);
+        $this->sip('CH-F3', 'DITO SIM', 7);
+        $this->sip('CH-F4', 'DITO SIM', 8);
+
         $validPath = $this->makeSpreadsheet([
-            ['Fte Import', '10.24.28.38', '4', '111', '300', '', 'CH-F1', 'DITO SIM', '1', '5'],
-            ['Fte Import', '10.24.28.38', '', '111', '300', '', 'CH-F2', 'DITO SIM', '2', '6'],
-            ['Fte Import', '10.24.28.38', '5', '111', '300', '', 'CH-F3', 'DITO SIM', '3', '7'],
-            ['Fte Import', '10.24.28.38', '4.5', '111', '300', '', 'CH-F4', 'DITO SIM', '4', '8'],
+            ['Fte Import', '4', '111', '300', '', 'CH-F1', '1'],
+            ['Fte Import', '', '111', '300', '', 'CH-F2', '2'],
+            ['Fte Import', '5', '111', '300', '', 'CH-F3', '3'],
+            ['Fte Import', '4.5', '111', '300', '', 'CH-F4', '4'],
         ]);
 
         $preview = $this->postJson('/channel-allocation/import/preview', [
@@ -294,11 +339,15 @@ class ChannelAllocationImportTest extends TestCase
     public function test_prefix_inherits_blank_and_uses_new_value(): void
     {
         $this->actingAs($this->admin);
+        $this->sip('CH-P1', 'DITO SIM', 5);
+        $this->sip('CH-P2', 'DITO SIM', 6);
+        $this->sip('CH-P3', 'DITO SIM', 7);
+        $this->sip('CH-P4', 'DITO SIM', 8);
         $path = $this->makeSpreadsheet([
-            ['Prefix Import', '10.24.28.38', '4', '111', '100', '', 'CH-P1', 'DITO SIM', '1', '5'],
-            ['Prefix Import', '10.24.28.38', '4', '111', '', '', 'CH-P2', 'DITO SIM', '2', '6'],
-            ['Prefix Import', '10.24.28.38', '4', '111', '200', '', 'CH-P3', 'DITO SIM', '3', '7'],
-            ['Prefix Import', '10.24.28.38', '4', '111', '', '', 'CH-P4', 'DITO SIM', '4', '8'],
+            ['Prefix Import', '4', '111', '100', '', 'CH-P1', '1'],
+            ['Prefix Import', '4', '111', '', '', 'CH-P2', '2'],
+            ['Prefix Import', '4', '111', '200', '', 'CH-P3', '3'],
+            ['Prefix Import', '4', '111', '', '', 'CH-P4', '4'],
         ]);
 
         $preview = $this->postJson('/channel-allocation/import/preview', [
@@ -321,11 +370,15 @@ class ChannelAllocationImportTest extends TestCase
     public function test_caller_id_allows_multiple_values_inherits_blank_and_uses_new_value(): void
     {
         $this->actingAs($this->admin);
+        $this->sip('CH-C1', 'DITO SIM', 5);
+        $this->sip('CH-C2', 'DITO SIM', 6);
+        $this->sip('CH-C3', 'DITO SIM', 7);
+        $this->sip('CH-C4', 'DITO SIM', 8);
         $path = $this->makeSpreadsheet([
-            ['Caller Import', '10.24.28.38', '4', '123456789, 987654321', '100', '', 'CH-C1', 'DITO SIM', '1', '5'],
-            ['Caller Import', '10.24.28.38', '4', '', '100', '', 'CH-C2', 'DITO SIM', '2', '6'],
-            ['Caller Import', '10.24.28.38', '4', '555111000', '100', '', 'CH-C3', 'DITO SIM', '3', '7'],
-            ['Caller Import', '10.24.28.38', '4', '', '100', '', 'CH-C4', 'DITO SIM', '4', '8'],
+            ['Caller Import', '4', '123456789, 987654321', '100', '', 'CH-C1', '1'],
+            ['Caller Import', '4', '', '100', '', 'CH-C2', '2'],
+            ['Caller Import', '4', '555111000', '100', '', 'CH-C3', '3'],
+            ['Caller Import', '4', '', '100', '', 'CH-C4', '4'],
         ]);
 
         $preview = $this->postJson('/channel-allocation/import/preview', [
@@ -345,14 +398,18 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertSame('555111000', ChannelAllocationCampaign::where('name', 'Caller Import')->value('caller_id'));
     }
 
-    public function test_dash_clears_carry_forward_fields_but_not_remarks_or_required_totals(): void
+    public function test_dash_clears_carry_forward_fields_but_not_remarks_and_auto_network(): void
     {
         $this->actingAs($this->admin);
+        $this->sip('CH-D1', 'DITO SIM', 5);
+        $this->sip('CH-D2', 'Globe SIM', 6);
+        $this->sip('CH-D3', 'Smart SIM', 7);
+        $this->sip('CH-D4', 'TNT', 8);
         $path = $this->makeSpreadsheet([
-            ['Dash Import', '10.24.28.38', '4', '111', '100', '-', 'CH-D1', 'DITO SIM', '1', '5'],
-            ['Dash Import', '-', '-', '-', '-', '', 'CH-D2', '-', '2', '6'],
-            ['Dash Import', '', '', '', '', '', 'CH-D3', '', '3', '7'],
-            ['Dash Import', '10.24.28.39', '5', '222', '200', 'note', 'CH-D4', 'TNT', '4', '8'],
+            ['Dash Import', '4', '111', '100', '-', 'CH-D1', '1'],
+            ['Dash Import', '-', '-', '-', '', 'CH-D2', '2'],
+            ['Dash Import', '', '', '', '', 'CH-D3', '3'],
+            ['Dash Import', '5', '222', '200', 'note', 'CH-D4', '4'],
         ]);
 
         $preview = $this->postJson('/channel-allocation/import/preview', [
@@ -360,19 +417,17 @@ class ChannelAllocationImportTest extends TestCase
         ])->assertOk()->json();
 
         $this->assertTrue($preview['valid'], $preview['rows'][1]['error'] ?? '');
-        $this->assertSame('10.24.28.38', $preview['rows'][0]['media_gateway']);
         $this->assertSame('DITO SIM', $preview['rows'][0]['network']);
-        $this->assertSame('', $preview['rows'][1]['media_gateway']);
+        $this->assertSame('5', $preview['rows'][0]['total_channel_allocated']);
         $this->assertSame('', $preview['rows'][1]['fte']);
         $this->assertSame('', $preview['rows'][1]['caller_id']);
         $this->assertSame('', $preview['rows'][1]['prefix']);
-        $this->assertSame('', $preview['rows'][1]['network']);
-        $this->assertSame('', $preview['rows'][2]['media_gateway']);
+        $this->assertSame('Globe SIM', $preview['rows'][1]['network']);
         $this->assertSame('', $preview['rows'][2]['fte']);
-        $this->assertSame('', $preview['rows'][2]['network']);
-        $this->assertSame('10.24.28.39', $preview['rows'][3]['media_gateway']);
+        $this->assertSame('Smart SIM', $preview['rows'][2]['network']);
         $this->assertSame('', $preview['rows'][3]['fte']);
         $this->assertSame('TNT', $preview['rows'][3]['network']);
+        $this->assertSame('8', $preview['rows'][3]['total_channel_allocated']);
 
         $this->postJson('/channel-allocation/import/confirm', ['token' => $preview['token']])
             ->assertOk()
@@ -383,37 +438,32 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertSame('222', $campaign->caller_id);
         $this->assertSame('200', $campaign->prefix);
         $this->assertSame('-', $campaign->remarks);
-        $this->assertSame('10.24.28.38', $campaign->allocations()->where('channel_allocation', 'CH-D1')->value('media_gateway'));
-        $this->assertNull($campaign->allocations()->where('channel_allocation', 'CH-D2')->value('media_gateway'));
-        $this->assertNull($campaign->allocations()->where('channel_allocation', 'CH-D2')->value('network'));
-        $this->assertNull($campaign->allocations()->where('channel_allocation', 'CH-D3')->value('network'));
-        $this->assertSame('10.24.28.39', $campaign->allocations()->where('channel_allocation', 'CH-D4')->value('media_gateway'));
+        $this->assertNull($campaign->allocations()->where('channel_allocation', 'CH-D1')->value('media_gateway'));
+        $this->assertSame('DITO SIM', $campaign->allocations()->where('channel_allocation', 'CH-D1')->value('network'));
+        $this->assertSame('Globe SIM', $campaign->allocations()->where('channel_allocation', 'CH-D2')->value('network'));
+        $this->assertSame('Smart SIM', $campaign->allocations()->where('channel_allocation', 'CH-D3')->value('network'));
         $this->assertSame('TNT', $campaign->allocations()->where('channel_allocation', 'CH-D4')->value('network'));
+        $this->assertSame(8, $campaign->allocations()->where('channel_allocation', 'CH-D4')->value('total_channel_allocated'));
 
         $blockedAllocation = $this->postJson('/channel-allocation/import/preview', [
             'file' => $this->upload($this->makeSpreadsheet([
-                ['Dash Bad CH', '10.24.28.38', '4', '111', '100', '', '-', 'DITO SIM', '1', '5'],
+                ['Dash Bad CH', '4', '111', '100', '', '-', '1'],
             ])),
         ])->assertOk()->json();
         $this->assertFalse($blockedAllocation['valid']);
-        $this->assertStringContainsString('Channel Allocation cannot be -', $blockedAllocation['rows'][0]['error']);
-
-        $blockedTotal = $this->postJson('/channel-allocation/import/preview', [
-            'file' => $this->upload($this->makeSpreadsheet([
-                ['Dash Bad Total', '10.24.28.38', '4', '111', '100', '', 'CH-DT', 'DITO SIM', '1', '-'],
-            ])),
-        ])->assertOk()->json();
-        $this->assertFalse($blockedTotal['valid']);
-        $this->assertStringContainsString('Total Channel Allocated must be a whole number', $blockedTotal['rows'][0]['error']);
+        $this->assertStringContainsString('Channel cannot be -', $blockedAllocation['rows'][0]['error']);
     }
 
     public function test_blank_campaign_rows_stay_on_the_same_campaign_with_unique_allocations(): void
     {
         $this->actingAs($this->admin);
+        $this->sip('CH-001', 'Globe SIM', 10);
+        $this->sip('CH-002', 'Smart SIM', 11);
+        $this->sip('CH-003', 'DITO SIM', 12);
         $path = $this->makeSpreadsheet([
-            ['Campaign A', '10.24.28.38', '5', '123456789', '100', '', 'CH-001', 'Globe SIM', '1', '10'],
-            ['', '10.24.28.39', '', '', '', '', 'CH-002', 'Smart SIM', '2', '11'],
-            ['', '10.24.28.40', '', '', '', '', 'CH-003', 'DITO SIM', '3', '12'],
+            ['Campaign A', '5', '123456789', '100', '', 'CH-001', '1'],
+            ['', '', '', '', '', 'CH-002', '2'],
+            ['', '', '', '', '', 'CH-003', '3'],
         ]);
 
         $preview = $this->postJson('/channel-allocation/import/preview', [
@@ -426,9 +476,12 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertSame('Campaign A', $preview['rows'][0]['campaign']);
         $this->assertSame('Campaign A', $preview['rows'][1]['campaign']);
         $this->assertSame('Campaign A', $preview['rows'][2]['campaign']);
-        $this->assertSame('10.24.28.38', $preview['rows'][0]['media_gateway']);
-        $this->assertSame('10.24.28.39', $preview['rows'][1]['media_gateway']);
-        $this->assertSame('10.24.28.40', $preview['rows'][2]['media_gateway']);
+        $this->assertSame('CH-001', $preview['rows'][0]['channel']);
+        $this->assertSame('CH-002', $preview['rows'][1]['channel']);
+        $this->assertSame('CH-003', $preview['rows'][2]['channel']);
+        $this->assertSame('Globe SIM', $preview['rows'][0]['network']);
+        $this->assertSame('Smart SIM', $preview['rows'][1]['network']);
+        $this->assertSame('DITO SIM', $preview['rows'][2]['network']);
         $this->assertSame('', $preview['rows'][1]['fte']);
         $this->assertSame('123456789', $preview['rows'][1]['caller_id']);
         $this->assertSame('100', $preview['rows'][1]['prefix']);
@@ -453,13 +506,37 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertSame(12, $campaign->allocations()->where('channel_allocation', 'CH-003')->value('total_channel_allocated'));
 
         $duplicatePath = $this->makeSpreadsheet([
-            ['Campaign A', '10.24.28.38', '5', '123456789', '100', '', 'CH-001', 'Globe SIM', '1', '10'],
+            ['Campaign A', '5', '123456789', '100', '', 'CH-001', '1'],
         ]);
         $duplicate = $this->postJson('/channel-allocation/import/preview', [
             'file' => $this->upload($duplicatePath),
         ])->assertOk()->json();
         $this->assertFalse($duplicate['valid']);
-        $this->assertStringContainsString('Channel Allocation already exists', $duplicate['rows'][0]['error']);
+        $this->assertStringContainsString('Channel already exists', $duplicate['rows'][0]['error']);
+    }
+
+    private function sip(string $name, string $network = 'Globe SIM', int $count = 10): SipChannel
+    {
+        return SipChannel::query()->firstOrCreate(
+            ['etpi_sip_name' => $name],
+            ['network' => $network, 'channel_count' => $count]
+        );
+    }
+
+    private function gsm(string $hostname, ?string $network = 'Globe SIM', int $count = 10): MediaGateway
+    {
+        return MediaGateway::query()->firstOrCreate(
+            ['hostname' => $hostname],
+            [
+                'site_name' => 'WFH',
+                'site_code' => $hostname,
+                'ip_address' => '10.24.28.'.random_int(20, 250),
+                'network' => $network,
+                'channel_count' => $count,
+                'username' => 'root',
+                'database' => 'asteriskcdrdb',
+            ]
+        );
     }
 
     /**
@@ -469,15 +546,12 @@ class ChannelAllocationImportTest extends TestCase
     {
         $headers = [
             'Campaign',
-            'Media Gateway',
             'FTE',
             'Caller ID',
             'Prefix',
             'Remarks',
-            'Channel Allocation',
-            'Network',
+            'Channel',
             'Line Priority',
-            'Total Channel Allocated',
         ];
 
         return app(XlsxService::class)->export($headers, $rows, 'import-test.xlsx');

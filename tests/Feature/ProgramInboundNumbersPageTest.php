@@ -186,6 +186,8 @@ class ProgramInboundNumbersPageTest extends TestCase
         $this->assertStringNotContainsString('>Remove</', $html);
         $this->assertStringNotContainsString('Enter mobile number and press Enter', $html);
         $this->assertStringNotContainsString('You can enter multiple mobile numbers.', $html);
+        $this->assertStringNotContainsString('name="mobile_gateways[]"', $html);
+        $this->assertStringNotContainsString('Select GSM Gateway', $html);
         $this->assertStringNotContainsString('id="field_media_gateway_id"', $html);
         $this->assertStringNotContainsString('id="pinGsmWrap"', $html);
         $this->assertStringNotContainsString('toggleGsm', $html);
@@ -251,6 +253,54 @@ class ProgramInboundNumbersPageTest extends TestCase
         $this->delete('/program-inbound-numbers/'.$record->id)->assertRedirect();
         $this->assertSame(2, GlobeSim::count());
         $this->assertSame(1, GatewaySimAssignment::query()->where('sim_type', 'globe')->where('sim_id', $globe['sim']->id)->count());
+    }
+
+    public function test_gsm_gateway_auto_fills_from_sim_assignment_and_matching_ip(): void
+    {
+        $this->actingAs($this->admin);
+        ChannelAllocationCampaign::create(['name' => 'Mynt']);
+        $assigned = $this->assignSim('globe', '09260484530', 'GSM-01', 7, '10.1.1.1');
+
+        $this->post('/program-inbound-numbers', [
+            'campaign' => 'Mynt',
+            'network' => 'Globe SIM',
+            'mobile_numbers' => ['09260484530'],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $assignedRecord = ProgramInboundNumber::query()->where('number', '09260484530')->firstOrFail();
+        $this->assertSame('GSM-01', $assignedRecord->mobileDisplayRows()[0]['hostname']);
+        $this->assertSame('7', $assignedRecord->mobileDisplayRows()[0]['port']);
+        $this->assertSame($assigned['gateway']->id, $assignedRecord->media_gateway_id);
+
+        $ipGateway = MediaGateway::create([
+            'hostname' => 'GSM-IP-ONLY',
+            'site_name' => 'Alcar',
+            'site_code' => 'PIN-GSM-IP-ONLY',
+            'ip_address' => '10.1.8.8',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'channel_count' => 8,
+        ]);
+        GlobeSim::query()->create([
+            'imei' => '356938035648801',
+            'mobile_number' => '09178880001',
+            'plan' => 'Unli Surf',
+            'ip_address' => '10.1.8.8',
+            'account_number' => 'ACC-09178880001',
+            'contract_start' => '2026-01-01',
+            'contract_end' => '2026-12-31',
+        ]);
+
+        $this->post('/program-inbound-numbers', [
+            'campaign' => 'Mynt',
+            'network' => 'Globe SIM',
+            'mobile_numbers' => ['09178880001'],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $ipRecord = ProgramInboundNumber::query()->where('number', '09178880001')->firstOrFail();
+        $this->assertSame('GSM-IP-ONLY', $ipRecord->mobileDisplayRows()[0]['hostname']);
+        $this->assertSame($ipGateway->id, $ipRecord->media_gateway_id);
+        $this->assertSame('', $ipRecord->mobileDisplayRows()[0]['port']);
     }
 
     public function test_add_and_edit_use_centered_modal_and_plus_icon_only(): void
@@ -437,8 +487,8 @@ class ProgramInboundNumbersPageTest extends TestCase
             'Remarks',
         ], $exportHeaders);
         $this->assertNotContains('Id', $exportHeaders);
-        $this->assertContains("09260484530\n09260484550", array_column($exportRows, 1));
-        $this->assertContains("GSM-01\nGSM-02", array_column($exportRows, 3));
+        $this->assertContains(['Mynt', '09260484530', '53229111', 'GSM-01', '7', 'Globe SIM', 'Primary inbound'], $exportRows);
+        $this->assertContains(['', '09260484550', '', 'GSM-02', '8', '', ''], $exportRows);
     }
 
     public function test_add_edit_and_import_share_validation_rules(): void

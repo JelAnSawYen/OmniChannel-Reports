@@ -339,6 +339,48 @@ class ProgramLocationAndDataTransferTest extends TestCase
         $this->get('/program-location/ctn/import/template')->assertOk()->assertDownload('ctn-gsm-gateways-template.xlsx');
     }
 
+    public function test_import_preview_modal_stays_within_the_viewport(): void
+    {
+        $css = file_get_contents(resource_path('css/app.css'));
+
+        $this->assertMatchesRegularExpression(
+            '/#importPreviewModal\.modal-backdrop\.visible\s*\{[^}]*overflow:\s*hidden/',
+            $css
+        );
+        $this->assertMatchesRegularExpression(
+            '/#importPreviewModal \.modal\.import-wide\s*\{[^}]*max-height:\s*calc\(100vh - 24px\)/',
+            $css
+        );
+        $this->assertMatchesRegularExpression(
+            '/#importPreviewModal \.modal\.import-wide\s*\{[^}]*display:\s*flex/',
+            $css
+        );
+        $this->assertMatchesRegularExpression(
+            '/#importPreviewModal \.modal\.import-wide\s*\{[^}]*overflow:\s*hidden/',
+            $css
+        );
+        $this->assertMatchesRegularExpression(
+            '/#importPreviewModal \.modal-body\s*\{[^}]*min-height:\s*0/',
+            $css
+        );
+        $this->assertMatchesRegularExpression(
+            '/#importPreviewModal \.import-preview-wrap\s*\{[^}]*overflow:\s*auto/',
+            $css
+        );
+        $this->assertMatchesRegularExpression(
+            '/#importPreviewModal \.import-preview-wrap\s*\{[^}]*min-height:\s*0/',
+            $css
+        );
+        $this->assertMatchesRegularExpression(
+            '/#importPreviewModal \.import-preview-table td\s*\{[^}]*overflow-wrap:\s*anywhere/',
+            $css
+        );
+        $this->assertMatchesRegularExpression(
+            '/#importPreviewModal \.import-preview-table thead th\s*\{[^}]*position:\s*sticky/',
+            $css
+        );
+    }
+
     public function test_every_inventory_module_offers_data_transfer_export(): void
     {
         $this->actingAs($this->admin);

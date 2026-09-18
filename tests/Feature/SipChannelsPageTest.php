@@ -4,11 +4,13 @@ namespace Tests\Feature;
 
 use App\Models\ChannelAllocationCampaign;
 use App\Models\SipChannel;
+use App\Models\SipChannelNumber;
 use App\Models\User;
 use App\Models\UserType;
 use App\Services\XlsxService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class SipChannelsPageTest extends TestCase
@@ -50,9 +52,11 @@ class SipChannelsPageTest extends TestCase
         $page = $this->get('/sip-channels')->assertOk();
         $html = $page->getContent();
         $css = file_get_contents(resource_path('css/app.css'));
+        $sipTable = Str::between($html, 'aria-label="SIP Channels"', '</table>');
+        $this->assertStringNotContainsString('<th>Campaign</th>', $sipTable);
+        $this->assertStringContainsString('<th>SIP Name</th>', $sipTable);
 
-        $page->assertSee('Campaign')
-            ->assertSee('>SIP Name</th>', false)
+        $page->assertSee('>SIP Name</th>', false)
             ->assertSee('Pilot Number')
             ->assertSee('Channel Count')
             ->assertSee('Channel Range')
@@ -61,8 +65,9 @@ class SipChannelsPageTest extends TestCase
             ->assertSee('ETPI_53235320')
             ->assertSee('253235320 - 253235333')
             ->assertSee('7/9/2026')
-            ->assertSee('class="sip-cell sip-campaign"', false)
+            ->assertSee('class="sip-cell sip-name"', false)
             ->assertSee('class="sip-table"', false)
+            ->assertDontSee('class="sip-cell sip-campaign"', false)
             ->assertSee('id="sipAddButton"', false)
             ->assertSee('id="sipSubmit">Save', false)
             ->assertSee('pin-campaign-combo', false)
@@ -78,12 +83,14 @@ class SipChannelsPageTest extends TestCase
         $this->assertStringContainsString('sipSubmit">Save', $html);
         $this->assertStringNotContainsString('sipSubmit">Save ', $html);
         $this->assertStringContainsString('.sip-table > thead > tr > th', $css);
-        $this->assertDoesNotMatchRegularExpression('/th[^>]*(sip-campaign|color:\s*#0b70f7)/', $html);
-        $this->assertStringContainsString('.sip-campaign', $css);
-        $this->assertStringContainsString('color: #0b70f7', $css);
-        $this->assertMatchesRegularExpression('/\.sip-campaign\s*\{[^}]*font-weight:\s*700/', $css);
-        $this->assertMatchesRegularExpression('/\.sip-table > thead > tr > th:first-child,\s*\.sip-table > tbody > tr > td:first-child \{\s*text-align: left;/', $css);
-        $this->assertMatchesRegularExpression('/\.sip-table > tbody > tr > td \.sip-campaign \{\s*color: #0b70f7;\s*font-weight: 700;\s*justify-content: flex-start;\s*text-align: left;/', $css);
+        $this->assertMatchesRegularExpression('/\.sip-table \{\s*table-layout: fixed;\s*width: 100%;/', $css);
+        $this->assertDoesNotMatchRegularExpression('/th[^>]*(sip-campaign|sip-name|color:\s*#0066FF)/', $html);
+        $this->assertStringContainsString('.sip-name', $css);
+        $this->assertStringNotContainsString('.sip-campaign', $css);
+        $this->assertStringContainsString('color: #0066FF', $css);
+        $this->assertMatchesRegularExpression('/\.sip-name\s*\{[^}]*font-weight:\s*700/', $css);
+        $this->assertMatchesRegularExpression('/\.sip-table > thead > tr > th:first-child,\s*\.sip-table > tbody > tr > td:first-child \{\s*text-align: left;\s*padding-left: 23px;/', $css);
+        $this->assertMatchesRegularExpression('/\.sip-table > tbody > tr > td \.sip-name \{\s*color: #0066FF;\s*font-weight: 700;\s*justify-content: flex-start;\s*text-align: left;/', $css);
         $this->assertStringContainsString('pdc-date-field', $html);
         $this->assertStringContainsString('id="sip_date_activation"', $html);
         $this->assertStringContainsString('min="2000-01-01"', $html);
@@ -97,10 +104,16 @@ class SipChannelsPageTest extends TestCase
         $this->assertMatchesRegularExpression('/body\[data-page="sip-channels"\] #sipModal \.modal \{\s*margin: 30px auto;\s*overflow: visible;/', $css);
         $this->assertMatchesRegularExpression('/body\[data-page="sip-channels"\] #sipModal \.modal-body \{\s*overflow: visible;/', $css);
         $this->assertMatchesRegularExpression('/body\[data-page="sip-channels"\] #sipCal\.pdc-cal \{\s*overflow: visible;/', $css);
-        $this->assertStringContainsString('id="sip_channel_range"', $html);
-        $this->assertStringNotContainsString('id="sip_channel_range" readonly', $html);
-        $this->assertStringNotContainsString('id="sip_from"', $html);
-        $this->assertStringNotContainsString('id="sip_to"', $html);
+        $this->assertStringContainsString('id="sip_from"', $html);
+        $this->assertStringContainsString('id="sip_to"', $html);
+        $this->assertStringContainsString('for="sip_from">From</label>', $html);
+        $this->assertStringContainsString('for="sip_to">To</label>', $html);
+        $this->assertTrue(strpos($html, 'form-group full') < strpos($html, 'for="sip_from">From</label>'));
+        $this->assertTrue(strpos($html, '<label>Channel Range</label>') < strpos($html, 'for="sip_from">From</label>'));
+        $this->assertTrue(strpos($html, '<label>Channel Range</label>') < strpos($html, 'for="sip_to">To</label>'));
+        $this->assertStringContainsString('splitChannelRange', $html);
+        $this->assertStringNotContainsString('id="sip_channel_range"', $html);
+        $this->assertStringNotContainsString('name="channel_range"', $html);
         $this->assertStringNotContainsString('fillAddChannelRange', $html);
     }
 
@@ -115,7 +128,8 @@ class SipChannelsPageTest extends TestCase
             'etpi_sip_name' => 'ETPI_ALPHA',
             'pilot_number' => '111',
             'channel_count' => 10,
-            'channel_range' => '111 - 120',
+            'from' => '111',
+            'to' => '120',
             'network' => 'ETPI',
             'date_activation' => '7/9/2026',
         ])->assertRedirect();
@@ -125,7 +139,8 @@ class SipChannelsPageTest extends TestCase
             'etpi_sip_name' => 'ETPI_BETA',
             'pilot_number' => '222',
             'channel_count' => 4,
-            'channel_range' => '222 - 225',
+            'from' => '222',
+            'to' => '225',
             'network' => 'ETPI',
             'date_activation' => '8/1/2026',
         ])->assertRedirect();
@@ -153,7 +168,8 @@ class SipChannelsPageTest extends TestCase
             'etpi_sip_name' => 'ETPI_ALPHA_UPDATED',
             'pilot_number' => '111',
             'channel_count' => 12,
-            'channel_range' => '111 - 122',
+            'from' => '111',
+            'to' => '122',
             'network' => 'ETPI',
             'date_activation' => '7/9/2026',
         ])->assertRedirect('/sip-channels')->assertSessionMissing('sip_edit');
@@ -186,6 +202,67 @@ class SipChannelsPageTest extends TestCase
         $this->delete('/sip-channels/'.$record->id)->assertRedirect();
         $this->assertDatabaseMissing('sip_channels', ['id' => $record->id]);
         $this->assertDatabaseHas('sip_channels', ['etpi_sip_name' => 'ETPI_BETA']);
+    }
+
+    public function test_from_to_preserves_spaces_and_creates_channel_range(): void
+    {
+        $this->actingAs($this->admin);
+        $campaign = ChannelAllocationCampaign::create(['name' => 'Mynt']);
+
+        $this->post('/sip-channels', [
+            'campaign_id' => $campaign->id,
+            'etpi_sip_name' => 'ETPI_SPACED',
+            'from' => '25322 9170',
+            'to' => '25322 9199',
+        ])->assertRedirect()->assertSessionDoesntHaveErrors();
+
+        $sip = SipChannel::where('etpi_sip_name', 'ETPI_SPACED')->firstOrFail();
+        $this->assertSame('25322 9170 - 25322 9199', $sip->channel_range);
+        $this->assertSame(30, SipChannelNumber::where('sip_channel_id', $sip->id)->count());
+        $this->assertDatabaseHas('sip_channel_numbers', [
+            'sip_channel_id' => $sip->id,
+            'channel_number' => '25322 9170',
+        ]);
+        $this->assertDatabaseHas('sip_channel_numbers', [
+            'sip_channel_id' => $sip->id,
+            'channel_number' => '25322 9199',
+        ]);
+
+        $page = $this->get('/sip-channels')->assertOk();
+        $page->assertSee('Channel Range')
+            ->assertSee('25322 9170 - 25322 9199')
+            ->assertDontSee('>From</th>', false)
+            ->assertDontSee('>To</th>', false);
+
+        $range = $this->get('/channel-range-list')->assertOk();
+        $range->assertSee('25322 9170 - 25322 9199')
+            ->assertSee('ETPI_SPACED')
+            ->assertDontSee('id="crlAddButton"', false)
+            ->assertDontSee('id="crlAddModal"', false);
+
+        $this->from('/sip-channels')->put('/sip-channels/'.$sip->id, [
+            'campaign_id' => $campaign->id,
+            'etpi_sip_name' => 'ETPI_SPACED',
+            'from' => '25322 9170',
+            'to' => '25322 9172',
+        ])->assertRedirect('/sip-channels');
+
+        $this->assertSame('25322 9170 - 25322 9172', $sip->fresh()->channel_range);
+        $this->assertSame(['25322 9170', '25322 9171', '25322 9172'], SipChannelNumber::query()
+            ->where('sip_channel_id', $sip->id)
+            ->orderBy('channel_number')
+            ->pluck('channel_number')
+            ->all());
+        $this->assertSame(1, SipChannel::where('etpi_sip_name', 'ETPI_SPACED')->count());
+
+        $other = ChannelAllocationCampaign::create(['name' => 'Atome']);
+        $this->from('/sip-channels')->post('/sip-channels', [
+            'campaign_id' => $other->id,
+            'etpi_sip_name' => 'ETPI_DUP',
+            'from' => '25322 9170',
+            'to' => '25322 9172',
+        ])->assertRedirect('/sip-channels')->assertSessionHasErrors('from');
+        $this->assertDatabaseMissing('sip_channels', ['etpi_sip_name' => 'ETPI_DUP']);
     }
 
     public function test_date_activation_accepts_valid_and_rejects_invalid_dates(): void

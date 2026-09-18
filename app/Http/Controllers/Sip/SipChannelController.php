@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\HandlesBulkDestroy;
 use App\Models\ChannelAllocationCampaign;
 use App\Models\SipChannel;
-use App\Models\SipChannelNumber;
 use App\Services\Logs\AuditLogger;
 use App\Services\Sip\SipChannelImportService;
 use App\Services\XlsxService;
@@ -63,7 +62,12 @@ class SipChannelController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validateRecord($request);
-        $record = SipChannel::query()->create($data);
+        $record = DB::transaction(function () use ($data) {
+            $record = SipChannel::query()->create($data);
+            $record->syncChannelNumbersFromRange();
+
+            return $record;
+        });
         AuditLogger::log('Created', 'SIP Channels', 'SIP Channels record added', $record->id, $request);
 
         return back()->with('success', 'SIP Channels record added successfully.');
@@ -72,15 +76,10 @@ class SipChannelController extends Controller
     public function update(Request $request, SipChannel $sipChannel): RedirectResponse
     {
         $data = $this->validateRecord($request, $sipChannel->id);
-        $oldRange = trim((string) $sipChannel->channel_range);
-        $hadChannelRangeRecords = $sipChannel->channelNumbers()->exists();
 
-        DB::transaction(function () use ($sipChannel, $data, $oldRange, $hadChannelRangeRecords) {
+        DB::transaction(function () use ($sipChannel, $data) {
             $sipChannel->update($data);
-            $newRange = trim((string) ($data['channel_range'] ?? ''));
-            if ($hadChannelRangeRecords && $newRange !== '' && $newRange !== $oldRange) {
-                $this->replaceChannelNumbersFromRange($sipChannel, $newRange);
-            }
+            $sipChannel->syncChannelNumbersFromRange();
         });
         AuditLogger::log('Updated', 'SIP Channels', 'SIP Channels record updated', $sipChannel->id, $request);
 
@@ -274,6 +273,8 @@ class SipChannelController extends Controller
             'etpi_sip_name' => ['required', 'string', 'max:255', Rule::unique('sip_channels', 'etpi_sip_name')->ignore($id)],
             'pilot_number' => ['nullable', 'string', 'max:255'],
             'channel_count' => ['nullable', 'integer', 'min:0'],
+            'from' => ['nullable', 'string', 'max:255'],
+            'to' => ['nullable', 'string', 'max:255'],
             'channel_range' => ['nullable', 'string', 'max:255'],
             'network' => ['nullable', 'string', 'max:255'],
             'date_activation' => ['nullable', 'string'],
@@ -295,9 +296,17 @@ class SipChannelController extends Controller
             ]);
         }
         $data['date_activation'] = $parsed['iso'];
-        foreach (['pilot_number', 'channel_range', 'network'] as $field) {
+        foreach (['pilot_number', 'network'] as $field) {
             $data[$field] = $this->nullableString($data[$field] ?? null);
         }
+        $from = $this->nullableString($data['from'] ?? null);
+        $to = $this->nullableString($data['to'] ?? null);
+        if ($from !== null || $to !== null) {
+            $data['channel_range'] = SipChannel::formatRangeFromBounds($from ?? '', $to ?? '');
+        } else {
+            $data['channel_range'] = $this->nullableString($data['channel_range'] ?? null);
+        }
+        unset($data['from'], $data['to']);
         if (($data['channel_count'] ?? '') === '' || $data['channel_count'] === null) {
             $data['channel_count'] = null;
         }
@@ -310,43 +319,5 @@ class SipChannelController extends Controller
         $value = is_string($value) ? trim($value) : $value;
 
         return $value === null || $value === '' ? null : (string) $value;
-    }
-
-    private function replaceChannelNumbersFromRange(SipChannel $sipChannel, string $range): void
-    {
-        [$from, $to] = SipChannel::boundsFromRange($range);
-        if ($from === '' || $to === '' || ! preg_match('/^\d+$/', $from) || ! preg_match('/^\d+$/', $to)) {
-            return;
-        }
-
-        $start = (int) $from;
-        $end = (int) $to;
-        if ($end < $start || ($end - $start + 1) > 10000) {
-            return;
-        }
-
-        $numbers = [];
-        for ($number = $start; $number <= $end; $number++) {
-            $numbers[] = (string) $number;
-        }
-
-        $existing = SipChannelNumber::query()
-            ->where('sip_channel_id', '!=', $sipChannel->id)
-            ->whereIn('channel_number', $numbers)
-            ->orderBy('channel_number')
-            ->pluck('channel_number');
-        if ($existing->isNotEmpty()) {
-            throw ValidationException::withMessages([
-                'channel_range' => 'Channel number already exists: '.$existing->take(8)->implode(', '),
-            ]);
-        }
-
-        $sipChannel->channelNumbers()->delete();
-        foreach ($numbers as $number) {
-            SipChannelNumber::query()->create([
-                'sip_channel_id' => $sipChannel->id,
-                'channel_number' => $number,
-            ]);
-        }
     }
 }

@@ -217,7 +217,7 @@ class SipChannelImportService
                     'channel_range' => $row['channel_range'],
                     'network' => $row['network'],
                     'date_activation' => $row['date_activation'],
-                ]);
+                ])->syncChannelNumbersFromRange();
                 $count++;
             }
         });

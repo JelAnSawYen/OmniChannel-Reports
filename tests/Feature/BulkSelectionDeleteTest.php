@@ -12,6 +12,7 @@ use App\Models\PdcGroup;
 use App\Models\PdcServer;
 use App\Models\SipChannel;
 use App\Models\SipChannelNumber;
+use App\Models\SmartSim;
 use App\Models\User;
 use App\Models\UserType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -214,7 +215,8 @@ class BulkSelectionDeleteTest extends TestCase
         $html = $this->actingAs($this->admin)->get('/channel-range-list')->assertOk()->getContent();
         $this->assertStringContainsString('data-bulk-row="main"', $html);
         $this->assertStringContainsString('data-bulk-ids="'.$keep->id.','.$drop->id.'"', $html);
-        $this->assertStringNotContainsString('data-bulk-row="nested"', $html);
+        $this->assertStringContainsString('data-bulk-row="nested" data-bulk-id="'.$keep->id.'" data-bulk-url="'.url('/channel-range-list/bulk').'"', $html);
+        $this->assertStringContainsString('data-bulk-row="nested" data-bulk-id="'.$drop->id.'" data-bulk-url="'.url('/channel-range-list/bulk').'"', $html);
 
         $this->delete('/channel-range-list/bulk', ['ids' => [$drop->id]])->assertRedirect();
 
@@ -333,6 +335,8 @@ class BulkSelectionDeleteTest extends TestCase
         $this->assertDatabaseHas('media_gateways', ['id' => $keep->id]);
         $this->assertDatabaseHas('gateway_sim_assignments', ['id' => $keepAssignment->id]);
         $this->assertDatabaseMissing('gateway_sim_assignments', ['id' => $dropAssignment->id]);
+        $this->assertDatabaseHas('globe_sims', ['id' => $simA->id]);
+        $this->assertDatabaseHas('globe_sims', ['id' => $simB->id]);
 
         $this->deleteJson('/gsm-gateways/bulk', ['ids' => [$drop->id]])->assertOk();
         $this->assertDatabaseHas('media_gateways', ['id' => $keep->id]);
@@ -342,6 +346,103 @@ class BulkSelectionDeleteTest extends TestCase
             'module' => 'Media Gateways',
             'record_id' => (string) $drop->id,
         ]);
+    }
+
+    public function test_gsm_nested_rows_bulk_unlink_assignments_without_deleting_sims(): void
+    {
+        $keep = MediaGateway::create([
+            'hostname' => 'gsm-nested-keep',
+            'site_name' => 'Alcar',
+            'site_code' => 'NEST01',
+            'ip_address' => '10.9.8.1',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+        ]);
+        $empty = MediaGateway::create([
+            'hostname' => 'gsm-nested-empty',
+            'site_name' => 'Alcar',
+            'site_code' => 'NEST02',
+            'ip_address' => '10.9.8.2',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+        ]);
+        $globe = GlobeSim::create([
+            'imei' => '356938035643831',
+            'mobile_number' => '09170000031',
+            'network' => 'Globe',
+            'plan' => 'Globe Nested',
+            'ip_address' => '10.9.8.1',
+            'status' => 'Active',
+        ]);
+        $smart = SmartSim::create([
+            'imei' => '356938035643832',
+            'mobile_number' => '09170000032',
+            'network' => 'Smart',
+            'plan' => 'Smart Nested',
+            'ip_address' => '10.9.8.1',
+            'status' => 'Active',
+        ]);
+        $keepAssignment = GatewaySimAssignment::create([
+            'media_gateway_id' => $keep->id,
+            'sim_type' => 'globe',
+            'sim_id' => $globe->id,
+            'port' => 1,
+        ]);
+        $dropAssignment = GatewaySimAssignment::create([
+            'media_gateway_id' => $keep->id,
+            'sim_type' => 'smart',
+            'sim_id' => $smart->id,
+            'port' => 2,
+        ]);
+        $ipOnly = GlobeSim::create([
+            'imei' => '356938035643833',
+            'mobile_number' => '09170000033',
+            'network' => 'Globe',
+            'plan' => 'IP Nested',
+            'ip_address' => '10.9.8.1',
+            'status' => 'Active',
+        ]);
+
+        $html = $this->actingAs($this->admin)->get('/gsm-gateways')->assertOk()->getContent();
+        $this->assertStringContainsString(
+            'data-bulk-row="main" data-bulk-id="'.$keep->id.'" data-bulk-url="'.url('/gsm-gateways/bulk').'" data-bulk-ajax="1"',
+            $html
+        );
+        $this->assertStringContainsString(
+            'data-bulk-row="nested" data-bulk-id="'.$keepAssignment->id.'" data-bulk-url="'.url('/gsm-gateways/'.$keep->id.'/assignments/bulk').'" data-bulk-ajax="1"',
+            $html
+        );
+        $this->assertStringContainsString(
+            'data-bulk-row="nested" data-bulk-id="'.$dropAssignment->id.'" data-bulk-url="'.url('/gsm-gateways/'.$keep->id.'/assignments/bulk').'" data-bulk-ajax="1"',
+            $html
+        );
+        $this->assertStringContainsString(
+            'data-bulk-row="nested" data-bulk-id="globe-'.$ipOnly->id.'" data-bulk-url="'.url('/gsm-gateways/'.$keep->id.'/assignments/bulk').'" data-bulk-ajax="1"',
+            $html
+        );
+        $emptyStart = strpos($html, 'id="gsm-panel-'.$empty->id.'"');
+        $this->assertNotFalse($emptyStart);
+        $emptyPanel = substr($html, $emptyStart, 2500);
+        $this->assertStringContainsString('No SIM assignments.', $emptyPanel);
+        $this->assertStringNotContainsString('data-bulk-row="nested"', $emptyPanel);
+
+        $record = collect($this->getJson('/gsm-gateways')->assertOk()->json('records'))->firstWhere('id', $keep->id);
+        $this->assertSame($keepAssignment->id, (int) $record['assignments'][0]['assignment_id']);
+        $this->assertSame($dropAssignment->id, (int) $record['assignments'][1]['assignment_id']);
+
+        $this->deleteJson('/gsm-gateways/'.$keep->id.'/assignments/bulk', [
+            'ids' => [$dropAssignment->id, 'globe-'.$ipOnly->id],
+        ])->assertOk();
+
+        $this->assertDatabaseHas('gateway_sim_assignments', ['id' => $keepAssignment->id]);
+        $this->assertDatabaseMissing('gateway_sim_assignments', ['id' => $dropAssignment->id]);
+        $this->assertDatabaseHas('globe_sims', ['id' => $globe->id, 'imei' => '356938035643831']);
+        $this->assertDatabaseHas('smart_sims', ['id' => $smart->id, 'imei' => '356938035643832']);
+        $this->assertDatabaseHas('globe_sims', ['id' => $ipOnly->id, 'imei' => '356938035643833']);
+        $this->assertNull($ipOnly->fresh()->ip_address);
+        $this->assertNull($smart->fresh()->ip_address);
+        $this->assertDatabaseHas('media_gateways', ['id' => $keep->id]);
+        $this->assertDatabaseHas('media_gateways', ['id' => $empty->id]);
     }
 
     public function test_activity_logs_and_data_transfer_do_not_gain_bulk_delete_controls(): void

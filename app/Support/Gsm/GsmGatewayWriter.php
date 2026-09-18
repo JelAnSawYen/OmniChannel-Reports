@@ -65,7 +65,7 @@ class GsmGatewayWriter
             'ip_address' => $data['ip_address'],
             'channel_count' => (int) $data['channel_count'],
             'device_function' => trim((string) ($data['device_function'] ?? '')),
-            'network' => GsmSimInventory::canonicalNetwork((string) ($data['network'] ?? '')) ?: ($existing?->network),
+            'network' => trim((string) ($data['network'] ?? '')),
             'username' => $data['username'],
             'password' => $data['password'] ?? $existing?->password,
         ];
@@ -117,7 +117,6 @@ class GsmGatewayWriter
             }
 
             $gateway->update([
-                'network' => GsmSimInventory::networkForType($simType),
                 'port' => (string) $port,
             ]);
 
@@ -128,6 +127,32 @@ class GsmGatewayWriter
 
             return $assignment;
         });
+    }
+
+    public static function unlinkSim(MediaGateway $gateway, string $simType, int $simId): bool
+    {
+        $simType = strtolower(trim($simType));
+        if (! in_array($simType, ['globe', 'smart'], true) || $simId < 1) {
+            return false;
+        }
+
+        $deleted = GatewaySimAssignment::query()
+            ->where('media_gateway_id', $gateway->id)
+            ->where('sim_type', $simType)
+            ->where('sim_id', $simId)
+            ->delete() > 0;
+
+        $sim = GsmSimInventory::findSim($simType, $simId);
+        if ($sim) {
+            $gatewayIp = strtolower(trim((string) $gateway->ip_address));
+            $simIp = strtolower(trim((string) $sim->ip_address));
+            if ($gatewayIp !== '' && $simIp === $gatewayIp) {
+                $sim->forceFill(['ip_address' => null])->save();
+                $deleted = true;
+            }
+        }
+
+        return $deleted;
     }
 
     public static function nextPort(MediaGateway $gateway): int
@@ -145,6 +170,55 @@ class GsmGatewayWriter
         ]);
     }
 
+    public static function syncSimPort(MediaGateway $gateway, string $simType, int $simId, int $port): GatewaySimAssignment
+    {
+        if ($port < 1) {
+            throw ValidationException::withMessages([
+                'port' => 'Port must be a number greater than 0.',
+            ]);
+        }
+
+        $max = (int) $gateway->channel_count;
+        if ($max > 0 && $port > $max) {
+            throw ValidationException::withMessages([
+                'port' => 'Port must not exceed Channel Count.',
+            ]);
+        }
+
+        $existing = GatewaySimAssignment::query()
+            ->where('sim_type', $simType)
+            ->where('sim_id', $simId)
+            ->first();
+
+        $taken = GatewaySimAssignment::query()
+            ->where('media_gateway_id', $gateway->id)
+            ->where('port', $port)
+            ->when($existing, fn ($query) => $query->where('id', '!=', $existing->id))
+            ->exists();
+        if ($taken) {
+            throw ValidationException::withMessages([
+                'port' => 'Port is already assigned on this gateway.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($gateway, $simType, $simId, $port, $existing) {
+            if ($existing) {
+                $existing->update([
+                    'media_gateway_id' => $gateway->id,
+                    'port' => $port,
+                ]);
+
+                return $existing->fresh() ?? $existing;
+            }
+
+            return $gateway->assignments()->create([
+                'sim_type' => $simType,
+                'sim_id' => $simId,
+                'port' => $port,
+            ]);
+        });
+    }
+
     /**
      * @param  list<array<string, mixed>>  $assignments
      */
@@ -158,6 +232,11 @@ class GsmGatewayWriter
                 'sim_id' => (int) $assignment['sim_id'],
                 'port' => (int) $assignment['port'],
             ]);
+
+            $sim = GsmSimInventory::findSim((string) $assignment['sim_type'], (int) $assignment['sim_id']);
+            if ($sim && $gateway->ip_address) {
+                $sim->forceFill(['ip_address' => $gateway->ip_address])->save();
+            }
         }
     }
 

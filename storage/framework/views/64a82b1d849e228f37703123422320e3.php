@@ -36,7 +36,6 @@
 <table class="sip-table" aria-label="SIP Channels">
 <thead>
 <tr>
-    <th>Campaign</th>
     <th>SIP Name</th>
     <th>Pilot Number</th>
     <th>Channel Count</th>
@@ -62,8 +61,7 @@
     ];
 ?>
 <tr <?php if(auth()->user()->hasPermission('media.delete')): ?> data-bulk-row="main" data-bulk-id="<?php echo e($record->id); ?>" data-bulk-url="<?php echo e(route('sip-channels.bulk-destroy')); ?>" <?php endif; ?>>
-    <td><span class="sip-cell sip-campaign"><?php echo e($campaignName); ?></span></td>
-    <td><span class="sip-cell"><?php echo e($record->etpi_sip_name ?: '—'); ?></span></td>
+    <td><span class="sip-cell sip-name"><?php echo e($record->etpi_sip_name ?: '—'); ?></span></td>
     <td><span class="sip-cell"><?php echo e($record->pilot_number ?: '—'); ?></span></td>
     <td><span class="sip-cell"><?php echo e($record->channel_count !== null ? $record->channel_count : '—'); ?></span></td>
     <td><span class="sip-cell sip-range"><?php echo e($record->channel_range ?: '—'); ?></span></td>
@@ -89,7 +87,7 @@
     </td>
 </tr>
 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
-<tr><td colspan="8"><div class="empty-state">No SIP Channels records found.</div></td></tr>
+<tr><td colspan="7"><div class="empty-state">No SIP Channels records found.</div></td></tr>
 <?php endif; ?>
 </tbody>
 </table>
@@ -142,9 +140,16 @@
                         <label for="sip_channel_count">Channel Count</label>
                         <input class="form-control" type="number" min="0" step="1" name="channel_count" id="sip_channel_count">
                     </div>
+                    <div class="form-group full">
+                        <label>Channel Range</label>
+                    </div>
                     <div class="form-group">
-                        <label for="sip_channel_range">Channel Range</label>
-                        <input class="form-control" name="channel_range" id="sip_channel_range">
+                        <label for="sip_from">From</label>
+                        <input class="form-control" name="from" id="sip_from" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label for="sip_to">To</label>
+                        <input class="form-control" name="to" id="sip_to" autocomplete="off">
                     </div>
                     <div class="form-group">
                         <label for="sip_network">Network</label>
@@ -430,6 +435,14 @@ document.addEventListener('DOMContentLoaded', () => {
         closeCal();
     }
 
+    function splitChannelRange(range) {
+        const value = String(range ?? '').trim();
+        if (value === '') return ['', ''];
+        const match = value.match(/^(.+?)\s+-\s+(.+)$/);
+        if (match) return [match[1].trim(), match[2].trim()];
+        return [value, value];
+    }
+
     document.getElementById('sipAddButton')?.addEventListener('click', () => {
         resetAdd();
         modal?.classList.add('visible');
@@ -446,10 +459,15 @@ document.addEventListener('DOMContentLoaded', () => {
         method.value = 'PUT';
         form.action = baseUrl + '/' + recordId;
         document.getElementById('sip_campaign_id').value = values.campaign ?? '';
-        ['etpi_sip_name', 'pilot_number', 'channel_count', 'channel_range', 'network', 'date_activation'].forEach((key) => {
+        ['etpi_sip_name', 'pilot_number', 'channel_count', 'network', 'date_activation'].forEach((key) => {
             const field = document.getElementById('sip_' + key);
             if (field) field.value = values[key] ?? '';
         });
+        const [from, to] = splitChannelRange(values.channel_range);
+        const fromField = document.getElementById('sip_from');
+        const toField = document.getElementById('sip_to');
+        if (fromField) fromField.value = from;
+        if (toField) toField.value = to;
         if (datePicker) datePicker.value = toIso(values.date_activation || '');
         modal?.classList.add('visible');
     });

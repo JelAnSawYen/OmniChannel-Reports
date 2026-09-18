@@ -29,7 +29,7 @@ class PdcServerImportService
     {
         return [
             'campaign' => 'Campaign',
-            'location' => 'Location',
+            'location' => 'Site',
             'date_endorse' => 'Date Endorse',
             'dns' => 'DNS',
             'hostname' => 'Hostname',
@@ -145,7 +145,7 @@ class PdcServerImportService
             if ($values['location'] !== '') {
                 $matched = $locations[mb_strtolower($values['location'])] ?? null;
                 if ($matched === null) {
-                    $errors[] = 'Location does not exist';
+                    $errors[] = 'Site does not exist';
                 } else {
                     $locationName = $matched;
                     $values['location'] = $matched;
@@ -344,10 +344,13 @@ class PdcServerImportService
     private function locationLookup(): array
     {
         $lookup = [];
-        foreach (OperationCatalog::locations() as $slug => $name) {
-            $lookup[mb_strtolower($slug)] = $name;
+        foreach (OperationCatalog::pdcSiteNames() as $name) {
             $lookup[mb_strtolower($name)] = $name;
         }
+        $lookup['scs'] = 'SC5';
+        $lookup['cg3'] = 'CG3';
+        $lookup['pdc'] = 'PDC';
+        $lookup['wfh'] = 'WFH';
 
         return $lookup;
     }

@@ -10,6 +10,7 @@ use App\Models\SipChannelNumber;
 use App\Services\Logs\AuditLogger;
 use App\Services\Sip\ChannelRangeListImportService;
 use App\Services\XlsxService;
+use App\Support\ExportRows;
 use App\Support\PublicError;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -51,17 +52,9 @@ class ChannelRangeListController extends Controller
         }
 
         $groups = $query->paginate($perPage)->withQueryString();
-        $sipChannels = SipChannel::query()
-            ->with(['campaign', 'channelNumbers'])
-            ->whereNotNull('campaign_id')
-            ->orderBy('id')
-            ->get()
-            ->filter(fn (SipChannel $channel) => $channel->campaign !== null)
-            ->values();
 
         return view('channel-range-list.index', [
             'groups' => $groups,
-            'sipChannels' => $sipChannels,
             'search' => $search,
             'perPage' => $perPage,
         ]);
@@ -174,13 +167,16 @@ class ChannelRangeListController extends Controller
         }
 
         $headers = array_values(app(ChannelRangeListImportService::class)->exportFields());
-        $rows = $query->get()->map(function (SipChannelNumber $record) {
-            return [
-                $record->sipChannel?->campaign?->name,
-                $record->sipChannel?->etpi_sip_name,
-                $record->channel_number,
-            ];
-        });
+        $rows = ExportRows::blankRepeatedParents(
+            $query->get()->map(function (SipChannelNumber $record) {
+                return [
+                    $record->sipChannel?->campaign?->name,
+                    $record->sipChannel?->etpi_sip_name,
+                    $record->channel_number,
+                ];
+            })->all(),
+            [0, 1]
+        );
 
         try {
             $path = $xlsx->export($headers, $rows, 'channel-range-list.xlsx');

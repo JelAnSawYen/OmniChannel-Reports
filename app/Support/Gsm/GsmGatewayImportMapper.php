@@ -151,6 +151,7 @@ class GsmGatewayImportMapper
                 'site_name' => $site,
                 'username' => $username,
                 'password' => $password,
+                'network' => trim((string) ($values['assignment_network'] ?? '')),
                 'assignment' => $assignment,
             ],
         ];
@@ -192,7 +193,7 @@ class GsmGatewayImportMapper
                     'site_name' => $row['site_name'],
                     'username' => $row['username'],
                     'password' => $row['password'] ?: null,
-                    'network' => self::networkFromAssignments($assignments),
+                    'network' => trim((string) ($row['network'] ?? '')),
                 ];
                 GsmGatewayWriter::create($data, $assignments);
                 $count++;
@@ -213,18 +214,5 @@ class GsmGatewayImportMapper
         }
 
         return $keys;
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $assignments
-     */
-    private static function networkFromAssignments(array $assignments): ?string
-    {
-        $first = $assignments[0] ?? null;
-        if (! is_array($first)) {
-            return null;
-        }
-
-        return GsmSimInventory::networkForType((string) ($first['sim_type'] ?? 'globe'));
     }
 }

@@ -48,7 +48,6 @@ class MediaGatewayController extends Controller
         $data = compact('mediaGateways', 'search', 'sortBy', 'sortDir', 'perPage', 'resource');
         if ($this->isGsm()) {
             $data['locations'] = OperationCatalog::locations();
-            $data['simNetworks'] = GsmSimInventory::networks();
         }
 
         if ($request->expectsJson()) {
@@ -300,15 +299,38 @@ class MediaGatewayController extends Controller
         abort_unless($request->user()?->hasPermission('media.delete'), 403, 'You do not have permission to perform this action.');
         $this->denyStandardMutation();
 
-        foreach ($this->validatedBulkIds($request) as $id) {
-            $assignment = GatewaySimAssignment::query()
-                ->whereKey($id)
-                ->where('media_gateway_id', $mediaGateway->id)
-                ->first();
-            if (! $assignment) {
+        $ids = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['required'],
+        ])['ids'];
+
+        foreach ($ids as $raw) {
+            $token = trim((string) $raw);
+            $simType = null;
+            $simId = 0;
+            if (preg_match('/^(globe|smart)-(\d+)$/', $token, $match) === 1) {
+                $simType = $match[1];
+                $simId = (int) $match[2];
+            } elseif (ctype_digit($token)) {
+                $assignment = GatewaySimAssignment::query()
+                    ->whereKey((int) $token)
+                    ->where('media_gateway_id', $mediaGateway->id)
+                    ->first();
+                if (! $assignment) {
+                    continue;
+                }
+                $simType = (string) $assignment->sim_type;
+                $simId = (int) $assignment->sim_id;
+            }
+
+            if ($simType === null || $simId < 1) {
                 continue;
             }
-            $assignment->delete();
+
+            if (! GsmGatewayWriter::unlinkSim($mediaGateway, $simType, $simId)) {
+                continue;
+            }
+
             AuditLogger::log(
                 'Deleted',
                 'Media Gateways',
@@ -568,16 +590,17 @@ class MediaGatewayController extends Controller
 
         $assignments = $gateway->assignmentPayload();
         if ($assignments === []) {
-            return [array_merge($base, ['', '', '', '', ''])];
+            return [array_merge($base, ['', '', '', (string) ($gateway->network ?? ''), ''])];
         }
 
         $rows = [];
-        foreach ($assignments as $assignment) {
-            $rows[] = array_merge($base, [
+        foreach ($assignments as $index => $assignment) {
+            $parent = $index === 0 ? $base : array_fill(0, count($base), '');
+            $rows[] = array_merge($parent, [
                 (string) ($assignment['port'] ?? ''),
                 (string) ($assignment['imei'] ?? ''),
                 (string) ($assignment['mobile_number'] ?? ''),
-                (string) ($assignment['network'] ?? ''),
+                $index === 0 ? (string) ($gateway->network ?? '') : (string) ($assignment['network'] ?? ''),
                 (string) ($assignment['plan'] ?? ''),
             ]);
         }

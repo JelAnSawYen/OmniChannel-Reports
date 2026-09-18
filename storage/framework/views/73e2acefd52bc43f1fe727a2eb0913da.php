@@ -79,6 +79,11 @@
             <div class="dash-kpi-body">
                 <span class="dash-kpi-label">Defective GSM</span>
                 <div class="dash-kpi-value" data-dash-kpi="defective"><?php echo e($kpis['defective']['display']); ?></div>
+                <div class="dash-sim-inline">
+                    <span>Open</span> <strong data-dash-kpi="defective_open"><?php echo e($kpis['defective_open']['display']); ?></strong>
+                    <span class="dash-sim-sep">|</span>
+                    <span>In Repair</span> <strong data-dash-kpi="defective_repair"><?php echo e($kpis['defective_repair']['display']); ?></strong>
+                </div>
             </div>
         </div>
         <div class="dash-kpi dash-kpi-sky">

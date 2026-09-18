@@ -53,7 +53,7 @@ class PdcServerController extends Controller
 
         $groups = (clone $query)->paginate($perPage)->withQueryString();
         $campaigns = ChannelAllocationCampaign::optionsForDropdown();
-        $locations = OperationCatalog::locations();
+        $locations = OperationCatalog::pdcSiteNames();
         $canRevealSecrets = (bool) $request->user()?->canExportGatewaySecrets();
 
         return view('pdc-servers.index', [
@@ -348,7 +348,7 @@ class PdcServerController extends Controller
         $request->validate([
             'campaign' => ['required_without:campaign_id', 'nullable', 'string', 'max:255'],
             'campaign_id' => ['required_without:campaign', 'nullable', 'integer'],
-            'location' => ['nullable', 'string', Rule::in(array_values(OperationCatalog::locations()))],
+            'location' => ['nullable', 'string', Rule::in(OperationCatalog::pdcSiteNames())],
             'date_endorse' => ['nullable', 'string'],
             'dns' => ['nullable', 'string', 'max:2000'],
         ]);

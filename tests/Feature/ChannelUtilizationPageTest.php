@@ -45,7 +45,7 @@ class ChannelUtilizationPageTest extends TestCase
             ->assertSee('>GSM</th>', false)
             ->assertSee('BPI Collection')
             ->assertSee('Atome')
-            ->assertSee('280')
+            ->assertSee('300')
             ->assertSee('<title>Channel Utilization</title>', false)
             ->assertSee('class="campaigns-name"', false)
             ->assertDontSee('>Reports</', false);
@@ -75,6 +75,8 @@ class ChannelUtilizationPageTest extends TestCase
         $this->assertSame(20, $rows[0]['gsm']);
         $this->assertSame('Atome', $rows[1]['name']);
         $this->assertSame(220, $rows[1]['total']);
+        $this->assertSame(0, $rows[1]['sip']);
+        $this->assertSame(220, $rows[1]['gsm']);
 
         $page = $this->actingAs($this->admin)->get('/channel-utilization')->assertOk();
         $html = $page->getContent();
@@ -137,13 +139,15 @@ class ChannelUtilizationPageTest extends TestCase
         ]);
         ChannelAllocation::create([
             'campaign_id' => $bpi->id,
-            'channel_allocation' => 'gsm_globe_bpi',
+            'channel_allocation' => 'PAS-DASH',
+            'media_gateway' => 'PAS-DASH',
             'network' => 'Globe SIM',
             'total_channel_allocated' => 20,
         ]);
         ChannelAllocation::create([
             'campaign_id' => $atome->id,
-            'channel_allocation' => 'gsm_globe_atome',
+            'channel_allocation' => 'PAS-ATOME',
+            'media_gateway' => 'PAS-ATOME',
             'network' => 'Globe SIM',
             'total_channel_allocated' => 220,
         ]);

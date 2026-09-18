@@ -106,6 +106,20 @@ class ChannelAllocationCampaign extends Model
         return $this->hasMany(ArchiveRecording::class, 'campaign_id');
     }
 
+    public function sipChannels(): HasMany
+    {
+        return $this->hasMany(SipChannel::class, 'campaign_id');
+    }
+
+    protected static function booted(): void
+    {
+        static::deleting(function (self $campaign): void {
+            $campaign->sipChannels()->get()->each(function (SipChannel $sip): void {
+                $sip->delete();
+            });
+        });
+    }
+
     public function refreshTotalChannelsAllocated(): int
     {
         return DB::transaction(function () {
