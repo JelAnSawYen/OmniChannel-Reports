@@ -14,6 +14,7 @@ use App\Support\ChannelTypeClassifier;
 use App\Support\Inbound\ProgramInboundNumberValidator;
 use App\Support\PageWindow;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 
 class DashboardOverviewService
@@ -127,10 +128,16 @@ class DashboardOverviewService
 
     private function sumGatewayPorts(): int
     {
-        return (int) MediaGateway::query()
-            ->toBase()
-            ->selectRaw('COALESCE(SUM(CAST(port AS SIGNED)), 0) as total')
-            ->value('total');
+        try {
+            return (int) MediaGateway::query()
+                ->toBase()
+                ->selectRaw('COALESCE(SUM(CAST(port AS SIGNED)), 0) as total')
+                ->value('total');
+        } catch (QueryException) {
+            return (int) MediaGateway::query()
+                ->pluck('port')
+                ->sum(fn ($port) => (int) $port);
+        }
     }
 
     /**
