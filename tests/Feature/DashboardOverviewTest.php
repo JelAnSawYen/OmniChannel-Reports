@@ -217,6 +217,33 @@ class DashboardOverviewTest extends TestCase
         $this->assertSame(50, $payload['trend']['total'][29]);
     }
 
+    public function test_gsm_gateway_kpi_counts_each_gateway_record_including_empty_hostname(): void
+    {
+        MediaGateway::create([
+            'hostname' => 'pas-one',
+            'site_name' => 'Estancia',
+            'site_code' => 'PAS-KPI-1',
+            'ip_address' => '10.28.240.31',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'port' => '32',
+        ]);
+        MediaGateway::create([
+            'hostname' => '',
+            'site_name' => 'Alcar',
+            'site_code' => 'PAS-KPI-2',
+            'ip_address' => '10.28.240.32',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'port' => '10',
+        ]);
+
+        $payload = app(DashboardOverviewService::class)->payload();
+
+        $this->assertSame(2, $payload['kpis']['gateways']['value']);
+        $this->assertSame('2', $payload['kpis']['gateways']['display']);
+    }
+
     public function test_inbound_kpis_count_every_phone_number_not_database_rows(): void
     {
         $campaign = ChannelAllocationCampaign::create(['name' => 'Inbound Count']);

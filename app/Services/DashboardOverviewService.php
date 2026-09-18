@@ -126,9 +126,12 @@ class DashboardOverviewService
     }
 
     private function countGateways(): int
-    {
-        return MediaGateway::query()->count();
-    }
+{
+    return MediaGateway::query()
+        ->toBase()
+        ->pluck('id')
+        ->count();
+}
 
     /**
      * Sum Channel Allocation `total_channel_allocated` by ChannelAllocation::channelType().
