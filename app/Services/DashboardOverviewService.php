@@ -39,7 +39,7 @@ class DashboardOverviewService
         $trend = $this->trend($allocations);
 
         $campaignCount = ChannelAllocationCampaign::count();
-        $gatewayCount = $this->countGateways();
+        $gatewayPorts = $this->sumGatewayPorts();
         $sipChannels = (int) SipChannel::query()->sum('channel_count');
         $globeCount = GlobeSim::count();
         $smartCount = SmartSim::count();
@@ -53,8 +53,8 @@ class DashboardOverviewService
                 'display' => number_format($campaignCount),
             ],
             'gateways' => [
-                'value' => $gatewayCount,
-                'display' => number_format($gatewayCount),
+                'value' => $gatewayPorts,
+                'display' => number_format($gatewayPorts),
             ],
             'channels' => [
                 'value' => $sipChannels,
@@ -125,13 +125,13 @@ class DashboardOverviewService
         return $payload;
     }
 
-    private function countGateways(): int
-{
-    return MediaGateway::query()
-        ->toBase()
-        ->pluck('id')
-        ->count();
-}
+    private function sumGatewayPorts(): int
+    {
+        return (int) MediaGateway::query()
+            ->toBase()
+            ->selectRaw('COALESCE(SUM(CAST(port AS SIGNED)), 0) as total')
+            ->value('total');
+    }
 
     /**
      * Sum Channel Allocation `total_channel_allocated` by ChannelAllocation::channelType().

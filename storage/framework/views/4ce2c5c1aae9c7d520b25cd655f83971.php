@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<?php echo e(csrf_token()); ?>">
+    <title><?php echo e($pageTitle ?? 'OmniChannel Inventory'); ?></title>
+    <link rel="icon" type="image/png" href="<?php echo e(asset('images/ssg-favicon.png')); ?>?v=<?php echo e(@filemtime(public_path('images/ssg-favicon.png')) ?: '1'); ?>">
+    <link rel="shortcut icon" href="<?php echo e(asset('favicon.ico')); ?>?v=<?php echo e(@filemtime(public_path('favicon.ico')) ?: '1'); ?>">
+    <script>
+        (function () {
+            try {
+                var raw = sessionStorage.getItem('omnichannel.expandedView');
+                if (!raw) return;
+                var data = JSON.parse(raw);
+                var here = location.pathname + location.search;
+                var state = data && data.path ? data : (data[here] || data[location.pathname]);
+                if (!state || !state.scroll) return;
+                if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+                window.scrollTo(Number(state.scroll.x) || 0, Number(state.scroll.y) || 0);
+            } catch (e) {}
+        })();
+    </script>
+    <?php echo app('Illuminate\Foundation\Vite')(['resources/css/app.css','resources/js/app.js']); ?>
+</head>
+<body data-user-type="<?php echo e(auth()->user()->userType?->name); ?>" data-page="<?php echo e($pageKey ?? ''); ?>" data-resource-base="<?php echo e($resource['base'] ?? ''); ?>" data-can-edit="<?php echo e((auth()->user()?->hasPermission('media.edit') && auth()->user()?->canMutateGateways()) ? '1' : '0'); ?>" data-can-delete="<?php echo e((auth()->user()?->hasPermission('media.delete') && auth()->user()?->canMutateGateways()) ? '1' : '0'); ?>" data-can-reveal-secrets="<?php echo e(auth()->user()?->canExportGatewaySecrets() ? '1' : '0'); ?>">
+<div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Sidebar navigation">
+        <div class="brand">
+            <img class="brand-logo" src="<?php echo e(asset('images/ssg-logo-white.png')); ?>" alt="SSG">
+            <div class="brand-title">OmniChannel Inventory</div>
+        </div>
+        <button class="sidebar-close" id="sidebarClose" type="button" aria-label="Close navigation">×</button>
+        <div class="sidebar-nav" id="sidebarNav">
+        <nav class="nav-section">
+            <div class="nav-list">
+                <?php if(auth()->user()->hasPermission('dashboard.view')): ?><a href="<?php echo e(route('dashboard')); ?>" class="nav-item <?php echo e(request()->routeIs('dashboard') ? 'active' : ''); ?>"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.6 11.2 12 4.7l7.4 6.5"/><path d="M6.4 10.2V19h11.2v-8.8"/><path d="M10 19v-5h4v5"/></svg></span><span>Dashboard</span></a><?php endif; ?>
+            </div>
+        </nav>
+        <?php if(auth()->user()->hasPermission('media.view')): ?>
+        <?php
+            $networkOpen = request()->routeIs('globe-sim', 'smart-sim');
+            $sipChannelsOpen = request()->routeIs('channel-range-list', 'channel-range-list.*');
+        ?>
+        <div class="nav-section"><div class="section-label">Manage</div>
+            <div class="nav-list">
+                <?php if(auth()->user()->canAccessModule('campaigns')): ?><a href="<?php echo e(route('campaigns')); ?>" class="nav-item <?php echo e(request()->routeIs('campaigns', 'campaigns.*') ? 'active' : ''); ?>"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 11 18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg></span><span>Campaigns</span></a><?php endif; ?>
+                <?php if(auth()->user()->canAccessModule('pdc-servers')): ?><a href="<?php echo e(route('pdc-servers')); ?>" class="nav-item <?php echo e(request()->routeIs('pdc-servers') ? 'active' : ''); ?>"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><circle cx="7" cy="7.5" r=".9" fill="currentColor" stroke="none"/><circle cx="7" cy="16.5" r=".9" fill="currentColor" stroke="none"/></svg></span><span>PDC Servers</span></a><?php endif; ?>
+                <?php if(auth()->user()->canAccessModule('sip-channels')): ?>
+                <div class="nav-group<?php echo e($sipChannelsOpen ? ' open' : ''); ?>" id="sipChannelsGroup">
+                    <a href="<?php echo e(route('sip-channels')); ?>" class="nav-item nav-parent-row <?php echo e(request()->routeIs('sip-channels') ? 'active' : ''); ?>" id="sipChannelsToggle" aria-expanded="<?php echo e($sipChannelsOpen ? 'true' : 'false'); ?>" aria-controls="sipChannelsSub">
+                        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 3a6.5 6.5 0 0 1 5.5 5.5"/><path d="M14.5 6.8a3 3 0 0 1 2.4 2.4"/><path d="M20 16.9v2.3a1.7 1.7 0 0 1-1.9 1.7 16.8 16.8 0 0 1-7.3-2.6 16.5 16.5 0 0 1-5.1-5.1A16.8 16.8 0 0 1 3.1 5.9 1.7 1.7 0 0 1 4.8 4h2.3a1.7 1.7 0 0 1 1.7 1.5c.1.8.3 1.6.6 2.3a1.7 1.7 0 0 1-.4 1.8l-1 1a13.5 13.5 0 0 0 5.1 5.1l1-1a1.7 1.7 0 0 1 1.8-.4c.7.3 1.5.5 2.3.6A1.7 1.7 0 0 1 20 16.9z"/></svg></span>
+                        <span>SIP Channels</span>
+                        <span class="nav-caret" id="sipChannelsCaret" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+                    </a>
+                    <div class="nav-sub" id="sipChannelsSub">
+                        <a href="<?php echo e(route('channel-range-list')); ?>" class="nav-item nav-subitem <?php echo e(request()->routeIs('channel-range-list', 'channel-range-list.*') ? 'active' : ''); ?>"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg></span><span>Channel Range</span></a>
+                    </div>
+                </div>
+                <?php endif; ?>
+                <?php if(auth()->user()->canAccessModule('channel-allocation')): ?><a href="<?php echo e(route('channel-allocation')); ?>" class="nav-item <?php echo e(request()->routeIs('channel-allocation', 'channel-allocation.*') ? 'active' : ''); ?>"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span><span>Channel Allocation</span></a><?php endif; ?>
+                <?php if(auth()->user()->canAccessModule('archive-recordings')): ?><a href="<?php echo e(route('archive-recordings')); ?>" class="nav-item <?php echo e(request()->routeIs('archive-recordings') ? 'active' : ''); ?>"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 3H7.5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8l-5-5z"/><path d="M13.5 3v5h5"/><path d="M10 12.8v4l3.4-2-3.4-2z"/></svg></span><span>Archive Recordings</span></a><?php endif; ?>
+                <?php if(auth()->user()->canAccessModule('gsm-gateways')): ?><a href="<?php echo e(route('gsm-gateways.index')); ?>" class="nav-item <?php echo e(request()->routeIs('gsm-gateways.*') ? 'active' : ''); ?>"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 6.5A2.5 2.5 0 0 1 7 4h4.2l3.3 3.3v10.2A2.5 2.5 0 0 1 12 20H7a2.5 2.5 0 0 1-2.5-2.5v-11z"/><rect x="7" y="10.5" width="5" height="5.5" rx="1"/><path d="M17.2 5.4a5.6 5.6 0 0 1 3.3 5"/><path d="M16.8 9.2a2.6 2.6 0 0 1 1.6 2.1"/></svg></span><span>GSM Gateway</span></a><?php endif; ?>
+                <?php if(auth()->user()->canAccessModule('globe-sim')): ?>
+                <div class="nav-group<?php echo e($networkOpen ? ' open' : ''); ?>" id="networkGroup">
+                    <button type="button" class="nav-item nav-parent-row" id="networkToggle" aria-expanded="<?php echo e($networkOpen ? 'true' : 'false'); ?>" aria-controls="networkSub">
+                        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></svg></span>
+                        <span>Network</span>
+                        <span class="nav-caret" id="networkCaret" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+                    </button>
+                    <div class="nav-sub" id="networkSub">
+                        <a href="<?php echo e(route('globe-sim')); ?>" class="nav-item nav-subitem <?php echo e(request()->routeIs('globe-sim') ? 'active' : ''); ?>"><span class="nav-icon"><img class="nav-icon-img" src="<?php echo e(asset('icons/globe-sim.png')); ?>" alt=""></span><span>Globe SIM</span></a>
+                        <a href="<?php echo e(route('smart-sim')); ?>" class="nav-item nav-subitem <?php echo e(request()->routeIs('smart-sim') ? 'active' : ''); ?>"><span class="nav-icon"><img class="nav-icon-img" src="<?php echo e(asset('icons/smart-sim.png')); ?>" alt=""></span><span>Smart SIM</span></a>
+                    </div>
+                </div>
+                <?php endif; ?>
+                <?php if(auth()->user()->canAccessModule('program-inbound-numbers')): ?><a href="<?php echo e(route('program-inbound-numbers')); ?>" class="nav-item nav-item-wrap <?php echo e(request()->routeIs('program-inbound-numbers') ? 'active' : ''); ?>"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 3.5 15.7 8.3"/><path d="M15.7 4v4.6h4.6"/><path d="M20 16.9v2.3a1.7 1.7 0 0 1-1.9 1.7 16.8 16.8 0 0 1-7.3-2.6 16.5 16.5 0 0 1-5.1-5.1A16.8 16.8 0 0 1 3.1 5.9 1.7 1.7 0 0 1 4.8 4h2.3a1.7 1.7 0 0 1 1.7 1.5c.1.8.3 1.6.6 2.3a1.7 1.7 0 0 1-.4 1.8l-1 1a13.5 13.5 0 0 0 5.1 5.1l1-1a1.7 1.7 0 0 1 1.8-.4c.7.3 1.5.5 2.3.6A1.7 1.7 0 0 1 20 16.9z"/></svg></span><span>Program Inbound Numbers</span></a><?php endif; ?>
+                <?php if(auth()->user()->canAccessModule('signal-boosters')): ?><a href="<?php echo e(route('signal-boosters')); ?>" class="nav-item <?php echo e(request()->routeIs('signal-boosters') ? 'active' : ''); ?>"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="9" r="1.8"/><path d="M8.6 5.6a4.8 4.8 0 0 0 0 6.8"/><path d="M15.4 5.6a4.8 4.8 0 0 1 0 6.8"/><path d="M6.2 3.2a8.2 8.2 0 0 0 0 11.6"/><path d="M17.8 3.2a8.2 8.2 0 0 1 0 11.6"/><path d="M12 10.8V21"/><path d="M9 21l3-5 3 5"/></svg></span><span>Signal Boosters</span></a><?php endif; ?>
+                <?php if(auth()->user()->canAccessModule('defective-gsm')): ?><a href="<?php echo e(route('defective-gsm')); ?>" class="nav-item <?php echo e(request()->routeIs('defective-gsm') ? 'active' : ''); ?>"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.4 4.3 3 17.4A1.8 1.8 0 0 0 4.6 20h14.8a1.8 1.8 0 0 0 1.6-2.6L13.6 4.3a1.8 1.8 0 0 0-3.2 0z"/><path d="M12 9.5v4"/><path d="M12 16.6h.01"/></svg></span><span>Defective GSM</span></a><?php endif; ?>
+                <?php if(auth()->user()->canAccessModule('program-location')): ?><a href="<?php echo e(route('program-location')); ?>" class="nav-item <?php echo e(request()->routeIs('program-location', 'program-location.*') ? 'active' : ''); ?>"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21c4.4-4 7-7.2 7-10.4A7 7 0 0 0 5 10.6C5 13.8 7.6 17 12 21z"/><circle cx="12" cy="10.2" r="2.4"/></svg></span><span>Program Location</span></a><?php endif; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+        </div>
+    </aside>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <main class="main">
+        <header class="app-header">
+            <div class="header-left">
+                <button class="hamburger" id="sidebarToggle" type="button" aria-label="Toggle navigation" aria-expanded="true"><span></span><span></span><span></span></button>
+            </div>
+            <div class="header-right">
+            <div class="account-wrap">
+                <button type="button" class="account-button" id="accountButton" aria-expanded="false">
+                    <span class="account-avatar"><?php echo e(strtoupper(substr(auth()->user()->name ?? 'U',0,1))); ?></span>
+                    <span class="account-label"><?php echo e(auth()->user()->name ?? 'User'); ?></span>
+                </button>
+                <div class="account-menu" id="accountMenu">
+                    <div class="account-menu-user"><div class="account-avatar large"><?php echo e(strtoupper(substr(auth()->user()->name ?? 'U',0,1))); ?></div><div><strong><?php echo e(auth()->user()->name); ?></strong><small><?php echo e(auth()->user()->userType?->name ?? 'User'); ?></small></div></div>
+                    <a class="account-item" href="<?php echo e(route('profile')); ?>"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>My Profile</a>
+                    <?php
+                        $navUserManagement = auth()->user()->canAccessAdministration() && auth()->user()->hasPermission('users.view');
+                        $navLoginHistory = auth()->user()->hasPermission('logs.view');
+                        $navAuditLogs = auth()->user()->hasPermission('logs.view');
+                        $settingsOpen = request()->routeIs('users.*', 'login-history', 'activity-logs');
+                    ?>
+                    <?php if($navUserManagement || $navLoginHistory || $navAuditLogs): ?>
+                    <div class="account-group<?php echo e($settingsOpen ? ' open' : ''); ?>" id="accountSettingsGroup">
+                        <button type="button" class="account-item account-group-toggle" id="accountSettingsToggle" aria-expanded="<?php echo e($settingsOpen ? 'true' : 'false'); ?>" aria-controls="accountSettingsSub">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+                            Settings
+                            <svg class="account-group-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                        <div class="account-group-sub" id="accountSettingsSub">
+                            <?php if($navUserManagement): ?><a class="account-item account-subitem <?php echo e(request()->routeIs('users.*') ? 'active' : ''); ?>" href="<?php echo e(route('users.index')); ?>"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9.5" cy="8" r="3.2"/><path d="M3.5 20a6 6 0 0 1 12 0"/><path d="M16.5 5.2a3.2 3.2 0 0 1 0 5.6"/><path d="M18 14.4A6 6 0 0 1 21 20"/></svg>User Management</a><?php endif; ?>
+                            <?php if($navLoginHistory): ?><a class="account-item account-subitem <?php echo e(request()->routeIs('login-history') ? 'active' : ''); ?>" href="<?php echo e(route('login-history')); ?>"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.9-6.4"/><path d="M3.2 4.6v4.6h4.6"/><path d="M12 8.2V12l2.9 1.8"/></svg>Login History</a><?php endif; ?>
+                            <?php if($navAuditLogs): ?><a class="account-item account-subitem <?php echo e(request()->routeIs('activity-logs') ? 'active' : ''); ?>" href="<?php echo e(route('activity-logs')); ?>"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4.5h10A1.5 1.5 0 0 1 18.5 6v14L12 16.8 5.5 20V6A1.5 1.5 0 0 1 7 4.5z"/><path d="M9 8.2h6M9 11.2h6"/></svg>Audit Logs</a><?php endif; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    <button type="button" class="account-item account-logout" id="logoutButton"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4H6.5A1.5 1.5 0 0 0 5 5.5v13A1.5 1.5 0 0 0 6.5 20H14"/><path d="m16.5 8.5 3.5 3.5-3.5 3.5"/><path d="M20 12h-9.5"/></svg>Logout</button>
+                </div>
+            </div>
+            </div>
+        </header>
+        <div class="flash-host" aria-live="polite">
+            <?php if(session('success')): ?><div class="flash success" role="status"><span class="flash-message"><?php echo e(session('success')); ?></span><button type="button" class="flash-close" aria-label="Close">×</button></div><?php endif; ?>
+            <?php if(session('error')): ?><div class="flash error" role="alert"><span class="flash-message"><?php echo e(session('error')); ?></span><button type="button" class="flash-close" aria-label="Close">×</button></div><?php endif; ?>
+            <?php if($errors->any()): ?><div class="flash error" role="alert"><span class="flash-message"><ul><?php $__currentLoopData = $errors->all(); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $error): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?><li><?php echo e($error); ?></li><?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?></ul></span><button type="button" class="flash-close" aria-label="Close">×</button></div><?php endif; ?>
+        </div>
+        <div class="page-container">
+            <?php echo $__env->yieldContent('content'); ?>
+        </div>
+        <footer class="app-footer">© <?php echo e(now()->year); ?> OmniChannel Inventory. All rights reserved.</footer>
+    </main>
+</div>
+<div class="modal-backdrop" id="logoutModal"><div class="modal small"><div class="modal-header"><h3>Confirm Logout</h3><button type="button" class="close-btn" data-close="logoutModal">×</button></div><div class="modal-body"><p>Are you sure you want to logout?</p></div><div class="modal-footer"><button type="button" class="btn secondary" data-close="logoutModal">No</button><form method="POST" action="<?php echo e(route('logout')); ?>"><?php echo csrf_field(); ?><button class="btn danger" type="submit">Yes</button></form></div></div></div>
+<div class="modal-backdrop" id="confirmModal">
+    <div class="modal small">
+        <div class="modal-header">
+            <h3 id="confirmModalTitle">Confirm</h3>
+            <button type="button" class="close-btn" data-close="confirmModal" id="confirmModalDismiss">×</button>
+        </div>
+        <div class="modal-body"><p id="confirmModalMessage">Are you sure?</p></div>
+        <div class="modal-footer">
+            <button type="button" class="btn secondary" id="confirmModalCancel">No</button>
+            <button type="button" class="btn danger" id="confirmModalOk">Yes</button>
+        </div>
+    </div>
+</div>
+<?php echo $__env->yieldPushContent('modals'); ?>
+</body>
+</html>
+<?php /**PATH C:\xampp\htdocs\OmniChannel\OmniChannel_Inventory_Production_Updated\resources\views/layouts/app.blade.php ENDPATH**/ ?>

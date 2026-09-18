@@ -117,7 +117,7 @@ class DashboardOverviewTest extends TestCase
 
         $json = $this->actingAs($this->admin)->getJson('/dashboard/snapshot')->assertOk();
         $json->assertJsonPath('kpis.campaigns.value', 2)
-            ->assertJsonPath('kpis.gateways.value', 1)
+            ->assertJsonPath('kpis.gateways.value', 32)
             ->assertJsonPath('kpis.channels.value', 500)
             ->assertJsonPath('kpis.sims.value', 3)
             ->assertJsonPath('kpis.globe.value', 2)
@@ -217,7 +217,7 @@ class DashboardOverviewTest extends TestCase
         $this->assertSame(50, $payload['trend']['total'][29]);
     }
 
-    public function test_gsm_gateway_kpi_counts_each_gateway_record_including_empty_hostname(): void
+    public function test_gsm_gateway_kpi_sums_port_values(): void
     {
         MediaGateway::create([
             'hostname' => 'pas-one',
@@ -240,8 +240,8 @@ class DashboardOverviewTest extends TestCase
 
         $payload = app(DashboardOverviewService::class)->payload();
 
-        $this->assertSame(2, $payload['kpis']['gateways']['value']);
-        $this->assertSame('2', $payload['kpis']['gateways']['display']);
+        $this->assertSame(42, $payload['kpis']['gateways']['value']);
+        $this->assertSame('42', $payload['kpis']['gateways']['display']);
     }
 
     public function test_inbound_kpis_count_every_phone_number_not_database_rows(): void
