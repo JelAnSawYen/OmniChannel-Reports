@@ -238,7 +238,7 @@ class ChannelAllocationImportService
                     }
                 }
 
-                $sort = (int) $campaign->allocations()->lockForUpdate()->max('sort_order');
+                $sort = (int) $campaign->allocations()->max('sort_order');
                 foreach ($item['allocations'] as $allocation) {
                     $sort++;
                     $campaign->allocations()->create([

@@ -110,7 +110,7 @@ class ChannelAllocationController extends Controller
                 ]);
 
                 if ($allocation !== null) {
-                    $allocation['sort_order'] = (int) $campaign->allocations()->lockForUpdate()->max('sort_order') + 1;
+                    $allocation['sort_order'] = (int) $campaign->allocations()->max('sort_order') + 1;
                     $campaign->allocations()->create($allocation);
                     $campaign->refreshTotalChannelsAllocated();
                 }
@@ -185,7 +185,7 @@ class ChannelAllocationController extends Controller
         try {
             DB::transaction(function () use ($campaign, $data) {
                 $locked = ChannelAllocationCampaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
-                $data['sort_order'] = (int) $locked->allocations()->lockForUpdate()->max('sort_order') + 1;
+                $data['sort_order'] = (int) $locked->allocations()->max('sort_order') + 1;
                 $locked->allocations()->create($data);
                 $locked->refreshTotalChannelsAllocated();
             });

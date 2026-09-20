@@ -124,7 +124,7 @@ class ChannelAllocationCampaign extends Model
     {
         return DB::transaction(function () {
             $campaign = static::query()->whereKey($this->id)->lockForUpdate()->firstOrFail();
-            $sum = (int) $campaign->allocations()->lockForUpdate()->sum('total_channel_allocated');
+            $sum = (int) $campaign->allocations()->sum('total_channel_allocated');
             $campaign->forceFill(['total_channels_allocated' => $sum])->save();
             $this->forceFill(['total_channels_allocated' => $sum]);
 
