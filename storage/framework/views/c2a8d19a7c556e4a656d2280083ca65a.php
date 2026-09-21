@@ -32,44 +32,40 @@
 <div class="table-card table-wrap">
 <table class="ca-table crl-table" aria-label="Channel Range List">
 <colgroup>
-    <col class="crl-col-campaign">
-    <col class="crl-col-channel">
     <col class="crl-col-sip">
+    <col class="crl-col-channel">
     <col class="crl-col-actions">
 </colgroup>
 <thead>
 <tr>
-    <th class="crl-campaign-col">
+    <th class="crl-sip-col">
         <span class="ca-campaign-cell">
             <span class="ca-toggle" aria-hidden="true"></span>
-            <span class="ca-campaign-identity">Campaign</span>
+            <span class="ca-campaign-identity">SIP Name</span>
         </span>
     </th>
     <th class="crl-channel-col">Channel Range</th>
-    <th class="crl-sip-col">SIP Name</th>
     <th class="crl-actions-col">Actions</th>
 </tr>
 </thead>
 <tbody>
 <?php $__empty_1 = true; $__currentLoopData = $groups; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $sip): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
 <?php
-    $campaignName = $sip->campaign?->name ?: '—';
     $sipName = $sip->etpi_sip_name ?: '—';
     $channelRange = $sip->channelRangeFromNumbers();
 ?>
 <tr class="ca-campaign-row" data-campaign="<?php echo e($sip->id); ?>" <?php if(auth()->user()->hasPermission('media.delete')): ?> data-bulk-row="main" data-bulk-ids="<?php echo e($sip->channelNumbers->pluck('id')->implode(',')); ?>" data-bulk-url="<?php echo e(route('channel-range-list.bulk-destroy')); ?>" <?php endif; ?>>
-    <td class="crl-campaign-col">
+    <td class="crl-sip-col">
         <span class="ca-campaign-cell">
-            <button type="button" class="ca-toggle" data-ca-toggle="<?php echo e($sip->id); ?>" aria-expanded="false" aria-controls="crl-panel-<?php echo e($sip->id); ?>" title="Expand <?php echo e($campaignName); ?>">
+            <button type="button" class="ca-toggle" data-ca-toggle="<?php echo e($sip->id); ?>" aria-expanded="false" aria-controls="crl-panel-<?php echo e($sip->id); ?>" title="Expand <?php echo e($sipName); ?>">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"></path></svg>
             </button>
             <span class="ca-campaign-identity">
-                <span class="ca-campaign-link campaigns-name"><?php echo e($campaignName); ?></span>
+                <span class="ca-campaign-link crl-sip-name"><?php echo e($sipName); ?></span>
             </span>
         </span>
     </td>
     <td class="crl-channel-col"><span class="crl-channel-range"><?php echo e($channelRange !== '' ? $channelRange : '—'); ?></span></td>
-    <td class="crl-sip-col"><span class="crl-sip-name"><?php echo e($sipName); ?></span></td>
     <td class="crl-actions-col actions-column">
         <?php if(auth()->user()->hasPermission('media.delete')): ?>
             <span class="row-actions">
@@ -89,33 +85,30 @@
     </td>
 </tr>
 <tr class="ca-nested-row" id="crl-panel-<?php echo e($sip->id); ?>" hidden>
-    <td colspan="4">
+    <td colspan="3">
         <div class="ca-nested">
-            <table class="crl-nested" aria-label="<?php echo e($campaignName); ?> channel numbers">
+            <table class="crl-nested" aria-label="<?php echo e($sipName); ?> channel numbers">
                 <colgroup>
-                    <col class="crl-col-campaign">
-                    <col class="crl-col-channel">
                     <col class="crl-col-sip">
+                    <col class="crl-col-channel">
                     <col class="crl-col-actions">
                 </colgroup>
                 <thead>
                     <tr>
-                        <th class="crl-campaign-col"></th>
-                        <th class="crl-channel-col">Channel Number</th>
                         <th class="crl-sip-col"></th>
+                        <th class="crl-channel-col">Channel Number</th>
                         <th class="crl-actions-col"></th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php $__empty_2 = true; $__currentLoopData = $sip->channelNumbers; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $number): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_2 = false; ?>
                     <tr <?php if(auth()->user()->hasPermission('media.delete')): ?> data-bulk-row="nested" data-bulk-id="<?php echo e($number->id); ?>" data-bulk-url="<?php echo e(route('channel-range-list.bulk-destroy')); ?>" <?php endif; ?>>
-                        <td class="crl-campaign-col"></td>
-                        <td class="crl-channel-col"><span class="crl-channel-number"><?php echo e($number->channel_number); ?></span></td>
                         <td class="crl-sip-col"></td>
+                        <td class="crl-channel-col"><span class="crl-channel-number"><?php echo e($number->channel_number); ?></span></td>
                         <td class="crl-actions-col"></td>
                     </tr>
                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_2): ?>
-                    <tr><td colspan="4"><div class="empty-state">No channel numbers for this SIP channel.</div></td></tr>
+                    <tr><td colspan="3"><div class="empty-state">No channel numbers for this SIP channel.</div></td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
@@ -123,7 +116,7 @@
     </td>
 </tr>
 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
-<tr><td colspan="4"><div class="empty-state">No Channel Range List records found.</div></td></tr>
+<tr><td colspan="3"><div class="empty-state">No Channel Range List records found.</div></td></tr>
 <?php endif; ?>
 </tbody>
 </table>

@@ -33,44 +33,40 @@
 <div class="table-card table-wrap">
 <table class="ca-table crl-table" aria-label="Channel Range List">
 <colgroup>
-    <col class="crl-col-campaign">
-    <col class="crl-col-channel">
     <col class="crl-col-sip">
+    <col class="crl-col-channel">
     <col class="crl-col-actions">
 </colgroup>
 <thead>
 <tr>
-    <th class="crl-campaign-col">
+    <th class="crl-sip-col">
         <span class="ca-campaign-cell">
             <span class="ca-toggle" aria-hidden="true"></span>
-            <span class="ca-campaign-identity">Campaign</span>
+            <span class="ca-campaign-identity">SIP Name</span>
         </span>
     </th>
     <th class="crl-channel-col">Channel Range</th>
-    <th class="crl-sip-col">SIP Name</th>
     <th class="crl-actions-col">Actions</th>
 </tr>
 </thead>
 <tbody>
 @forelse($groups as $sip)
 @php
-    $campaignName = $sip->campaign?->name ?: '—';
     $sipName = $sip->etpi_sip_name ?: '—';
     $channelRange = $sip->channelRangeFromNumbers();
 @endphp
 <tr class="ca-campaign-row" data-campaign="{{ $sip->id }}" @if(auth()->user()->hasPermission('media.delete')) data-bulk-row="main" data-bulk-ids="{{ $sip->channelNumbers->pluck('id')->implode(',') }}" data-bulk-url="{{ route('channel-range-list.bulk-destroy') }}" @endif>
-    <td class="crl-campaign-col">
+    <td class="crl-sip-col">
         <span class="ca-campaign-cell">
-            <button type="button" class="ca-toggle" data-ca-toggle="{{ $sip->id }}" aria-expanded="false" aria-controls="crl-panel-{{ $sip->id }}" title="Expand {{ $campaignName }}">
+            <button type="button" class="ca-toggle" data-ca-toggle="{{ $sip->id }}" aria-expanded="false" aria-controls="crl-panel-{{ $sip->id }}" title="Expand {{ $sipName }}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"></path></svg>
             </button>
             <span class="ca-campaign-identity">
-                <span class="ca-campaign-link campaigns-name">{{ $campaignName }}</span>
+                <span class="ca-campaign-link crl-sip-name">{{ $sipName }}</span>
             </span>
         </span>
     </td>
     <td class="crl-channel-col"><span class="crl-channel-range">{{ $channelRange !== '' ? $channelRange : '—' }}</span></td>
-    <td class="crl-sip-col"><span class="crl-sip-name">{{ $sipName }}</span></td>
     <td class="crl-actions-col actions-column">
         @if(auth()->user()->hasPermission('media.delete'))
             <span class="row-actions">
@@ -90,33 +86,30 @@
     </td>
 </tr>
 <tr class="ca-nested-row" id="crl-panel-{{ $sip->id }}" hidden>
-    <td colspan="4">
+    <td colspan="3">
         <div class="ca-nested">
-            <table class="crl-nested" aria-label="{{ $campaignName }} channel numbers">
+            <table class="crl-nested" aria-label="{{ $sipName }} channel numbers">
                 <colgroup>
-                    <col class="crl-col-campaign">
-                    <col class="crl-col-channel">
                     <col class="crl-col-sip">
+                    <col class="crl-col-channel">
                     <col class="crl-col-actions">
                 </colgroup>
                 <thead>
                     <tr>
-                        <th class="crl-campaign-col"></th>
-                        <th class="crl-channel-col">Channel Number</th>
                         <th class="crl-sip-col"></th>
+                        <th class="crl-channel-col">Channel Number</th>
                         <th class="crl-actions-col"></th>
                     </tr>
                 </thead>
                 <tbody>
                 @forelse($sip->channelNumbers as $number)
                     <tr @if(auth()->user()->hasPermission('media.delete')) data-bulk-row="nested" data-bulk-id="{{ $number->id }}" data-bulk-url="{{ route('channel-range-list.bulk-destroy') }}" @endif>
-                        <td class="crl-campaign-col"></td>
-                        <td class="crl-channel-col"><span class="crl-channel-number">{{ $number->channel_number }}</span></td>
                         <td class="crl-sip-col"></td>
+                        <td class="crl-channel-col"><span class="crl-channel-number">{{ $number->channel_number }}</span></td>
                         <td class="crl-actions-col"></td>
                     </tr>
                 @empty
-                    <tr><td colspan="4"><div class="empty-state">No channel numbers for this SIP channel.</div></td></tr>
+                    <tr><td colspan="3"><div class="empty-state">No channel numbers for this SIP channel.</div></td></tr>
                 @endforelse
                 </tbody>
             </table>
@@ -124,7 +117,7 @@
     </td>
 </tr>
 @empty
-<tr><td colspan="4"><div class="empty-state">No Channel Range List records found.</div></td></tr>
+<tr><td colspan="3"><div class="empty-state">No Channel Range List records found.</div></td></tr>
 @endforelse
 </tbody>
 </table>

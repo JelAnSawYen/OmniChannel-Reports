@@ -35,7 +35,7 @@ class ChannelRangeListPageTest extends TestCase
         ]);
     }
 
-    public function test_page_uses_campaign_and_sip_name_with_pdc_style_expander(): void
+    public function test_page_uses_sip_name_with_pdc_style_expander(): void
     {
         $this->actingAs($this->admin);
         $atome = ChannelAllocationCampaign::create(['name' => 'Atome']);
@@ -63,14 +63,12 @@ class ChannelRangeListPageTest extends TestCase
 
         $page->assertSee('<h1 class="page-title">Channel Range</h1>', false)
             ->assertSee('Manage channel numbers for each SIP channel.')
-            ->assertSee('ca-campaign-identity">Campaign</span>', false)
+            ->assertSee('ca-campaign-identity">SIP Name</span>', false)
             ->assertSee('>Channel Range</th>', false)
-            ->assertSee('>SIP Name</th>', false)
             ->assertSee('>Actions</th>', false)
             ->assertSee('class="ca-campaign-cell"', false)
             ->assertSee('data-ca-toggle="'.$sip->id.'"', false)
             ->assertSee('SIP_ATOME_01')
-            ->assertSee('Atome')
             ->assertSee('24556 - 457864')
             ->assertSee('>Channel Number</th>', false)
             ->assertSee('24556')
@@ -93,22 +91,22 @@ class ChannelRangeListPageTest extends TestCase
             ->assertDontSee('class="ca-menu-btn"', false);
 
         $this->assertStringContainsString('class="ca-campaign-cell"', $html);
-        $this->assertStringContainsString('campaigns-name', $html);
+        $this->assertStringContainsString('crl-sip-name', $html);
+        $this->assertStringNotContainsString('ca-campaign-identity">Campaign</span>', $html);
         $mainHead = Str::betweenFirst($html, 'class="ca-table crl-table"', '</thead>');
         $this->assertStringContainsString('class="ca-campaign-cell"', $mainHead);
         $this->assertStringContainsString('class="ca-toggle" aria-hidden="true"', $mainHead);
-        $this->assertStringContainsString('ca-campaign-identity">Campaign</span>', $mainHead);
+        $this->assertStringContainsString('ca-campaign-identity">SIP Name</span>', $mainHead);
         $this->assertStringNotContainsString('class="crl-toggle-col"', $mainHead);
-        $this->assertTrue(strpos($mainHead, 'ca-campaign-identity">Campaign</span>') < strpos($mainHead, '>Channel Range</th>'));
-        $this->assertTrue(strpos($mainHead, '>Channel Range</th>') < strpos($mainHead, '>SIP Name</th>'));
-        $this->assertTrue(strpos($mainHead, '>SIP Name</th>') < strpos($mainHead, '>Actions</th>'));
-        $this->assertStringContainsString('crl-campaign-col', $mainHead);
-        $this->assertStringContainsString('crl-channel-col', $mainHead);
+        $this->assertStringNotContainsString('Campaign', $mainHead);
+        $this->assertTrue(strpos($mainHead, 'ca-campaign-identity">SIP Name</span>') < strpos($mainHead, '>Channel Range</th>'));
+        $this->assertTrue(strpos($mainHead, '>Channel Range</th>') < strpos($mainHead, '>Actions</th>'));
         $this->assertStringContainsString('crl-sip-col', $mainHead);
+        $this->assertStringContainsString('crl-channel-col', $mainHead);
         $this->assertStringContainsString('crl-actions-col', $mainHead);
-        $this->assertTrue(strpos($mainHead, 'crl-campaign-col') < strpos($mainHead, 'crl-channel-col'));
-        $this->assertTrue(strpos($mainHead, 'crl-channel-col') < strpos($mainHead, 'crl-sip-col'));
-        $this->assertTrue(strpos($mainHead, 'crl-sip-col') < strpos($mainHead, 'crl-actions-col'));
+        $this->assertStringNotContainsString('crl-campaign-col', $mainHead);
+        $this->assertTrue(strpos($mainHead, 'crl-sip-col') < strpos($mainHead, 'crl-channel-col'));
+        $this->assertTrue(strpos($mainHead, 'crl-channel-col') < strpos($mainHead, 'crl-actions-col'));
         $this->assertStringNotContainsString('Channel Number', $mainHead);
         $this->assertStringContainsString('id="sipChannelsGroup"', $html);
         $this->assertStringContainsString('id="sipChannelsCaret"', $html);
@@ -120,7 +118,10 @@ class ChannelRangeListPageTest extends TestCase
 
         $campaignRow = Str::betweenFirst($html, 'class="ca-campaign-row"', 'class="ca-nested-row"');
         $this->assertStringContainsString('class="ca-campaign-cell"', $campaignRow);
-        $this->assertTrue(strpos($campaignRow, 'class="ca-toggle"') < strpos($campaignRow, 'campaigns-name'));
+        $this->assertTrue(strpos($campaignRow, 'class="ca-toggle"') < strpos($campaignRow, 'crl-sip-name'));
+        $this->assertTrue(strpos($campaignRow, 'crl-sip-name') < strpos($campaignRow, 'crl-channel-range'));
+        $this->assertStringContainsString('SIP_ATOME_01', $campaignRow);
+        $this->assertStringNotContainsString('Atome', $campaignRow);
         $this->assertStringContainsString('24556 - 457864', $campaignRow);
         $this->assertStringContainsString('class="action-btn delete"', $campaignRow);
         $this->assertStringNotContainsString('class="action-btn edit"', $campaignRow);
@@ -141,21 +142,30 @@ class ChannelRangeListPageTest extends TestCase
         $this->assertStringContainsString('data-bulk-row="nested" data-bulk-id="'.$secondNumber->id.'" data-bulk-url="'.url('/channel-range-list/bulk').'"', $nested);
         $this->assertStringNotContainsString('class="action-btn', $nested);
         $this->assertStringNotContainsString('SIP Name', $nested);
-        $this->assertStringNotContainsString('SIP_ATOME_01', $nested);
+        $this->assertStringNotContainsString('class="crl-sip-name"', $nested);
+        $this->assertStringNotContainsString('>SIP_ATOME_01<', $nested);
         $this->assertStringNotContainsString('ca-menu-btn', $nested);
         $this->assertStringNotContainsString('>ID</th>', $nested);
         $this->assertStringNotContainsString('>Status</th>', $nested);
+
+        $filtered = $this->get('/channel-range-list?search=SIP_ATOME_01')->assertOk()->getContent();
+        $this->assertStringContainsString('SIP_ATOME_01', $filtered);
+        $this->assertStringContainsString('data-ca-toggle="'.$sip->id.'"', $filtered);
     }
 
     public function test_channel_range_table_uses_compact_spacing_mixed_alignment_and_no_grid(): void
     {
         $css = file_get_contents(resource_path('css/app.css'));
         $this->assertMatchesRegularExpression(
-            '/body\[data-page="channel-range-list"\] \.crl-table > thead > tr > th\.crl-campaign-col,\s*body\[data-page="channel-range-list"\] \.crl-table \.ca-campaign-row > td\.crl-campaign-col \{\s*text-align: left;/',
+            '/body\[data-page="channel-range-list"\] \.crl-table > thead > tr > th\.crl-sip-col,\s*body\[data-page="channel-range-list"\] \.crl-table \.ca-campaign-row > td\.crl-sip-col \{\s*text-align: left;/',
             $css
         );
         $this->assertMatchesRegularExpression(
-            '/body\[data-page="channel-range-list"\] \.crl-table \.ca-campaign-link,\s*body\[data-page="channel-range-list"\] \.crl-table \.ca-campaign-link\.campaigns-name \{\s*color: #0066FF;\s*font-weight: 700;/',
+            '/body\[data-page="channel-range-list"\] \.crl-table \.ca-campaign-link,\s*body\[data-page="channel-range-list"\] \.crl-table \.ca-campaign-link\.crl-sip-name,\s*body\[data-page="channel-range-list"\] \.crl-table \.crl-sip-name \{\s*color: #0066FF;\s*font-weight: 700;/',
+            $css
+        );
+        $this->assertMatchesRegularExpression(
+            '/body\[data-page="channel-range-list"\] \.crl-table > thead > tr > th\.crl-sip-col \.ca-campaign-identity \{\s*color: #0f172a;\s*font-weight: 700;/',
             $css
         );
         $this->assertMatchesRegularExpression(
@@ -163,19 +173,19 @@ class ChannelRangeListPageTest extends TestCase
             $css
         );
         $this->assertMatchesRegularExpression(
-            '/body\[data-page="channel-range-list"\] \.crl-table > thead > tr > th\.crl-sip-col,\s*body\[data-page="channel-range-list"\] \.crl-table \.ca-campaign-row > td\.crl-sip-col \{\s*text-align: center;/',
-            $css
-        );
-        $this->assertMatchesRegularExpression(
             '/body\[data-page="channel-range-list"\] \.crl-table > thead > tr > th\.crl-actions-col,\s*body\[data-page="channel-range-list"\] \.crl-table \.ca-campaign-row > td\.crl-actions-col \{\s*text-align: center;/',
             $css
         );
         $this->assertMatchesRegularExpression(
-            '/body\[data-page="channel-range-list"\] \.crl-table \.ca-nested \.crl-nested thead th\.crl-channel-col,\s*body\[data-page="channel-range-list"\] \.crl-table \.ca-nested \.crl-nested tbody td\.crl-channel-col \{\s*width: 24%;\s*text-align: center;/',
+            '/body\[data-page="channel-range-list"\] \.crl-table > colgroup > \.crl-col-sip,[\s\S]*?\.crl-actions-col \{\s*width: 33\.333%;/',
             $css
         );
         $this->assertMatchesRegularExpression(
-            '/body\[data-page="channel-range-list"\] \.crl-table \.ca-nested \.crl-nested \.actions-column \{\s*width: 24%;\s*text-align: center;/',
+            '/body\[data-page="channel-range-list"\] \.crl-table \.ca-nested \.crl-nested thead th\.crl-channel-col,\s*body\[data-page="channel-range-list"\] \.crl-table \.ca-nested \.crl-nested tbody td\.crl-channel-col \{\s*width: 33\.333%;\s*text-align: center;/',
+            $css
+        );
+        $this->assertMatchesRegularExpression(
+            '/body\[data-page="channel-range-list"\] \.crl-table \.ca-nested \.crl-nested \.actions-column \{\s*width: 33\.333%;\s*text-align: center;/',
             $css
         );
         $this->assertMatchesRegularExpression(
@@ -187,8 +197,12 @@ class ChannelRangeListPageTest extends TestCase
             $css
         );
         $this->assertStringContainsString('.ca-nested { border: 1.25px solid var(--border); border-radius: 10px;', $css);
-        $this->assertDoesNotMatchRegularExpression(
-            '/body\[data-page="channel-range-list"\] \.crl-table > thead > tr > th\.crl-campaign-col[\s\S]{0,180}padding-left: 16px;/',
+        $this->assertMatchesRegularExpression(
+            '/body\[data-page="channel-range-list"\] \.crl-table > thead > tr > th\.crl-sip-col[\s\S]{0,180}padding-left: 16px;/',
+            $css
+        );
+        $this->assertMatchesRegularExpression(
+            '/body\[data-page="channel-range-list"\] \.crl-table > thead > tr > th\.crl-actions-col[\s\S]{0,180}padding-right: 16px;/',
             $css
         );
         $this->assertMatchesRegularExpression(
@@ -200,6 +214,7 @@ class ChannelRangeListPageTest extends TestCase
             $css
         );
         $this->assertStringNotContainsString('crl-toggle-col', $css);
+        $this->assertStringNotContainsString('crl-campaign-col', $css);
     }
 
     public function test_from_to_creates_actual_channel_records_and_blocks_duplicates(): void
@@ -366,8 +381,8 @@ class ChannelRangeListPageTest extends TestCase
             ->all());
 
         $html = $this->get('/channel-range-list')->assertOk()->getContent();
-        $this->assertStringContainsString('BPI', $html);
         $this->assertStringContainsString('SIP_BPI_01', $html);
+        $this->assertStringNotContainsString('ca-campaign-identity">Campaign</span>', $html);
         $this->assertStringContainsString('200 - 202', $html);
         $this->assertStringContainsString('>200</span>', $html);
         $this->assertStringContainsString('>202</span>', $html);
@@ -417,12 +432,12 @@ class ChannelRangeListPageTest extends TestCase
         $this->assertStringContainsString('const previewUrl', $html);
         $this->assertStringContainsString('channel-range-list\\/import\\/preview', $html);
         $this->assertStringContainsString('channel-range-list\\/import\\/confirm', $html);
-        $this->assertStringContainsString('["campaign","channel_number"]', $html);
+        $this->assertStringContainsString('["sip_name","channel_number"]', $html);
 
         $template = $this->get('/channel-range-list/import/template')->assertOk()->assertDownload('channel-range-list-template.xlsx');
         [$headers, $rows] = app(XlsxService::class)->read($template->getFile()->getPathname());
-        $this->assertSame(['Campaign', 'Channel Number'], $headers);
-        $this->assertNotContains('SIP Name', $headers);
+        $this->assertSame(['SIP Name', 'Channel Number'], $headers);
+        $this->assertNotContains('Campaign', $headers);
         $this->assertNotContains('Id', $headers);
         $this->assertNotContains('From', $headers);
         $this->assertNotContains('To', $headers);
@@ -432,8 +447,8 @@ class ChannelRangeListPageTest extends TestCase
 
         $preview = $this->postJson('/channel-range-list/import/preview', [
             'file' => $this->upload($this->spreadsheet([
-                ['Campaign', 'Channel Number'],
-                ['Atome', '253235320'],
+                ['SIP Name', 'Channel Number'],
+                ['SIP_ATOME_01', '253235320'],
                 ['Unknown', '253235321'],
             ])),
         ])->assertOk()->json();
@@ -444,9 +459,9 @@ class ChannelRangeListPageTest extends TestCase
 
         $ok = $this->postJson('/channel-range-list/import/preview', [
             'file' => $this->upload($this->spreadsheet([
-                ['Campaign', 'Channel Number'],
-                ['Atome', '253235320'],
-                ['Atome', '253235321'],
+                ['SIP Name', 'Channel Number'],
+                ['SIP_ATOME_01', '253235320'],
+                ['', '253235321'],
             ])),
         ])->assertOk()->json();
         $this->assertTrue($ok['valid'], $ok['rows'][0]['error'] ?? '');
@@ -462,8 +477,8 @@ class ChannelRangeListPageTest extends TestCase
 
         $dup = $this->postJson('/channel-range-list/import/preview', [
             'file' => $this->upload($this->spreadsheet([
-                ['Campaign', 'Channel Number'],
-                ['Atome', '253235320'],
+                ['SIP Name', 'Channel Number'],
+                ['SIP_ATOME_01', '253235320'],
             ])),
         ])->assertOk()->json();
         $this->assertFalse($dup['valid']);
@@ -471,8 +486,9 @@ class ChannelRangeListPageTest extends TestCase
 
         $export = $this->get('/channel-range-list/export')->assertOk()->assertDownload('channel-range-list.xlsx');
         [$exportHeaders, $exportRows] = app(XlsxService::class)->read($export->getFile()->getPathname());
-        $this->assertSame(['Campaign', 'SIP Name', 'Channel Number'], $exportHeaders);
-        $this->assertContains(['Atome', 'SIP_ATOME_01', '253235320'], $exportRows);
+        $this->assertSame(['SIP Name', 'Channel Range', 'Channel Numbers/Range Entries'], $exportHeaders);
+        $this->assertNotContains('Campaign', $exportHeaders);
+        $this->assertContains(['SIP_ATOME_01', '253235320 - 253235321', '253235320'], $exportRows);
         $this->assertContains(['', '', '253235321'], $exportRows);
     }
 

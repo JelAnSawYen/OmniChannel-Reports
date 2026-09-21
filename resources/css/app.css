@@ -2595,35 +2595,36 @@ body[data-page="channel-range-list"] .crl-table > tbody > tr > td {
     border: 0;
     border-bottom: 0;
 }
-body[data-page="channel-range-list"] .crl-table > colgroup > .crl-col-campaign,
-body[data-page="channel-range-list"] .crl-nested > colgroup > .crl-col-campaign,
-body[data-page="channel-range-list"] .crl-table .crl-campaign-col,
-body[data-page="channel-range-list"] .crl-nested .crl-campaign-col {
-    width: 23%;
-}
-body[data-page="channel-range-list"] .crl-table > colgroup > .crl-col-channel,
-body[data-page="channel-range-list"] .crl-nested > colgroup > .crl-col-channel,
-body[data-page="channel-range-list"] .crl-table .crl-channel-col,
-body[data-page="channel-range-list"] .crl-nested .crl-channel-col {
-    width: 24%;
-}
 body[data-page="channel-range-list"] .crl-table > colgroup > .crl-col-sip,
 body[data-page="channel-range-list"] .crl-nested > colgroup > .crl-col-sip,
 body[data-page="channel-range-list"] .crl-table .crl-sip-col,
-body[data-page="channel-range-list"] .crl-nested .crl-sip-col {
-    width: 23%;
-}
+body[data-page="channel-range-list"] .crl-nested .crl-sip-col,
+body[data-page="channel-range-list"] .crl-table > colgroup > .crl-col-channel,
+body[data-page="channel-range-list"] .crl-nested > colgroup > .crl-col-channel,
+body[data-page="channel-range-list"] .crl-table .crl-channel-col,
+body[data-page="channel-range-list"] .crl-nested .crl-channel-col,
 body[data-page="channel-range-list"] .crl-table > colgroup > .crl-col-actions,
 body[data-page="channel-range-list"] .crl-nested > colgroup > .crl-col-actions,
 body[data-page="channel-range-list"] .crl-table .crl-actions-col,
 body[data-page="channel-range-list"] .crl-nested .crl-actions-col {
-    width: 24%;
+    width: 33.333%;
+    max-width: none;
 }
-body[data-page="channel-range-list"] .crl-table > thead > tr > th.crl-campaign-col,
-body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td.crl-campaign-col {
+body[data-page="channel-range-list"] .crl-table > thead > tr > th:first-child,
+body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td:first-child {
+    width: 33.333%;
+    max-width: none;
+}
+body[data-page="channel-range-list"] .crl-table > thead > tr > th.crl-sip-col,
+body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td.crl-sip-col {
     text-align: left;
     white-space: nowrap;
+    padding-left: 70px;
     padding-right: 8px;
+}
+body[data-page="channel-range-list"] .crl-table > thead > tr > th.crl-sip-col .ca-campaign-identity {
+    color: #0f172a;
+    font-weight: 700;
 }
 body[data-page="channel-range-list"] .crl-table > thead > tr > th:first-child .ca-toggle {
     visibility: hidden;
@@ -2640,18 +2641,11 @@ body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td.crl-channe
     padding-left: 8px;
     padding-right: 8px;
 }
-body[data-page="channel-range-list"] .crl-table > thead > tr > th.crl-sip-col,
-body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td.crl-sip-col {
-    text-align: center;
-    white-space: nowrap;
-    padding-left: 8px;
-    padding-right: 8px;
-}
 body[data-page="channel-range-list"] .crl-table > thead > tr > th.crl-actions-col,
 body[data-page="channel-range-list"] .crl-table .ca-campaign-row > td.crl-actions-col {
     text-align: center;
     padding-left: 8px;
-    padding-right: 8px;
+    padding-right: 16px;
 }
 body[data-page="channel-range-list"] .crl-table .ca-campaign-cell {
     gap: 4px;
@@ -2660,11 +2654,12 @@ body[data-page="channel-range-list"] .crl-table .ca-toggle {
     margin-right: 0;
 }
 body[data-page="channel-range-list"] .crl-table .ca-campaign-link,
-body[data-page="channel-range-list"] .crl-table .ca-campaign-link.campaigns-name {
+body[data-page="channel-range-list"] .crl-table .ca-campaign-link.crl-sip-name,
+body[data-page="channel-range-list"] .crl-table .crl-sip-name {
     color: #0066FF;
     font-weight: 700;
+    justify-content: flex-start;
 }
-body[data-page="channel-range-list"] .crl-sip-name,
 body[data-page="channel-range-list"] .crl-channel-range {
     display: inline-flex;
     align-items: center;
@@ -2678,20 +2673,16 @@ body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td 
     box-sizing: border-box;
     vertical-align: middle;
 }
-body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th.crl-campaign-col,
-body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td.crl-campaign-col {
-    width: 23%;
-    text-align: left;
-    padding-right: 8px;
-}
 body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th.crl-sip-col,
 body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td.crl-sip-col {
-    width: 23%;
-    text-align: center;
+    width: 33.333%;
+    text-align: left;
+    padding-left: 16px;
+    padding-right: 8px;
 }
 body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th.crl-channel-col,
 body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td.crl-channel-col {
-    width: 24%;
+    width: 33.333%;
     text-align: center;
 }
 body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th.crl-actions-col,
@@ -2699,9 +2690,10 @@ body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td.
 body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested thead th:last-child,
 body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested tbody td:last-child,
 body[data-page="channel-range-list"] .crl-table .ca-nested .crl-nested .actions-column {
-    width: 24%;
+    width: 33.333%;
     text-align: center;
     white-space: nowrap;
+    padding-right: 16px;
 }
 body[data-page="channel-range-list"] .crl-table .ca-campaign-row .row-actions,
 body[data-page="channel-range-list"] .crl-nested .row-actions {
@@ -2841,7 +2833,7 @@ body[data-page="smart-sim"] .page-container {
 .pin-table > tbody > tr > td.pin-campaign-col {
     text-align: left;
     width: 14%;
-    padding-left: 20px;
+    padding-left: 30px;
 }
 .pin-table > thead > tr > th:nth-child(2),
 .pin-table > tbody > tr > td:nth-child(2) { width: 14%; }
@@ -2867,7 +2859,7 @@ body[data-page="smart-sim"] .page-container {
 .pin-table > tbody > tr > td .pin-campaign {
     color: #0b70f7;
     font-weight: 700;
-    justify-content: flex-start;
+    justify-content: center;
 }
 .pin-stack {
     display: inline-flex;
@@ -5165,7 +5157,6 @@ body.bulk-mode .pager,
 body.bulk-mode .per-page-select {
     pointer-events: none;
 }
-
 body.bulk-mode .sidebar,
 body.bulk-mode .app-header {
     opacity: 0.55;

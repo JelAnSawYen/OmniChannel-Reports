@@ -176,7 +176,8 @@ class CampaignsPageTest extends TestCase
         $this->assertStringContainsString('data-fte="9"', $caHtml);
         $this->assertMatchesRegularExpression('/id="campaign_fte"[^>]*\breadonly\b/', $caHtml);
         $this->assertDoesNotMatchRegularExpression('/id="campaign_fte"[^>]*\bname="fte"/', $caHtml);
-        $ca->assertSee('data-label="FTE">9', false);
+        $this->assertStringNotContainsString('data-label="FTE">9', $caHtml);
+        $this->assertDoesNotMatchRegularExpression('/class="ca-campaign-link"[^>]*>Master Camp</', $caHtml);
 
         $this->put('/channel-allocation/'.$campaign->id, [
             'name' => 'Master Camp',

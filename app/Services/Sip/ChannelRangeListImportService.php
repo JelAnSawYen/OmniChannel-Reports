@@ -15,7 +15,7 @@ class ChannelRangeListImportService
 {
     public const SESSION_KEY = 'channel_range_list_import';
 
-    public const CARRY_FIELDS = ['campaign'];
+    public const CARRY_FIELDS = ['sip_name'];
 
     /**
      * @return array<string, string>
@@ -23,7 +23,7 @@ class ChannelRangeListImportService
     public function fields(): array
     {
         return [
-            'campaign' => 'Campaign',
+            'sip_name' => 'SIP Name',
             'channel_number' => 'Channel Number',
         ];
     }
@@ -34,9 +34,9 @@ class ChannelRangeListImportService
     public function exportFields(): array
     {
         return [
-            'campaign' => 'Campaign',
             'sip_name' => 'SIP Name',
-            'channel_number' => 'Channel Number',
+            'channel_range' => 'Channel Range',
+            'channel_number' => 'Channel Numbers/Range Entries',
         ];
     }
 
@@ -80,20 +80,20 @@ class ChannelRangeListImportService
             }
         }
 
-        $sipByCampaign = [];
-        foreach (SipChannel::query()->with('campaign')->whereNotNull('campaign_id')->get() as $sip) {
-            $name = mb_strtolower(trim((string) $sip->campaign?->name));
+        $sipByName = [];
+        foreach (SipChannel::query()->orderBy('id')->get() as $sip) {
+            $name = mb_strtolower(trim((string) $sip->etpi_sip_name));
             if ($name === '') {
                 continue;
             }
-            $sipByCampaign[$name][] = $sip;
+            $sipByName[$name][] = $sip;
         }
 
         $existingNumbers = SipChannelNumber::query()->pluck('channel_number')
             ->map(fn ($number) => (string) $number)
             ->all();
         $fileNumbers = [];
-        $carry = ['campaign' => null];
+        $carry = ['sip_name' => null];
         $previewRows = [];
         $payload = [];
 
@@ -121,21 +121,19 @@ class ChannelRangeListImportService
 
             $errors = [];
             $sipChannelId = null;
-            $sipName = '';
 
-            if ($values['campaign'] === '') {
-                $errors[] = 'Campaign is required';
+            if ($values['sip_name'] === '') {
+                $errors[] = 'SIP Name is required';
             } else {
-                $matches = $sipByCampaign[mb_strtolower($values['campaign'])] ?? [];
+                $matches = $sipByName[mb_strtolower($values['sip_name'])] ?? [];
                 if ($matches === []) {
-                    $errors[] = 'Campaign does not match an existing SIP Channel';
+                    $errors[] = 'SIP Name does not match an existing SIP Channel';
                 } elseif (count($matches) > 1) {
-                    $errors[] = 'Campaign matches more than one SIP Channel';
+                    $errors[] = 'SIP Name matches more than one SIP Channel';
                 } else {
                     $sip = $matches[0];
                     $sipChannelId = (int) $sip->id;
-                    $values['campaign'] = $sip->campaign?->name ?: $values['campaign'];
-                    $sipName = (string) $sip->etpi_sip_name;
+                    $values['sip_name'] = (string) ($sip->etpi_sip_name ?: $values['sip_name']);
                 }
             }
 
@@ -159,7 +157,6 @@ class ChannelRangeListImportService
                 'status' => $ok ? 'Valid' : 'Error',
                 'error' => implode('; ', $errors),
                 'valid' => $ok,
-                'sip_name' => $sipName,
             ];
             foreach (array_keys($this->fields()) as $field) {
                 $preview[$field] = $values[$field] ?? '';
@@ -258,6 +255,7 @@ class ChannelRangeListImportService
             $aliases[strtolower($label)] = $field;
             $aliases[strtolower(str_replace('_', ' ', $field))] = $field;
         }
+        $aliases[strtolower('Channel Numbers/Range Entries')] = 'channel_number';
 
         $map = [];
         foreach ($headers as $index => $header) {

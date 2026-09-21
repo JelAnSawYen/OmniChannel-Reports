@@ -268,7 +268,7 @@ class ChannelAllocationPageTest extends TestCase
             'line_priority' => 1,
             'total_channel_allocated' => 1,
             'remarks' => 'line note',
-        ])->assertRedirect()->assertSessionHas('ca_expanded', $alpha->id)->assertSessionHas('ca_edit_allocation', $target->id);
+        ])->assertRedirect()->assertSessionHas('ca_expanded', $alpha->id)->assertSessionMissing('ca_edit_allocation');
 
         $this->assertDatabaseHas('channel_allocations', [
             'id' => $target->id,
@@ -281,9 +281,18 @@ class ChannelAllocationPageTest extends TestCase
         $this->assertSame(45, $alpha->fresh()->total_channels_allocated);
 
         $page = $this->get('/channel-allocation')->assertOk();
-        $table = Str::between($page->getContent(), '<table', '</table>');
+        $html = $page->getContent();
+        $table = Str::between($html, '<table', '</table>');
         $this->assertStringContainsString('CH-A-UPDATED', $table);
-        $this->assertStringContainsString('Data Transfer', $page->getContent());
+        $this->assertStringContainsString('Data Transfer', $html);
+        $this->assertStringNotContainsString('restoreEditAllocation', $html);
+        $this->assertDoesNotMatchRegularExpression('/id="allocationModal"[^>]*\bvisible\b/', $html);
+        $this->assertStringContainsString('class="plus-btn"', $html);
+
+        $this->put('/channel-allocation/'.$alpha->id.'/allocations/'.$target->id, [
+            'channel_type' => 'sip',
+            'line_priority' => 1,
+        ])->assertSessionHasErrors('channel')->assertSessionMissing('ca_edit_allocation');
 
         $this->get('/channel-allocation?search=CH-A-UPDATED')
             ->assertOk()
@@ -311,6 +320,7 @@ class ChannelAllocationPageTest extends TestCase
         $campaign = ChannelAllocationCampaign::create([
             'name' => 'Locked',
             'sort_order' => 1,
+            'listed_in_channel_allocation' => true,
         ]);
         $allocation = ChannelAllocation::create([
             'campaign_id' => $campaign->id,
@@ -346,7 +356,11 @@ class ChannelAllocationPageTest extends TestCase
     {
         $this->actingAs($this->admin);
         for ($i = 1; $i <= 12; $i++) {
-            ChannelAllocationCampaign::create(['name' => 'Camp '.$i, 'sort_order' => $i]);
+            ChannelAllocationCampaign::create([
+                'name' => 'Camp '.$i,
+                'sort_order' => $i,
+                'listed_in_channel_allocation' => true,
+            ]);
         }
 
         $this->get('/channel-allocation?per_page=5')
@@ -361,10 +375,44 @@ class ChannelAllocationPageTest extends TestCase
             ->assertSee('Camp 11');
     }
 
+    public function test_campaigns_tab_records_are_not_listed_until_added_or_imported(): void
+    {
+        $this->actingAs($this->admin);
+
+        $this->post('/campaigns', [
+            'name' => 'Catalog Only',
+            'fte' => 3,
+            'location' => 'WFH',
+        ])->assertRedirect();
+
+        $campaign = ChannelAllocationCampaign::where('name', 'Catalog Only')->firstOrFail();
+        $this->assertFalse((bool) $campaign->listed_in_channel_allocation);
+
+        $this->get('/channel-allocation')
+            ->assertOk()
+            ->assertDontSee('title="Expand Catalog Only"', false)
+            ->assertSee('>Catalog Only</button>', false);
+
+        $this->post('/channel-allocation', [
+            'campaign_id' => $campaign->id,
+            'caller_id' => '100',
+        ])->assertRedirect();
+
+        $this->assertTrue((bool) $campaign->fresh()->listed_in_channel_allocation);
+        $this->get('/channel-allocation')
+            ->assertOk()
+            ->assertSee('title="Expand Catalog Only"', false)
+            ->assertSee('data-label="Caller ID">100', false);
+    }
+
     public function test_allocation_dropdowns_auto_fill_from_sip_channel(): void
     {
         $this->actingAs($this->admin);
-        $campaign = ChannelAllocationCampaign::create(['name' => 'Mynt', 'sort_order' => 1]);
+        $campaign = ChannelAllocationCampaign::create([
+            'name' => 'Mynt',
+            'sort_order' => 1,
+            'listed_in_channel_allocation' => true,
+        ]);
         $this->createSipChannel('ETPI_53235320', 'ETPI', 14);
         $this->createGsmGateway('PDC-MG1', 'Globe SIM', 16);
 

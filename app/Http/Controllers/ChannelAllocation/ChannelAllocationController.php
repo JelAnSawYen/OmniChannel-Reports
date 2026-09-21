@@ -33,7 +33,11 @@ class ChannelAllocationController extends Controller
             $perPage = 10;
         }
 
-        $query = ChannelAllocationCampaign::query()->with('allocations')->orderBy('sort_order')->orderBy('name');
+        $query = ChannelAllocationCampaign::query()
+            ->listedInChannelAllocation()
+            ->with('allocations')
+            ->orderBy('sort_order')
+            ->orderBy('name');
         if ($search !== '') {
             $query->where(function ($campaigns) use ($search) {
                 $campaigns->where('name', 'like', "%{$search}%")
@@ -107,6 +111,7 @@ class ChannelAllocationController extends Controller
                     'caller_id' => $data['caller_id'] ?? null,
                     'prefix' => $data['prefix'] ?? null,
                     'remarks' => $data['remarks'] ?? null,
+                    'listed_in_channel_allocation' => true,
                 ]);
 
                 if ($allocation !== null) {
@@ -224,8 +229,7 @@ class ChannelAllocationController extends Controller
 
         return back()
             ->with('success', 'Channel allocation updated successfully.')
-            ->with('ca_expanded', $campaign->id)
-            ->with('ca_edit_allocation', $allocation->id);
+            ->with('ca_expanded', $campaign->id);
     }
 
     public function destroyAllocation(Request $request, ChannelAllocationCampaign $campaign, ChannelAllocation $allocation): RedirectResponse
@@ -297,7 +301,11 @@ class ChannelAllocationController extends Controller
     public function export(Request $request, XlsxService $xlsx): BinaryFileResponse|RedirectResponse
     {
         $search = trim((string) $request->query('search'));
-        $query = ChannelAllocationCampaign::query()->with('allocations')->orderBy('sort_order')->orderBy('name');
+        $query = ChannelAllocationCampaign::query()
+            ->listedInChannelAllocation()
+            ->with('allocations')
+            ->orderBy('sort_order')
+            ->orderBy('name');
         if ($search !== '') {
             $query->where(function ($campaigns) use ($search) {
                 $campaigns->where('name', 'like', "%{$search}%")

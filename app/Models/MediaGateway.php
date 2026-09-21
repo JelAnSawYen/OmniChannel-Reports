@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\GsmSimInventory;
+use App\Support\InventoryDependentSync;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -87,6 +88,9 @@ class MediaGateway extends Model
             if ($gateway->database === null) {
                 $gateway->database = '';
             }
+        });
+        static::updated(function (MediaGateway $gateway): void {
+            InventoryDependentSync::gatewaySaved($gateway);
         });
     }
 }

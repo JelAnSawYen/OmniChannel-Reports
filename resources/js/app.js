@@ -543,7 +543,7 @@ function initBulkSelection(){
     function isAllowedBulkEvent(event){
         const el=event.target;
         if(!(el instanceof Element))return false;
-        if(el.closest('.bulk-action-bar, #confirmModal'))return true;
+        if(el.closest('.bulk-action-bar, #confirmModal, .modal-backdrop.visible'))return true;
         if(isMod(event) && el.closest('[data-bulk-row]') && !el.closest(blockedSel))return true;
         return false;
     }
@@ -1032,6 +1032,7 @@ async function initMedia(){
     }
 
     function openAdd(){
+        qs('[data-bulk-clear]')?.click();
         dom.modalTitle.textContent='Add '+entity;
         dom.form.reset();
         dom.gatewayId.value='';
@@ -1043,6 +1044,7 @@ async function initMedia(){
     }
 
     function openEdit(button){
+        qs('[data-bulk-clear]')?.click();
         const id=button.dataset.editId;
         dom.modalTitle.textContent='Edit '+entity;
         dom.gatewayId.value=id;
@@ -1060,6 +1062,8 @@ async function initMedia(){
 
     async function save(event){
         event.preventDefault();
+        const submit=dom.form?.querySelector('button[type="submit"]');
+        if(submit)submit.disabled=true;
         const id=dom.gatewayId.value;
         const endpoint=id?base+'/'+encodeURIComponent(id):base;
         const formData=new FormData(dom.form);
@@ -1081,9 +1085,15 @@ async function initMedia(){
             }
             hideModal('mediaGatewayModal');
             flash(data.message||'Saved successfully.');
-            await load(id?state.page:1);
+            try{
+                await load(id?state.page:1);
+            }catch(loadError){
+                flash(loadError.message||'Saved, but the list could not refresh.','error');
+            }
         }catch(error){
             flash(error.message||'Unable to save record.','error');
+        }finally{
+            if(submit)submit.disabled=false;
         }
     }
 

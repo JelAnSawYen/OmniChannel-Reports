@@ -111,8 +111,8 @@ class ProgramInboundNumbersPageTest extends TestCase
         $this->assertStringContainsString('.pin-campaign', $css);
         $this->assertMatchesRegularExpression('/\.pin-campaign\s*\{[^}]*color:\s*#0b70f7/', $css);
         $this->assertMatchesRegularExpression('/\.pin-campaign\s*\{[^}]*font-weight:\s*700/', $css);
-        $this->assertMatchesRegularExpression('/th\.pin-campaign-col[\s\S]*?text-align:\s*left/', $css);
-        $this->assertMatchesRegularExpression('/th\.pin-campaign-col[\s\S]*?padding-left:\s*20px/', $css);
+        $this->assertMatchesRegularExpression('/th\.pin-campaign-col[\s\S]*?text-align:\s*center/', $css);
+        $this->assertDoesNotMatchRegularExpression('/th\.pin-campaign-col[\s\S]*?padding-left:\s*20px/', $css);
         $this->assertMatchesRegularExpression('/\.pin-table > thead > tr > th,[\s\S]*?text-align:\s*center/', $css);
         $this->assertMatchesRegularExpression('/\.pin-stack\s*\{[^}]*flex-direction:\s*column/', $css);
     }

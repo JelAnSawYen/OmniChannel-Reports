@@ -380,6 +380,9 @@ class OperationsDataController extends Controller
                     }
                     $i === 0 ? $q->where($field, 'like', "%$search%") : $q->orWhere($field, 'like', "%$search%");
                 }
+                if (OperationCatalog::isInbound($module)) {
+                    $q->orWhereHas('campaign', fn ($campaigns) => $campaigns->where('name', 'like', "%{$search}%"));
+                }
                 if (OperationCatalog::isSim($module)) {
                     $parsed = PdcEndorseDate::parse($search);
                     if ($parsed['valid'] && ! $parsed['empty']) {

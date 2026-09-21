@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Sip;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\HandlesBulkDestroy;
-use App\Models\ChannelAllocationCampaign;
 use App\Models\SipChannel;
 use App\Models\SipChannelNumber;
 use App\Services\Logs\AuditLogger;
@@ -34,19 +33,14 @@ class ChannelRangeListController extends Controller
         }
 
         $query = SipChannel::query()
-            ->with(['campaign', 'channelNumbers'])
+            ->with(['channelNumbers'])
             ->whereHas('channelNumbers')
-            ->orderBy(
-                ChannelAllocationCampaign::select('name')
-                    ->whereColumn('channel_allocation_campaigns.id', 'sip_channels.campaign_id')
-            )
             ->orderBy('etpi_sip_name')
             ->orderBy('id');
 
         if ($search !== '') {
             $query->where(function ($channels) use ($search) {
                 $channels->where('sip_channels.etpi_sip_name', 'like', "%{$search}%")
-                    ->orWhereHas('campaign', fn ($campaigns) => $campaigns->where('name', 'like', "%{$search}%"))
                     ->orWhereHas('channelNumbers', fn ($numbers) => $numbers->where('channel_number', 'like', "%{$search}%"));
             });
         }
@@ -150,28 +144,28 @@ class ChannelRangeListController extends Controller
     {
         $search = trim((string) $request->query('search'));
         $query = SipChannelNumber::query()
-            ->with(['sipChannel.campaign'])
+            ->with(['sipChannel.channelNumbers'])
             ->leftJoin('sip_channels', 'sip_channels.id', '=', 'sip_channel_numbers.sip_channel_id')
-            ->leftJoin('channel_allocation_campaigns as cac', 'cac.id', '=', 'sip_channels.campaign_id')
             ->select('sip_channel_numbers.*')
-            ->orderBy('cac.name')
             ->orderBy('sip_channels.etpi_sip_name')
             ->orderBy('sip_channel_numbers.channel_number');
 
         if ($search !== '') {
             $query->where(function ($numbers) use ($search) {
                 $numbers->where('sip_channel_numbers.channel_number', 'like', "%{$search}%")
-                    ->orWhere('sip_channels.etpi_sip_name', 'like', "%{$search}%")
-                    ->orWhere('cac.name', 'like', "%{$search}%");
+                    ->orWhere('sip_channels.etpi_sip_name', 'like', "%{$search}%");
             });
         }
 
         $headers = array_values(app(ChannelRangeListImportService::class)->exportFields());
         $rows = ExportRows::blankRepeatedParents(
             $query->get()->map(function (SipChannelNumber $record) {
+                $sip = $record->sipChannel;
+                $range = $sip?->channelRangeFromNumbers() ?: '';
+
                 return [
-                    $record->sipChannel?->campaign?->name,
-                    $record->sipChannel?->etpi_sip_name,
+                    $sip?->etpi_sip_name,
+                    $range,
                     $record->channel_number,
                 ];
             })->all(),

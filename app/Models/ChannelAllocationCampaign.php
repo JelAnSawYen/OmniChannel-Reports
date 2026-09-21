@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Support\InventoryDependentSync;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ChannelAllocationCampaign extends Model
 {
@@ -20,6 +22,7 @@ class ChannelAllocationCampaign extends Model
         'prefix',
         'remarks',
         'sort_order',
+        'listed_in_channel_allocation',
     ];
 
     protected function casts(): array
@@ -28,7 +31,30 @@ class ChannelAllocationCampaign extends Model
             'total_channels_allocated' => 'integer',
             'fte' => 'integer',
             'sort_order' => 'integer',
+            'listed_in_channel_allocation' => 'boolean',
         ];
+    }
+
+    public function scopeListedInChannelAllocation($query)
+    {
+        if (! Schema::hasColumn($this->getTable(), 'listed_in_channel_allocation')) {
+            return $query;
+        }
+
+        return $query->where('listed_in_channel_allocation', true);
+    }
+
+    public function markListedInChannelAllocation(): void
+    {
+        if (! Schema::hasColumn($this->getTable(), 'listed_in_channel_allocation')) {
+            return;
+        }
+
+        if ($this->listed_in_channel_allocation) {
+            return;
+        }
+
+        $this->forceFill(['listed_in_channel_allocation' => true])->saveQuietly();
     }
 
     /**
@@ -113,6 +139,9 @@ class ChannelAllocationCampaign extends Model
 
     protected static function booted(): void
     {
+        static::updated(function (self $campaign): void {
+            InventoryDependentSync::campaignSaved($campaign);
+        });
         static::deleting(function (self $campaign): void {
             $campaign->sipChannels()->get()->each(function (SipChannel $sip): void {
                 $sip->delete();

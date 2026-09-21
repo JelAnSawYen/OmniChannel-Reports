@@ -23,6 +23,7 @@ class ChannelAllocationSeeder extends Seeder
                     'prefix' => $campaign['prefix'] !== '' ? $campaign['prefix'] : null,
                     'remarks' => $campaign['remarks'] !== '' ? $campaign['remarks'] : null,
                     'sort_order' => $index + 1,
+                    'listed_in_channel_allocation' => true,
                 ]
             );
 

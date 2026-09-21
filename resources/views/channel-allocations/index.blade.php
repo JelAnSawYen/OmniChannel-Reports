@@ -852,12 +852,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('importSuccessDismiss')?.addEventListener('click', finishImportSuccess);
 
     const restoreExpanded = @json(session('ca_expanded'));
-    const restoreEditAllocation = @json(session('ca_edit_allocation'));
     if (restoreExpanded) {
         document.querySelector('[data-ca-toggle="' + restoreExpanded + '"]')?.click();
-    }
-    if (restoreEditAllocation) {
-        document.querySelector('[data-allocation-edit][data-id="' + restoreEditAllocation + '"]')?.click();
     }
 });
 </script>

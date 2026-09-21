@@ -228,6 +228,7 @@ class ChannelAllocationImportService
                             'remarks' => $item['remarks'],
                             'total_channels_allocated' => 0,
                             'sort_order' => (int) ChannelAllocationCampaign::query()->max('sort_order') + 1,
+                            'listed_in_channel_allocation' => true,
                         ]);
                         $campaignCount++;
                     } catch (UniqueConstraintViolationException) {
@@ -237,6 +238,8 @@ class ChannelAllocationImportService
                             ->firstOrFail();
                     }
                 }
+
+                $campaign->markListedInChannelAllocation();
 
                 $sort = (int) $campaign->allocations()->max('sort_order');
                 foreach ($item['allocations'] as $allocation) {

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\InventoryDependentSync;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -30,6 +31,13 @@ class SipChannel extends Model
     public function campaign(): BelongsTo
     {
         return $this->belongsTo(ChannelAllocationCampaign::class, 'campaign_id');
+    }
+
+    protected static function booted(): void
+    {
+        static::updated(function (self $sip): void {
+            InventoryDependentSync::sipChannelSaved($sip);
+        });
     }
 
     public function channelNumbers(): HasMany
