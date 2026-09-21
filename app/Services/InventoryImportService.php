@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\MediaGateway;
 use App\Support\InventoryImportCatalog;
 use App\Support\PdcEndorseDate;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -64,6 +65,7 @@ class InventoryImportService
 
         $existingIps = InventoryImportCatalog::existingIpv4Addresses();
         $gatewayIps = InventoryImportCatalog::existingGsmGatewayIps();
+        $ipUniquenessPool = $config['model'] === MediaGateway::class ? $gatewayIps : $existingIps;
         $fileIps = [];
         $uniqueTracker = [];
         $carry = [];
@@ -134,7 +136,7 @@ class InventoryImportService
                     continue;
                 }
                 $normalized = strtolower($ip);
-                if (in_array($normalized, $existingIps, true) || isset($fileIps[$normalized])) {
+                if (in_array($normalized, $ipUniquenessPool, true) || isset($fileIps[$normalized])) {
                     $errors[] = ($config['fields'][$field] ?? 'IP Address').' already exists';
                 } else {
                     $fileIps[$normalized] = $excelRow;

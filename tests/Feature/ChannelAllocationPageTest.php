@@ -118,7 +118,7 @@ class ChannelAllocationPageTest extends TestCase
             ->assertSee('Total Channels')
             ->assertDontSee('id="campaign_total_channels_allocated"', false)
             ->assertDontSee('Total Channels Allocated')
-            ->assertSee('data-confirm-title="Delete Campaign"', false)
+            ->assertSee('data-confirm-title="Delete Allocations"', false)
             ->assertSee('data-confirm-title="Delete Allocation"', false)
             ->assertSee('campaigns')
             ->assertDontSee('All Status')
@@ -310,9 +310,16 @@ class ChannelAllocationPageTest extends TestCase
         $this->assertDatabaseHas('channel_allocation_campaigns', ['id' => $alpha->id, 'total_channels_allocated' => 20]);
 
         $this->delete('/channel-allocation/'.$alpha->id)->assertRedirect();
-        $this->assertDatabaseMissing('channel_allocation_campaigns', ['id' => $alpha->id]);
+        $this->assertDatabaseHas('channel_allocation_campaigns', [
+            'id' => $alpha->id,
+            'name' => 'Alpha Campaign',
+        ]);
+        $this->assertFalse((bool) $alpha->fresh()->listed_in_channel_allocation);
+        $this->assertSame(0, (int) $alpha->fresh()->total_channels_allocated);
         $this->assertDatabaseMissing('channel_allocations', ['id' => $keep->id]);
         $this->assertDatabaseHas('channel_allocation_campaigns', ['name' => 'Beta Campaign']);
+        $this->get('/channel-allocation')->assertOk()->assertDontSee('title="Expand Alpha Campaign"', false);
+        $this->get('/campaigns')->assertOk()->assertSee('Alpha Campaign');
     }
 
     public function test_roles_can_view_and_standard_cannot_mutate(): void
@@ -476,6 +483,40 @@ class ChannelAllocationPageTest extends TestCase
             'channel' => 'DOES-NOT-EXIST',
             'line_priority' => 2,
         ])->assertSessionHasErrors('channel');
+    }
+
+    public function test_channel_allocation_delete_keeps_master_campaign_and_sip_channels(): void
+    {
+        $this->actingAs($this->admin);
+        $campaign = ChannelAllocationCampaign::create([
+            'name' => 'Master Keep',
+            'fte' => 6,
+            'location' => 'WFH',
+            'listed_in_channel_allocation' => true,
+        ]);
+        $sip = SipChannel::create([
+            'campaign_id' => $campaign->id,
+            'etpi_sip_name' => 'SIP_MASTER_KEEP',
+            'channel_count' => 4,
+        ]);
+        ChannelAllocation::create([
+            'campaign_id' => $campaign->id,
+            'channel_allocation' => 'SIP_MASTER_KEEP',
+            'total_channel_allocated' => 4,
+        ]);
+
+        $this->delete('/channel-allocation/'.$campaign->id)->assertRedirect();
+
+        $this->assertDatabaseHas('channel_allocation_campaigns', [
+            'id' => $campaign->id,
+            'name' => 'Master Keep',
+            'fte' => 6,
+            'location' => 'WFH',
+        ]);
+        $this->assertFalse((bool) $campaign->fresh()->listed_in_channel_allocation);
+        $this->assertDatabaseHas('sip_channels', ['id' => $sip->id, 'etpi_sip_name' => 'SIP_MASTER_KEEP']);
+        $this->assertDatabaseMissing('channel_allocations', ['campaign_id' => $campaign->id]);
+        $this->get('/campaigns')->assertOk()->assertSee('Master Keep');
     }
 
     private function createSipChannel(string $name, string $network, int $count): SipChannel

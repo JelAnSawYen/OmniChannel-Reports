@@ -18,13 +18,12 @@ var e=(e,t=document)=>t.querySelector(e),t=(e,t=document)=>[...t.querySelectorAl
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"></path></svg>
             </button>
             <span>${d(t||`—`)}</span>
-        </span>`}function T(e,t){let n=e.assignments||[],i=r+`/`+e.id+`/assignments/bulk`,a=n.length?n.map(n=>{let r=Number(n.assignment_id||0),a=String(n.sim_type||``).trim(),o=Number(n.id||0),s=r?String(r):a&&o?`${a}-${o}`:``;return`<tr${t&&s?` data-bulk-row="nested" data-bulk-id="${d(s)}" data-bulk-url="${d(i)}" data-bulk-ajax="1"`:``}>
-                <td>${d(n.imei||`—`)}</td>
-                <td>${d(n.mobile_number||`—`)}</td>
-                <td>${d(n.plan||`—`)}</td>
-                <td>${d(e.ip_address||`—`)}</td>
-                <td>${d(n.port||`—`)}</td>
-            </tr>`}).join(``):`<tr><td colspan="5"><div class="empty-state">No SIM assignments.</div></td></tr>`;return`<tr class="ca-nested-row" id="gsm-panel-${d(e.id)}" hidden>
+        </span>`}function T(e,t){let n=e.assignments||[],i=r+`/`+e.id+`/assignments/bulk`,a=n.length?n.map(e=>{let n=Number(e.assignment_id||0),r=String(e.sim_type||``).trim(),a=Number(e.id||0),o=n?String(n):r&&a?`${r}-${a}`:``;return`<tr${t&&o?` data-bulk-row="nested" data-bulk-id="${d(o)}" data-bulk-url="${d(i)}" data-bulk-ajax="1"`:``}>
+                <td>${d(e.imei||`—`)}</td>
+                <td>${d(e.mobile_number||`—`)}</td>
+                <td>${d(e.plan||`—`)}</td>
+                <td>${d(e.port||`—`)}</td>
+            </tr>`}).join(``):`<tr><td colspan="4"><div class="empty-state">No SIM assignments.</div></td></tr>`;return`<tr class="ca-nested-row" id="gsm-panel-${d(e.id)}" hidden>
             <td colspan="10">
                 <div class="ca-nested">
                     <table class="gsm-sim-nested" aria-label="SIM assignments">
@@ -32,7 +31,6 @@ var e=(e,t=document)=>t.querySelector(e),t=(e,t=document)=>[...t.querySelectorAl
                             <col class="gsm-sim-col-imei">
                             <col class="gsm-sim-col-mobile">
                             <col class="gsm-sim-col-plan">
-                            <col class="gsm-sim-col-ip">
                             <col class="gsm-sim-col-port">
                         </colgroup>
                         <thead>
@@ -40,7 +38,6 @@ var e=(e,t=document)=>t.querySelector(e),t=(e,t=document)=>[...t.querySelectorAl
                                 <th>IMEI</th>
                                 <th>Mobile Number</th>
                                 <th>Plan</th>
-                                <th>IP</th>
                                 <th>Port</th>
                             </tr>
                         </thead>

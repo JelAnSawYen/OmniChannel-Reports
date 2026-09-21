@@ -6,7 +6,6 @@ use App\Models\ChannelAllocation;
 use App\Models\ChannelAllocationCampaign;
 use App\Models\DefectiveGsm;
 use App\Models\GlobeSim;
-use App\Models\MediaGateway;
 use App\Models\ProgramInboundNumber;
 use App\Models\SipChannel;
 use App\Models\SmartSim;
@@ -40,7 +39,8 @@ class DashboardOverviewService
         $trend = $this->trend($allocations);
 
         $campaignCount = ChannelAllocationCampaign::count();
-        $gatewayPorts = $this->sumGatewayPorts();
+        $typedCounts = $this->summedChannelCountsByType($allocations);
+        $gatewayChannels = $typedCounts['gsm'];
         $sipChannels = (int) SipChannel::query()->sum('channel_count');
         $globeCount = GlobeSim::count();
         $smartCount = SmartSim::count();
@@ -54,8 +54,8 @@ class DashboardOverviewService
                 'display' => number_format($campaignCount),
             ],
             'gateways' => [
-                'value' => $gatewayPorts,
-                'display' => number_format($gatewayPorts),
+                'value' => $gatewayChannels,
+                'display' => number_format($gatewayChannels),
             ],
             'channels' => [
                 'value' => $sipChannels,
@@ -124,13 +124,6 @@ class DashboardOverviewService
         $payload['fingerprint'] = $this->fingerprint($payload);
 
         return $payload;
-    }
-
-    private function sumGatewayPorts(): int
-    {
-        return (int) MediaGateway::query()
-            ->pluck('port')
-            ->sum(fn ($port) => (int) $port);
     }
 
     /**

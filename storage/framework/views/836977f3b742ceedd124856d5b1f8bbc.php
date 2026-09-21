@@ -99,7 +99,7 @@
             continue;
         }
         if ($isSim && $field === 'port') {
-            $editValues['port'] = $record->gatewayAssignment?->port ?: '';
+            $editValues['port'] = $record->port ?: '';
             continue;
         }
         $value = $record->{$field};

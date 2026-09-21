@@ -52,11 +52,9 @@ class SipChannelController extends Controller
         }
 
         $records = $query->paginate($perPage)->withQueryString();
-        $campaigns = ChannelAllocationCampaign::optionsForDropdown();
 
         return view('sip-channels.index', [
             'records' => $records,
-            'campaigns' => $campaigns,
             'search' => $search,
             'perPage' => $perPage,
         ]);
@@ -132,7 +130,6 @@ class SipChannelController extends Controller
         $headers = array_values(app(SipChannelImportService::class)->fields());
         $rows = $query->get()->map(function (SipChannel $record) {
             return [
-                $record->campaign?->name,
                 $record->etpi_sip_name,
                 $record->pilot_number,
                 $record->channel_count,
@@ -273,8 +270,8 @@ class SipChannelController extends Controller
     private function validateRecord(Request $request, ?int $id = null): array
     {
         $data = $request->validate([
-            'campaign' => ['required_without:campaign_id', 'nullable', 'string', 'max:255'],
-            'campaign_id' => ['required_without:campaign', 'nullable', 'integer'],
+            'campaign' => ['nullable', 'string', 'max:255'],
+            'campaign_id' => ['nullable', 'integer'],
             'etpi_sip_name' => ['required', 'string', 'max:255', Rule::unique('sip_channels', 'etpi_sip_name')->ignore($id)],
             'pilot_number' => ['nullable', 'string', 'max:255'],
             'channel_count' => ['nullable', 'integer', 'min:0'],
@@ -285,14 +282,14 @@ class SipChannelController extends Controller
             'date_activation' => ['nullable', 'string'],
         ]);
 
-        $campaign = ChannelAllocationCampaign::fromFormValue($data['campaign'] ?? null, $data['campaign_id'] ?? null);
-        if ($campaign === null) {
-            throw ValidationException::withMessages([
-                'campaign' => 'Please select or type a campaign.',
-            ]);
-        }
-        $data['campaign_id'] = $campaign->id;
         unset($data['campaign']);
+        $incomingCampaignId = (int) ($data['campaign_id'] ?? 0);
+        if ($incomingCampaignId > 0) {
+            $existing = ChannelAllocationCampaign::query()->find($incomingCampaignId);
+            $data['campaign_id'] = $existing?->id;
+        } else {
+            unset($data['campaign_id']);
+        }
 
         $parsed = PdcEndorseDate::parse($data['date_activation'] ?? '');
         if (! $parsed['valid']) {

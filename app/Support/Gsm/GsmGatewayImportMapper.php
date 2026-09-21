@@ -23,7 +23,7 @@ class GsmGatewayImportMapper
             $context->fileIps = [];
         }
         if (! isset($context->existingIps) || ! is_array($context->existingIps)) {
-            $context->existingIps = array_fill_keys(InventoryImportCatalog::existingIpv4Addresses(), true);
+            $context->existingIps = array_fill_keys(InventoryImportCatalog::existingGsmGatewayIps(), true);
         }
         if (! isset($context->usedSims) || ! is_array($context->usedSims)) {
             $context->usedSims = self::existingSimKeys();

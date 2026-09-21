@@ -151,13 +151,15 @@ class BulkSelectionDeleteTest extends TestCase
         ])->assertRedirect();
 
         $this->assertDatabaseHas('channel_allocation_campaigns', ['id' => $keep->id]);
-        $this->assertDatabaseMissing('channel_allocation_campaigns', ['id' => $drop->id]);
+        $this->assertDatabaseHas('channel_allocation_campaigns', ['id' => $drop->id, 'name' => 'Drop Parent']);
+        $this->assertFalse((bool) $drop->fresh()->listed_in_channel_allocation);
         $this->assertDatabaseMissing('channel_allocations', ['channel_allocation' => 'CHILD-1']);
         $this->assertDatabaseHas('audit_logs', [
             'action' => 'Deleted',
             'module' => 'Channel Allocation',
             'record_id' => (string) $drop->id,
         ]);
+        $this->get('/campaigns')->assertOk()->assertSee('Drop Parent')->assertSee('Keep Parent');
     }
 
     public function test_pdc_nested_bulk_delete_removes_only_servers_in_that_group(): void

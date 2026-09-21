@@ -2,7 +2,6 @@
 
 namespace App\Services\Sip;
 
-use App\Models\ChannelAllocationCampaign;
 use App\Models\SipChannel;
 use App\Services\InventoryImportService;
 use App\Services\XlsxService;
@@ -16,7 +15,7 @@ class SipChannelImportService
 {
     public const SESSION_KEY = 'sip_channels_import';
 
-    public const CARRY_FIELDS = ['campaign'];
+    public const CARRY_FIELDS = [];
 
     /**
      * @return array<string, string>
@@ -24,7 +23,6 @@ class SipChannelImportService
     public function fields(): array
     {
         return [
-            'campaign' => 'Campaign',
             'etpi_sip_name' => 'SIP Name',
             'pilot_number' => 'Pilot Number',
             'channel_count' => 'Channel Count',
@@ -74,12 +72,10 @@ class SipChannelImportService
             }
         }
 
-        $campaigns = ChannelAllocationCampaign::keyedByName();
         $existingNames = SipChannel::query()->whereNotNull('etpi_sip_name')->pluck('etpi_sip_name')
             ->map(fn ($name) => mb_strtolower(trim((string) $name)))
             ->all();
         $fileNames = [];
-        $carry = ['campaign' => null];
         $previewRows = [];
         $payload = [];
 
@@ -96,31 +92,12 @@ class SipChannelImportService
 
             $values = [];
             foreach (array_keys($this->fields()) as $field) {
-                if (in_array($field, self::CARRY_FIELDS, true)) {
-                    [$resolved, $next] = $this->applyCarry($carry[$field], $rawValues[$field]);
-                    $values[$field] = $resolved;
-                    $carry[$field] = $next;
-                } else {
-                    $values[$field] = $rawValues[$field];
-                }
+                $values[$field] = $rawValues[$field];
             }
 
             $errors = [];
-            $campaignId = null;
             $dateIso = null;
             $channelCount = null;
-
-            if ($values['campaign'] === '') {
-                $errors[] = 'Campaign is required';
-            } else {
-                $campaign = $campaigns->get(mb_strtolower($values['campaign']));
-                if (! $campaign) {
-                    $errors[] = 'Campaign does not exist';
-                } else {
-                    $campaignId = (int) $campaign->id;
-                    $values['campaign'] = $campaign->name;
-                }
-            }
 
             $etpiName = trim((string) $values['etpi_sip_name']);
             if ($etpiName === '') {
@@ -169,7 +146,6 @@ class SipChannelImportService
 
             if ($ok) {
                 $payload[] = [
-                    'campaign_id' => $campaignId,
                     'etpi_sip_name' => $etpiName,
                     'pilot_number' => $this->nullable($values['pilot_number']),
                     'channel_count' => $channelCount,
@@ -210,7 +186,6 @@ class SipChannelImportService
         DB::transaction(function () use ($payload, &$count) {
             foreach ($payload as $row) {
                 SipChannel::query()->create([
-                    'campaign_id' => $row['campaign_id'],
                     'etpi_sip_name' => $row['etpi_sip_name'],
                     'pilot_number' => $row['pilot_number'],
                     'channel_count' => $row['channel_count'],

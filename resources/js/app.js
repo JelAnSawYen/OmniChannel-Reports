@@ -868,11 +868,10 @@ async function initMedia(){
                 <td>${escapeHtml(item.imei||'—')}</td>
                 <td>${escapeHtml(item.mobile_number||'—')}</td>
                 <td>${escapeHtml(item.plan||'—')}</td>
-                <td>${escapeHtml(g.ip_address||'—')}</td>
                 <td>${escapeHtml(item.port||'—')}</td>
             </tr>`;
             }).join('')
-            : `<tr><td colspan="5"><div class="empty-state">No SIM assignments.</div></td></tr>`;
+            : `<tr><td colspan="4"><div class="empty-state">No SIM assignments.</div></td></tr>`;
         return `<tr class="ca-nested-row" id="gsm-panel-${escapeHtml(g.id)}" hidden>
             <td colspan="10">
                 <div class="ca-nested">
@@ -881,7 +880,6 @@ async function initMedia(){
                             <col class="gsm-sim-col-imei">
                             <col class="gsm-sim-col-mobile">
                             <col class="gsm-sim-col-plan">
-                            <col class="gsm-sim-col-ip">
                             <col class="gsm-sim-col-port">
                         </colgroup>
                         <thead>
@@ -889,7 +887,6 @@ async function initMedia(){
                                 <th>IMEI</th>
                                 <th>Mobile Number</th>
                                 <th>Plan</th>
-                                <th>IP</th>
                                 <th>Port</th>
                             </tr>
                         </thead>

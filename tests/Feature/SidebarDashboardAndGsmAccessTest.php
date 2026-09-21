@@ -12,6 +12,7 @@ use App\Models\SmartSim;
 use App\Models\User;
 use App\Models\UserType;
 use App\Services\XlsxService;
+use App\Support\Gsm\GsmGatewayWriter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -438,6 +439,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         $this->assertSame('10.5.20.201', $first->json('record.assignments.0.ip_address'));
         $this->assertSame('123456789012345', $first->json('record.assignments.0.imei'));
         $this->assertSame('Corporate', $first->json('record.assignments.0.plan'));
+        $this->assertSame(1, (int) $globe->fresh()->port);
 
         $second = $this->postJson('/gsm-gateways/'.$gatewayId.'/assignments', [
             'network' => 'Smart SIM',
@@ -445,6 +447,7 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         ])->assertCreated();
         $this->assertSame(2, $second->json('record.assignments.1.port'));
         $this->assertSame('10.5.20.201', $second->json('record.assignments.1.ip_address'));
+        $this->assertSame(2, (int) $smart->fresh()->port);
 
         $this->postJson('/gsm-gateways/'.$gatewayId.'/assignments', [
             'network' => 'Globe SIM',
@@ -475,8 +478,8 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         $this->assertStringContainsString('>IMEI</th>', $nested);
         $this->assertStringContainsString('>Mobile Number</th>', $nested);
         $this->assertStringContainsString('>Plan</th>', $nested);
-        $this->assertStringContainsString('>IP</th>', $nested);
         $this->assertStringContainsString('>Port</th>', $nested);
+        $this->assertStringNotContainsString('>IP</th>', $nested);
         $this->assertStringNotContainsString('Actions', $nested);
         $this->assertStringNotContainsString('plus-btn', $nested);
 
@@ -679,5 +682,66 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             ->assertSee('href="'.url('/globe-sim').'"', false)
             ->assertSee('href="'.url('/smart-sim').'"', false)
             ->assertDontSee('href="'.url('/network').'"', false);
+    }
+
+    public function test_linked_assignment_port_syncs_to_sim_tabs_and_ignores_gateway_ip_edits(): void
+    {
+        $this->actingAs($this->user($this->adminType));
+
+        $globe = GlobeSim::create([
+            'imei' => '356938035651001',
+            'mobile_number' => '09170005551',
+            'plan' => 'Unli Surf',
+            'network' => 'Globe',
+            'ip_address' => '10.9.1.1',
+            'port' => 12,
+            'account_number' => 'ACC-PORT-SYNC',
+            'contract_start' => '2026-03-01',
+            'contract_end' => '2026-09-03',
+            'status' => 'Active',
+        ]);
+        $create = $this->postJson('/gsm-gateways', [
+            'hostname' => 'gsm-port-sync',
+            'site_name' => 'Alcar',
+            'site_code' => 'PORTSYNC1',
+            'ip_address' => '10.9.1.1',
+            'channel_count' => 16,
+            'device_function' => 'Inbound',
+            'username' => 'root',
+        ])->assertCreated();
+        $gatewayId = (int) $create->json('record.id');
+
+        $this->postJson('/gsm-gateways/'.$gatewayId.'/assignments', [
+            'network' => 'Globe SIM',
+            'sim_id' => $globe->id,
+        ])->assertCreated();
+
+        $globe->refresh();
+        $this->assertSame(1, (int) $globe->port);
+        $this->assertSame('10.9.1.1', $globe->ip_address);
+        $globePage = $this->actingAs($this->user($this->adminType))->get('/globe-sim')->assertOk()->getContent();
+        $this->assertMatchesRegularExpression('/>\s*1\s*</', Str::betweenFirst($globePage, 'class="sim-table"', '</table>'));
+
+        $gateway = MediaGateway::query()->findOrFail($gatewayId);
+        GsmGatewayWriter::syncSimPort($gateway, 'globe', (int) $globe->id, 7);
+        $this->assertSame(7, (int) $globe->fresh()->port);
+        $globePage = $this->actingAs($this->user($this->adminType))->get('/globe-sim')->assertOk()->getContent();
+        $this->assertMatchesRegularExpression('/>\s*7\s*</', Str::betweenFirst($globePage, 'class="sim-table"', '</table>'));
+
+        $this->putJson('/gsm-gateways/'.$gatewayId, [
+            'hostname' => 'gsm-port-sync-edit',
+            'site_name' => 'Alcar',
+            'site_code' => 'PORTSYNC1',
+            'ip_address' => '10.9.1.9',
+            'channel_count' => 16,
+            'device_function' => 'Inbound',
+            'network' => 'Globe SIM',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+        ])->assertOk();
+
+        $globe->refresh();
+        $this->assertSame(7, (int) $globe->port);
+        $this->assertSame('10.9.1.9', $globe->ip_address);
     }
 }

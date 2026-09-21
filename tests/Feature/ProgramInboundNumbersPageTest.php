@@ -548,7 +548,7 @@ class ProgramInboundNumbersPageTest extends TestCase
         $this->post('/program-inbound-numbers', [
             'campaign' => 'Mynt',
             'landline_numbers' => ['09260484550'],
-        ])->assertRedirect()->assertSessionHasErrors('number');
+        ])->assertRedirect()->assertSessionHasErrors('landline_numbers');
 
         $record = ProgramInboundNumber::query()->where('number', '09260484530')->firstOrFail();
         $this->put('/program-inbound-numbers/'.$record->id, [
@@ -585,6 +585,77 @@ class ProgramInboundNumbersPageTest extends TestCase
         $this->assertStringContainsString('duplicated', $preview['rows'][5]['error']);
         $this->assertStringContainsString('Port must match', $preview['rows'][6]['error']);
         $this->assertStringContainsString('Network must match', $preview['rows'][7]['error']);
+    }
+
+    public function test_duplicate_numbers_are_blocked_per_campaign_not_globally(): void
+    {
+        $this->actingAs($this->admin);
+        ChannelAllocationCampaign::create(['name' => 'Mynt']);
+        ChannelAllocationCampaign::create(['name' => 'Atome']);
+        $this->assignSim('globe', '09260484530', 'GSM-01', 7, '10.1.1.1');
+        $this->assignSim('globe', '09260484550', 'GSM-02', 8, '10.1.1.2');
+
+        $this->post('/program-inbound-numbers', [
+            'campaign' => 'Mynt',
+            'network' => 'Globe SIM',
+            'mobile_numbers' => ['09260484530'],
+            'landline_numbers' => ['53229111'],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->post('/program-inbound-numbers', [
+            'campaign' => 'Mynt',
+            'network' => 'Globe SIM',
+            'mobile_numbers' => ['09260484530'],
+        ])->assertRedirect()->assertSessionHasErrors('number');
+
+        $this->post('/program-inbound-numbers', [
+            'campaign' => 'Mynt',
+            'landline_numbers' => ['53229111'],
+        ])->assertRedirect()->assertSessionHasErrors('number');
+
+        $this->post('/program-inbound-numbers', [
+            'campaign' => 'Atome',
+            'network' => 'Globe SIM',
+            'mobile_numbers' => ['09260484530'],
+            'landline_numbers' => ['53229111'],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame(2, ProgramInboundNumber::query()->whereJsonContains('mobile_numbers', '09260484530')->count());
+        $this->assertSame(2, ProgramInboundNumber::query()->whereJsonContains('landline_numbers', '53229111')->count());
+        $this->assertNotEquals(
+            ProgramInboundNumber::query()->where('program', 'Mynt')->value('campaign_id'),
+            ProgramInboundNumber::query()->where('program', 'Atome')->value('campaign_id')
+        );
+
+        $this->post('/program-inbound-numbers', [
+            'campaign' => 'Atome',
+            'network' => 'Globe SIM',
+            'mobile_numbers' => ['09260484550'],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->post('/program-inbound-numbers', [
+            'campaign' => 'Atome',
+            'network' => 'Globe SIM',
+            'mobile_numbers' => ['09260484550'],
+        ])->assertRedirect()->assertSessionHasErrors('number');
+
+        $preview = $this->postJson('/program-inbound-numbers/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                ['Campaign', 'Mobile', 'Landline', 'GSM Gateway', 'Port', 'Network', 'Remarks'],
+                ['Mynt', '09260484550', '', '', '', 'Globe SIM', ''],
+                ['Atome', '09260484530', '53229112', '', '', 'Globe SIM', ''],
+                ['Mynt', '', '53229112', '', '', '', ''],
+                ['Mynt', '09260484550', '', '', '', 'Globe SIM', ''],
+            ])),
+        ])->assertOk()->json();
+
+        $this->assertFalse($preview['valid']);
+        $this->assertTrue($preview['rows'][0]['valid'], $preview['rows'][0]['error'] ?? '');
+        $this->assertFalse($preview['rows'][1]['valid']);
+        $this->assertStringContainsString('already exists', $preview['rows'][1]['error']);
+        $this->assertTrue($preview['rows'][2]['valid'], $preview['rows'][2]['error'] ?? '');
+        $this->assertFalse($preview['rows'][3]['valid']);
+        $this->assertStringContainsString('duplicated', $preview['rows'][3]['error']);
     }
 
     /**
@@ -646,10 +717,14 @@ class ProgramInboundNumbersPageTest extends TestCase
                 'mobile_number' => $mobile,
                 'plan' => 'Unli Surf',
                 'ip_address' => $ip,
+                'port' => $port,
                 'account_number' => 'ACC-'.$mobile,
                 'contract_start' => '2026-01-01',
                 'contract_end' => '2026-12-31',
             ]);
+        if (! $sim->port) {
+            $sim->forceFill(['port' => $port])->save();
+        }
 
         GatewaySimAssignment::query()->firstOrCreate(
             [

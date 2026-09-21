@@ -330,7 +330,7 @@ class OperationCatalog
     }
 
     /**
-     * Globe / Smart SIM add/edit fields. Port is stored on GSM Gateway assignments.
+     * Globe / Smart SIM add/edit fields. Port is typed on the SIM record.
      *
      * @return array<string, string>
      */
@@ -382,7 +382,7 @@ class OperationCatalog
     }
 
     /**
-     * Excel export columns include Port from the GSM Gateway assignment.
+     * Excel export columns include the typed SIM Port.
      *
      * @return array<string, string>
      */

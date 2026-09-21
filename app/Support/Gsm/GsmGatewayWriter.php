@@ -120,10 +120,7 @@ class GsmGatewayWriter
                 'port' => (string) $port,
             ]);
 
-            $sim = GsmSimInventory::findSim($simType, $simId);
-            if ($sim && $gateway->ip_address) {
-                $sim->forceFill(['ip_address' => $gateway->ip_address])->save();
-            }
+            self::syncLinkedSim($simType, $simId, $gateway, $port);
 
             return $assignment;
         });
@@ -207,15 +204,18 @@ class GsmGatewayWriter
                     'media_gateway_id' => $gateway->id,
                     'port' => $port,
                 ]);
-
-                return $existing->fresh() ?? $existing;
+                $assignment = $existing->fresh() ?? $existing;
+            } else {
+                $assignment = $gateway->assignments()->create([
+                    'sim_type' => $simType,
+                    'sim_id' => $simId,
+                    'port' => $port,
+                ]);
             }
 
-            return $gateway->assignments()->create([
-                'sim_type' => $simType,
-                'sim_id' => $simId,
-                'port' => $port,
-            ]);
+            self::syncLinkedSim($simType, $simId, $gateway, $port);
+
+            return $assignment;
         });
     }
 
@@ -233,11 +233,35 @@ class GsmGatewayWriter
                 'port' => (int) $assignment['port'],
             ]);
 
-            $sim = GsmSimInventory::findSim((string) $assignment['sim_type'], (int) $assignment['sim_id']);
-            if ($sim && $gateway->ip_address) {
-                $sim->forceFill(['ip_address' => $gateway->ip_address])->save();
-            }
+            self::syncLinkedSim(
+                (string) $assignment['sim_type'],
+                (int) $assignment['sim_id'],
+                $gateway,
+                (int) $assignment['port']
+            );
         }
+    }
+
+    private static function syncLinkedSim(string $simType, int $simId, MediaGateway $gateway, int $port): void
+    {
+        $sim = GsmSimInventory::findSim($simType, $simId);
+        if (! $sim) {
+            return;
+        }
+
+        $updates = [];
+        if ($port > 0) {
+            $updates['port'] = $port;
+        }
+        $ip = trim((string) $gateway->ip_address);
+        if ($ip !== '') {
+            $updates['ip_address'] = $ip;
+        }
+        if ($updates === []) {
+            return;
+        }
+
+        $sim->forceFill($updates)->save();
     }
 
     /**

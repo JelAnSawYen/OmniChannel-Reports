@@ -174,7 +174,7 @@ class InventoryImportTest extends TestCase
         );
     }
 
-    public function test_ipv4_is_unique_across_pdc_and_gsm_modules(): void
+    public function test_gsm_ip_is_unique_only_among_gsm_gateways(): void
     {
         $this->actingAs($this->admin);
         PdcServer::create([
@@ -193,9 +193,21 @@ class InventoryImportTest extends TestCase
             'file' => $this->upload($path),
         ])->assertOk()->json();
 
-        $this->assertFalse($preview['valid']);
-        $this->assertStringContainsString('already exists', $preview['rows'][0]['error']);
-        $this->assertSame(0, MediaGateway::count());
+        $this->assertTrue($preview['valid'], $preview['rows'][0]['error'] ?? '');
+        $this->postJson('/gsm-gateways/import/confirm', ['token' => $preview['token']])->assertOk();
+        $this->assertDatabaseHas('media_gateways', [
+            'hostname' => 'clash-host',
+            'ip_address' => '10.50.50.50',
+        ]);
+
+        $dup = $this->postJson('/gsm-gateways/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan'],
+                ['other-host', '10.50.50.50', 'ALC-DUP', '8', 'Inbound', 'Alcar', 'root', 'secret', '', '', '', '', ''],
+            ])),
+        ])->assertOk()->json();
+        $this->assertFalse($dup['valid']);
+        $this->assertStringContainsString('already exists', $dup['rows'][0]['error']);
     }
 
     public function test_gsm_import_assigns_existing_sims_without_duplicating_inventory(): void
@@ -249,6 +261,8 @@ class InventoryImportTest extends TestCase
             'sim_id' => $smart->id,
             'port' => 2,
         ]);
+        $this->assertSame(1, (int) $globe->fresh()->port);
+        $this->assertSame(2, (int) $smart->fresh()->port);
         $this->assertSame('', (string) $gateway->network);
     }
 
@@ -327,7 +341,6 @@ class InventoryImportTest extends TestCase
     public function test_sip_channel_import_one_row_one_record_and_template_menu(): void
     {
         $this->actingAs($this->admin);
-        ChannelAllocationCampaign::create(['name' => 'Mynt']);
         $this->get('/sip-channels')
             ->assertOk()
             ->assertSee('Data Transfer')
@@ -337,18 +350,17 @@ class InventoryImportTest extends TestCase
             ->assertSee('Download Excel Template');
 
         $path = $this->spreadsheet([
-            ['Campaign', 'SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
-            ['Mynt', 'ETPI-A', '100', '2', '100 - 101', 'ETPI', '7/9/2026'],
-            ['', 'ETPI-B', '', '', '', '', ''],
+            ['SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
+            ['ETPI-A', '100', '2', '100 - 101', 'ETPI', '7/9/2026'],
+            ['ETPI-B', '', '', '', '', ''],
         ]);
         $preview = $this->postJson('/sip-channels/import/preview', [
             'file' => $this->upload($path),
         ])->assertOk()->json();
         $this->assertTrue($preview['valid'], $preview['rows'][1]['error'] ?? '');
-        $this->assertSame('Mynt', $preview['rows'][1]['campaign']);
         $this->postJson('/sip-channels/import/confirm', ['token' => $preview['token']])->assertOk();
         $this->assertSame(2, SipChannel::count());
-        $this->assertSame('Mynt', SipChannel::where('etpi_sip_name', 'ETPI-B')->first()?->campaign?->name);
+        $this->assertNull(SipChannel::where('etpi_sip_name', 'ETPI-B')->first()?->campaign_id);
     }
 
     public function test_globe_and_smart_sim_import_maps_the_new_fields_including_contract_dates(): void

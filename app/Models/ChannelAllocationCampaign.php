@@ -59,6 +59,23 @@ class ChannelAllocationCampaign extends Model
     }
 
     /**
+     * Remove this campaign from Channel Allocation without deleting the master Campaign.
+     */
+    public function removeFromChannelAllocation(): void
+    {
+        DB::transaction(function () {
+            $campaign = static::query()->whereKey($this->id)->lockForUpdate()->firstOrFail();
+            $campaign->allocations()->delete();
+            $payload = ['total_channels_allocated' => 0];
+            if (Schema::hasColumn($campaign->getTable(), 'listed_in_channel_allocation')) {
+                $payload['listed_in_channel_allocation'] = false;
+            }
+            $campaign->forceFill($payload)->saveQuietly();
+            $this->forceFill($payload);
+        });
+    }
+
+    /**
      * Master Campaign dropdown options used across the app.
      *
      * @return Collection<int, $this>

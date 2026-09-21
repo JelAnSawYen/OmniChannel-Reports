@@ -101,7 +101,7 @@
                     </button>
                 <?php endif; ?>
                 <?php if(auth()->user()->hasPermission('media.delete')): ?>
-                    <form method="POST" action="<?php echo e(route('channel-allocation.destroy', $campaign)); ?>" data-confirm="Delete this campaign and all of its allocations?" data-confirm-title="Delete Campaign" data-confirm-ok="Delete">
+                    <form method="POST" action="<?php echo e(route('channel-allocation.destroy', $campaign)); ?>" data-confirm="Delete this campaign's allocations? The master Campaign will not be deleted." data-confirm-title="Delete Allocations" data-confirm-ok="Delete">
                         <?php echo csrf_field(); ?>
                         <?php echo method_field('DELETE'); ?>
                         <button class="ca-menu-item delete" type="submit" role="menuitem">

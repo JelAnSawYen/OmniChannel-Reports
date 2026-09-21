@@ -163,7 +163,7 @@ class ProgramInboundSimLookup
                 $ip = strtolower(trim((string) ($sim->ip_address ?? '')));
                 $gateway = $ip !== '' ? $gatewaysByIp->get($ip) : null;
             }
-            $port = $assignment?->port;
+            $port = $sim->port;
 
             $indexed[$mobile] = [
                 'mobile' => $mobile,

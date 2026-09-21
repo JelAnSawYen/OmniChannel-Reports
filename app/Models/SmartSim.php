@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\InventoryDependentSync;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
@@ -13,6 +14,7 @@ class SmartSim extends Model
         'network',
         'plan',
         'ip_address',
+        'port',
         'account_number',
         'contract_start',
         'contract_end',
@@ -21,6 +23,7 @@ class SmartSim extends Model
     ];
 
     protected $casts = [
+        'port' => 'integer',
         'contract_start' => 'date',
         'contract_end' => 'date',
     ];
@@ -39,7 +42,7 @@ class SmartSim extends Model
 
     public function displayPort(): string
     {
-        $port = $this->gatewayAssignment?->port;
+        $port = $this->port;
 
         return $port ? (string) $port : '—';
     }
@@ -50,6 +53,12 @@ class SmartSim extends Model
             if ($sim->network === null || $sim->network === '') {
                 $sim->network = 'Smart';
             }
+        });
+        static::saved(function (SmartSim $sim): void {
+            InventoryDependentSync::simSaved($sim);
+        });
+        static::deleted(function (SmartSim $sim): void {
+            InventoryDependentSync::simDeleted($sim);
         });
     }
 }

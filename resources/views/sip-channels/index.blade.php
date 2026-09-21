@@ -49,10 +49,8 @@
 <tbody>
 @forelse($records as $record)
 @php
-    $campaignName = $record->campaign?->name ?: '—';
     $dateDisplay = $record->date_activation ? \App\Support\PdcEndorseDate::display($record->date_activation->format('Y-m-d')) : '—';
     $editValues = [
-        'campaign' => $campaignName === '—' ? '' : $campaignName,
         'etpi_sip_name' => $record->etpi_sip_name,
         'pilot_number' => $record->pilot_number,
         'channel_count' => $record->channel_count,
@@ -120,15 +118,6 @@
             <input type="hidden" name="_method" id="sipMethod" value="POST">
             <div class="modal-body">
                 <div class="form-grid">
-                    <div class="form-group">
-                        <label for="sip_campaign_id">Campaign</label>
-                        @include('partials.campaign-combo', [
-                            'inputId' => 'sip_campaign_id',
-                            'inputName' => 'campaign',
-                            'menuId' => 'sipCampaignMenu',
-                            'campaigns' => $campaigns,
-                        ])
-                    </div>
                     <div class="form-group">
                         <label for="sip_etpi_sip_name">SIP Name</label>
                         <input class="form-control" name="etpi_sip_name" id="sip_etpi_sip_name" required>
@@ -459,7 +448,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('sipSubmit').textContent = 'Save';
         method.value = 'PUT';
         form.action = baseUrl + '/' + recordId;
-        document.getElementById('sip_campaign_id').value = values.campaign ?? '';
         ['etpi_sip_name', 'pilot_number', 'channel_count', 'network', 'date_activation'].forEach((key) => {
             const field = document.getElementById('sip_' + key);
             if (field) field.value = values[key] ?? '';

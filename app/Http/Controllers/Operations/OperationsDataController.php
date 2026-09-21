@@ -9,7 +9,6 @@ use App\Models\ChannelAllocationCampaign;
 use App\Models\MediaGateway;
 use App\Services\Logs\AuditLogger;
 use App\Services\XlsxService;
-use App\Support\Gsm\GsmGatewayWriter;
 use App\Support\GsmSimInventory;
 use App\Support\Inbound\ProgramInboundNumberValidator;
 use App\Support\Inbound\ProgramInboundSimLookup;
@@ -78,7 +77,6 @@ class OperationsDataController extends Controller
     {
         $config = $this->config($module);
         $data = $request->validate($this->rules($module), $this->messages($module));
-        $simPort = OperationCatalog::isSim($module) ? ($data['port'] ?? null) : null;
         if (OperationCatalog::isSim($module)) {
             $data = $this->applySimDefaults($module, $data);
             $data = $this->parseSimDates($data);
@@ -99,9 +97,6 @@ class OperationsDataController extends Controller
         } catch (UniqueConstraintViolationException $exception) {
             throw $this->uniqueConstraintValidation($module, $exception);
         }
-        if (OperationCatalog::isSim($module)) {
-            $this->syncSimPort($record, $module, (string) $data['ip_address'], $simPort);
-        }
         AuditLogger::log('Created', $config['title'], $config['title'].' record added', $record->id, $request);
 
         return back()->with('success', $config['title'].' record added successfully.');
@@ -111,7 +106,6 @@ class OperationsDataController extends Controller
     {
         [$config, $module, $id, $record] = $this->resolveRecord($request);
         $data = $request->validate($this->rules($module, $id), $this->messages($module));
-        $simPort = OperationCatalog::isSim($module) ? ($data['port'] ?? null) : null;
         if (OperationCatalog::isSim($module)) {
             $data = $this->applySimDefaults($module, $data);
             $data = $this->parseSimDates($data);
@@ -131,9 +125,6 @@ class OperationsDataController extends Controller
             $record->update($data);
         } catch (UniqueConstraintViolationException $exception) {
             throw $this->uniqueConstraintValidation($module, $exception);
-        }
-        if (OperationCatalog::isSim($module)) {
-            $this->syncSimPort($record, $module, (string) $data['ip_address'], $simPort);
         }
         AuditLogger::log('Updated', $config['title'], $config['title'].' record updated', $record->id, $request);
 
@@ -197,7 +188,7 @@ class OperationsDataController extends Controller
                     $exportFields = $isSim ? array_keys(OperationCatalog::simTransferColumns()) : $fields;
                     $values = collect($exportFields)->map(function ($field) use ($record, $isSim, $isDefective) {
                         if ($isSim && $field === 'port') {
-                            $port = $record->gatewayAssignment?->port;
+                            $port = $record->port;
 
                             return $port ? (string) $port : '';
                         }
@@ -338,27 +329,12 @@ class OperationsDataController extends Controller
      */
     private function applySimDefaults(string $module, array $data): array
     {
-        unset($data['network'], $data['port']);
+        unset($data['network']);
         $data['network'] = $module === 'smart-sim' ? 'Smart' : 'Globe';
+        $port = $data['port'] ?? null;
+        $data['port'] = is_numeric($port) && (int) $port > 0 ? (int) $port : null;
 
         return $data;
-    }
-
-    private function syncSimPort(mixed $record, string $module, string $ip, mixed $port): void
-    {
-        $simType = $module === 'smart-sim' ? 'smart' : 'globe';
-        $existingPort = (int) ($record->gatewayAssignment?->port ?? 0);
-        $portNumber = is_numeric($port) && (int) $port > 0 ? (int) $port : $existingPort;
-        if ($portNumber < 1) {
-            return;
-        }
-
-        $gateway = MediaGateway::query()->where('ip_address', $ip)->first();
-        if (! $gateway) {
-            return;
-        }
-
-        GsmGatewayWriter::syncSimPort($gateway, $simType, (int) $record->id, $portNumber);
     }
 
     /**
@@ -416,9 +392,6 @@ class OperationsDataController extends Controller
         if ($search = trim((string) $request->query('search'))) {
             $query->where(function ($q) use ($search, $config, $module) {
                 foreach (array_keys($config['columns']) as $i => $field) {
-                    if (OperationCatalog::isSim($module) && $field === 'port') {
-                        continue;
-                    }
                     $i === 0 ? $q->where($field, 'like', "%$search%") : $q->orWhere($field, 'like', "%$search%");
                 }
                 if (OperationCatalog::isInbound($module)) {
@@ -569,7 +542,22 @@ class OperationsDataController extends Controller
             $messages['landline_numbers'] = $error;
         }
         $seen = [];
-        foreach (ProgramInboundNumberValidator::uniquenessErrors($mobiles, $landlines, $seen, $ignoreId) as $error) {
+        $campaignName = trim((string) ($data['campaign'] ?? ''));
+        $campaignId = $campaignName === ''
+            ? null
+            : ChannelAllocationCampaign::query()
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower($campaignName)])
+                ->value('id');
+        $campaignId = $campaignId ? (int) $campaignId : null;
+        foreach (ProgramInboundNumberValidator::uniquenessErrors(
+            $mobiles,
+            $landlines,
+            $seen,
+            $ignoreId,
+            false,
+            $campaignId,
+            mb_strtolower($campaignName)
+        ) as $error) {
             $messages['number'] = $error;
         }
 

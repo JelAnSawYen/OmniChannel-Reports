@@ -63,7 +63,7 @@ class MediaGateway extends Model
                 $serialized = GsmSimInventory::serialize($type, $sim);
                 $key = $type.':'.$sim->id;
                 $serialized['assignment_id'] = $assignmentIds[$key] ?? 0;
-                $serialized['port'] = $ports[$key] ?? '';
+                $serialized['port'] = $ports[$key] ?? ($sim->port ?: '');
                 $serialized['ip_address'] = (string) ($this->ip_address ?? '');
                 $serialized['network'] = GsmSimInventory::networkForType($type);
                 $rows[] = $serialized;
@@ -92,6 +92,9 @@ class MediaGateway extends Model
         });
         static::updated(function (MediaGateway $gateway): void {
             InventoryDependentSync::gatewaySaved($gateway);
+        });
+        static::deleting(function (MediaGateway $gateway): void {
+            InventoryDependentSync::gatewayDeleted($gateway);
         });
     }
 }

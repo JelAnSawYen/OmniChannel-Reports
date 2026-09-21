@@ -37,7 +37,15 @@ class ProgramInboundImportMapper
         $errors = array_merge($errors, ProgramInboundNumberValidator::landlineSourceErrors($landlines));
         $errors = array_merge(
             $errors,
-            ProgramInboundNumberValidator::uniquenessErrors($mobiles, $landlines, $seen, null, true)
+            ProgramInboundNumberValidator::uniquenessErrors(
+                $mobiles,
+                $landlines,
+                $seen,
+                null,
+                true,
+                $campaign ? (int) $campaign->id : null,
+                mb_strtolower($campaignName)
+            )
         );
         $context->numbers = $seen;
 

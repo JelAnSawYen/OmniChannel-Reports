@@ -166,10 +166,10 @@ class ChannelAllocationController extends Controller
     public function destroy(Request $request, ChannelAllocationCampaign $campaign): RedirectResponse
     {
         $id = $campaign->id;
-        $campaign->delete();
-        AuditLogger::log('Deleted', 'Channel Allocation', 'Campaign deleted', $id, $request);
+        $campaign->removeFromChannelAllocation();
+        AuditLogger::log('Deleted', 'Channel Allocation', 'Allocations deleted', $id, $request);
 
-        return back()->with('success', 'Campaign and associated allocations deleted successfully.');
+        return back()->with('success', 'Channel allocations deleted successfully.');
     }
 
     public function bulkDestroy(Request $request): RedirectResponse
@@ -179,11 +179,11 @@ class ChannelAllocationController extends Controller
             if (! $campaign) {
                 continue;
             }
-            $campaign->delete();
-            AuditLogger::log('Deleted', 'Channel Allocation', 'Campaign deleted', $id, $request);
+            $campaign->removeFromChannelAllocation();
+            AuditLogger::log('Deleted', 'Channel Allocation', 'Allocations deleted', $id, $request);
         }
 
-        return back()->with('success', 'Selected campaigns deleted successfully.');
+        return back()->with('success', 'Selected channel allocations deleted successfully.');
     }
 
     public function storeAllocation(Request $request, ChannelAllocationCampaign $campaign): RedirectResponse

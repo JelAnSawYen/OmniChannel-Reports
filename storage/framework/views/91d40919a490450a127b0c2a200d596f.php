@@ -142,7 +142,6 @@
                     <col class="gsm-sim-col-imei">
                     <col class="gsm-sim-col-mobile">
                     <col class="gsm-sim-col-plan">
-                    <col class="gsm-sim-col-ip">
                     <col class="gsm-sim-col-port">
                 </colgroup>
                 <thead>
@@ -150,7 +149,6 @@
                         <th>IMEI</th>
                         <th>Mobile Number</th>
                         <th>Plan</th>
-                        <th>IP</th>
                         <th>Port</th>
                     </tr>
                 </thead>
@@ -165,11 +163,10 @@
                         <td><?php echo e($assignment['imei'] ?: '—'); ?></td>
                         <td><?php echo e($assignment['mobile_number'] ?: '—'); ?></td>
                         <td><?php echo e($assignment['plan'] ?: '—'); ?></td>
-                        <td><?php echo e($gateway->ip_address); ?></td>
                         <td><?php echo e($assignment['port'] !== '' && $assignment['port'] !== null ? $assignment['port'] : '—'); ?></td>
                     </tr>
                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_2): ?>
-                    <tr><td colspan="5"><div class="empty-state">No SIM assignments.</div></td></tr>
+                    <tr><td colspan="4"><div class="empty-state">No SIM assignments.</div></td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>

@@ -122,7 +122,8 @@ class SimInventoryFieldsTest extends TestCase
         $this->assertSame($network, $record->network);
         $this->assertSame('Unli Surf', $record->plan);
         $this->assertSame('10.73.1.1', $record->ip_address);
-        $this->assertSame(3, (int) $record->fresh()->gatewayAssignment?->port);
+        $this->assertSame(3, (int) $record->port);
+        $this->assertNull($record->fresh()->gatewayAssignment);
         $this->assertSame('ACC-3001', $record->account_number);
         $this->assertSame('2026-03-01', $record->contract_start?->format('Y-m-d'));
         $this->assertSame('2026-09-03', $record->contract_end?->format('Y-m-d'));
@@ -156,11 +157,12 @@ class SimInventoryFieldsTest extends TestCase
         $updated['contract_end'] = '10/15/2026';
         $updated['port'] = 5;
         $this->put('/'.$module.'/'.$record->id, $updated)->assertRedirect();
-        $record->refresh()->load('gatewayAssignment');
+        $record->refresh();
         $this->assertSame('ACC-3001-EDIT', $record->account_number);
         $this->assertSame('2026-03-01', $record->contract_start?->format('Y-m-d'));
         $this->assertSame('2026-10-15', $record->contract_end?->format('Y-m-d'));
-        $this->assertSame(5, (int) $record->gatewayAssignment?->port);
+        $this->assertSame(5, (int) $record->port);
+        $this->assertNull($record->gatewayAssignment);
 
         $this->delete('/'.$module.'/'.$record->id)->assertRedirect();
         $this->assertDatabaseMissing($table, ['id' => $record->id]);
@@ -323,6 +325,7 @@ class SimInventoryFieldsTest extends TestCase
             'network' => $network,
             'plan' => 'Unli Surf',
             'ip_address' => '10.73.9.9',
+            'port' => 4,
             'account_number' => 'ACC-PORT',
             'contract_start' => '2026-03-01',
             'contract_end' => '2026-09-03',
@@ -331,7 +334,7 @@ class SimInventoryFieldsTest extends TestCase
             'media_gateway_id' => $gateway->id,
             'sim_type' => $module === 'globe-sim' ? 'globe' : 'smart',
             'sim_id' => $sim->id,
-            'port' => 4,
+            'port' => 9,
         ]);
 
         $page = $this->get('/'.$module)->assertOk();
@@ -342,13 +345,15 @@ class SimInventoryFieldsTest extends TestCase
         $this->assertStringNotContainsString('>Network</th>', $tableHtml);
         $this->assertStringContainsString('10.73.9.9', $tableHtml);
         $this->assertMatchesRegularExpression('/>\s*4\s*</', $tableHtml);
+        $this->assertStringNotContainsString('>9</td>', $tableHtml);
+        $this->assertSame('4', $sim->displayPort());
         $this->assertDoesNotMatchRegularExpression('/>\s*'.preg_quote($network, '/').'\s*</', $tableHtml);
     }
 
     public function test_legacy_sim_columns_are_preserved_and_existing_values_can_still_be_stored(): void
     {
         foreach (['globe_sims', 'smart_sims'] as $table) {
-            foreach (['sim_number', 'imsi', 'assigned_to', 'location', 'status', 'imei', 'mobile_number', 'network', 'plan', 'ip_address', 'account_number', 'contract_start', 'contract_end'] as $column) {
+            foreach (['sim_number', 'imsi', 'assigned_to', 'location', 'status', 'imei', 'mobile_number', 'network', 'plan', 'ip_address', 'port', 'account_number', 'contract_start', 'contract_end'] as $column) {
                 $this->assertTrue(Schema::hasColumn($table, $column), $table.'.'.$column);
             }
         }
@@ -436,5 +441,68 @@ class SimInventoryFieldsTest extends TestCase
         } catch (UniqueConstraintViolationException) {
             $this->assertSame(1, SmartSim::query()->where('imei', '356938035649101')->count());
         }
+    }
+
+    #[DataProvider('simModules')]
+    public function test_sim_port_does_not_change_when_gsm_gateway_is_edited_or_deleted(string $module, string $model, string $table, string $network): void
+    {
+        $this->actingAs($this->admin);
+
+        $gateway = MediaGateway::create([
+            'hostname' => 'sim-port-host',
+            'site_name' => 'Alcar',
+            'site_code' => 'SIM-IND-'.$module,
+            'ip_address' => '10.73.8.8',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'channel_count' => 16,
+            'password' => 'Secret#Gsm99!',
+        ]);
+        $keep = MediaGateway::create([
+            'hostname' => 'sim-port-keep',
+            'site_name' => 'CTN',
+            'site_code' => 'SIM-KEEP-'.$module,
+            'ip_address' => '10.73.8.9',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'channel_count' => 8,
+            'password' => 'Secret#Gsm99!',
+        ]);
+
+        $this->post('/'.$module, [
+            'imei' => $module === 'globe-sim' ? '356938035648001' : '356938035648101',
+            'mobile_number' => $module === 'globe-sim' ? '09178880001' : '09288880001',
+            'plan' => 'Unli Surf',
+            'ip_address' => '10.73.8.8',
+            'port' => 12,
+            'account_number' => 'ACC-IND',
+            'contract_start' => '3/1/2026',
+            'contract_end' => '9/3/2026',
+        ])->assertRedirect();
+
+        $sim = $model::query()->firstOrFail();
+        $this->assertSame(12, (int) $sim->port);
+        $this->assertNull($sim->gatewayAssignment);
+
+        $this->putJson('/gsm-gateways/'.$gateway->id, [
+            'hostname' => 'sim-port-host-edit',
+            'site_name' => 'Estancia',
+            'site_code' => 'SIM-IND-'.$module,
+            'ip_address' => '10.73.8.80',
+            'channel_count' => 16,
+            'device_function' => 'Inbound',
+            'network' => $network === 'Smart' ? 'Smart SIM' : 'Globe SIM',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+        ])->assertOk();
+
+        $sim->refresh();
+        $this->assertSame(12, (int) $sim->port);
+        $this->assertSame('10.73.8.80', $sim->ip_address);
+
+        $this->deleteJson('/gsm-gateways/'.$gateway->id)->assertOk();
+        $sim->refresh();
+        $this->assertSame(12, (int) $sim->port);
+        $this->assertDatabaseHas('media_gateways', ['id' => $keep->id]);
     }
 }

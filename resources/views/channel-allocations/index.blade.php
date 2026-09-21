@@ -102,7 +102,7 @@
                     </button>
                 @endif
                 @if(auth()->user()->hasPermission('media.delete'))
-                    <form method="POST" action="{{ route('channel-allocation.destroy', $campaign) }}" data-confirm="Delete this campaign and all of its allocations?" data-confirm-title="Delete Campaign" data-confirm-ok="Delete">
+                    <form method="POST" action="{{ route('channel-allocation.destroy', $campaign) }}" data-confirm="Delete this campaign's allocations? The master Campaign will not be deleted." data-confirm-title="Delete Allocations" data-confirm-ok="Delete">
                         @csrf
                         @method('DELETE')
                         <button class="ca-menu-item delete" type="submit" role="menuitem">

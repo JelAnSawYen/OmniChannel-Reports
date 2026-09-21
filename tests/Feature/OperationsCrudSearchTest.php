@@ -398,7 +398,7 @@ class OperationsCrudSearchTest extends TestCase
         $this->assertMatchesRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-sim-nested \{\s*width: 100%;\s*table-layout: fixed;/', $css);
         $this->assertStringContainsString('body[data-page="gsm-gateways"] .gsm-sim-nested > colgroup > col', $css);
         $this->assertStringContainsString('body[data-page="gsm-gateways"] .gsm-sim-nested thead th:last-child', $css);
-        $this->assertMatchesRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-sim-nested tbody td:last-child \{\s*width: 20%;\s*min-width: 0;/', $css);
+        $this->assertMatchesRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-sim-nested tbody td:last-child \{\s*width: 25%;\s*min-width: 0;/', $css);
         $this->assertMatchesRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-sim-nested tbody td:last-child \{[\s\S]*?padding: 18\.75px 15px;/', $css);
 
         $this->actingAs($this->admin)->get('/program-location/estancia')

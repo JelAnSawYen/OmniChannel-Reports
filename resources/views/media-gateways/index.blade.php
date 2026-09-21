@@ -143,7 +143,6 @@
                     <col class="gsm-sim-col-imei">
                     <col class="gsm-sim-col-mobile">
                     <col class="gsm-sim-col-plan">
-                    <col class="gsm-sim-col-ip">
                     <col class="gsm-sim-col-port">
                 </colgroup>
                 <thead>
@@ -151,7 +150,6 @@
                         <th>IMEI</th>
                         <th>Mobile Number</th>
                         <th>Plan</th>
-                        <th>IP</th>
                         <th>Port</th>
                     </tr>
                 </thead>
@@ -166,11 +164,10 @@
                         <td>{{ $assignment['imei'] ?: '—' }}</td>
                         <td>{{ $assignment['mobile_number'] ?: '—' }}</td>
                         <td>{{ $assignment['plan'] ?: '—' }}</td>
-                        <td>{{ $gateway->ip_address }}</td>
                         <td>{{ $assignment['port'] !== '' && $assignment['port'] !== null ? $assignment['port'] : '—' }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="5"><div class="empty-state">No SIM assignments.</div></td></tr>
+                    <tr><td colspan="4"><div class="empty-state">No SIM assignments.</div></td></tr>
                 @endforelse
                 </tbody>
             </table>

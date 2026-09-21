@@ -111,19 +111,33 @@ class ProgramInboundNumberValidator
         return count($all) !== count(array_unique($all));
     }
 
-    public static function exists(string $number, ?int $ignoreId = null): bool
+    public static function exists(string $number, ?int $ignoreId = null, ?int $campaignId = null, string $field = 'any'): bool
     {
         $number = trim($number);
-        if ($number === '') {
+        if ($number === '' || ! $campaignId) {
             return false;
         }
 
         $query = ProgramInboundNumber::query();
+        if ($campaignId) {
+            $query->where('campaign_id', $campaignId);
+        }
         if ($ignoreId) {
             $query->where('id', '<>', $ignoreId);
         }
 
-        return $query->where(function ($inner) use ($number) {
+        return $query->where(function ($inner) use ($number, $field) {
+            if ($field === 'mobile') {
+                $inner->whereJsonContains('mobile_numbers', $number);
+
+                return;
+            }
+            if ($field === 'landline') {
+                $inner->whereJsonContains('landline_numbers', $number);
+
+                return;
+            }
+
             $inner->whereRaw('LOWER(number) = ?', [mb_strtolower($number)])
                 ->orWhereJsonContains('mobile_numbers', $number)
                 ->orWhereJsonContains('landline_numbers', $number);
@@ -136,22 +150,42 @@ class ProgramInboundNumberValidator
      * @param  array<string, true>  $seen
      * @return list<string>
      */
-    public static function uniquenessErrors(array $mobiles, array $landlines, array &$seen, ?int $ignoreId = null, bool $inFile = false): array
-    {
+    public static function uniquenessErrors(
+        array $mobiles,
+        array $landlines,
+        array &$seen,
+        ?int $ignoreId = null,
+        bool $inFile = false,
+        ?int $campaignId = null,
+        string $campaignKey = ''
+    ): array {
         $errors = [];
         if (self::hasInternalDuplicate($mobiles, $landlines)) {
             $errors[] = $inFile ? self::NUMBER_DUPLICATED_IN_FILE : self::NUMBER_DUPLICATED;
         }
 
-        foreach (array_merge($mobiles, $landlines) as $number) {
-            $key = mb_strtolower($number);
+        $scope = mb_strtolower(trim($campaignKey));
+        foreach ($mobiles as $number) {
+            $key = $scope.'|m|'.mb_strtolower($number);
             if (isset($seen[$key])) {
                 $errors[] = $inFile ? self::NUMBER_DUPLICATED_IN_FILE : self::NUMBER_DUPLICATED;
 
                 continue;
             }
             $seen[$key] = true;
-            if (self::exists($number, $ignoreId)) {
+            if (self::exists($number, $ignoreId, $campaignId, 'mobile')) {
+                $errors[] = self::NUMBER_EXISTS;
+            }
+        }
+        foreach ($landlines as $number) {
+            $key = $scope.'|l|'.mb_strtolower($number);
+            if (isset($seen[$key])) {
+                $errors[] = $inFile ? self::NUMBER_DUPLICATED_IN_FILE : self::NUMBER_DUPLICATED;
+
+                continue;
+            }
+            $seen[$key] = true;
+            if (self::exists($number, $ignoreId, $campaignId, 'landline')) {
                 $errors[] = self::NUMBER_EXISTS;
             }
         }

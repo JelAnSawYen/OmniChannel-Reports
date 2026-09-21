@@ -165,7 +165,7 @@ class CampaignsPageTest extends TestCase
         $campaign = ChannelAllocationCampaign::where('name', 'Master Camp')->firstOrFail();
         $option = '>Master Camp</button>';
 
-        $this->get('/sip-channels')->assertOk()->assertSee($option, false);
+        $this->get('/sip-channels')->assertOk()->assertDontSee($option, false);
         $this->get('/pdc-servers')->assertOk()->assertSee($option, false);
         $this->get('/archive-recordings')->assertOk()->assertSee('Master Camp');
 

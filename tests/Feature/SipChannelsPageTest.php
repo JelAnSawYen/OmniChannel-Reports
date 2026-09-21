@@ -70,8 +70,9 @@ class SipChannelsPageTest extends TestCase
             ->assertDontSee('class="sip-cell sip-campaign"', false)
             ->assertSee('id="sipAddButton"', false)
             ->assertSee('id="sipSubmit">Save', false)
-            ->assertSee('pin-campaign-combo', false)
-            ->assertSee('Select or type a campaign...', false)
+            ->assertDontSee('for="sip_campaign_id"', false)
+            ->assertDontSee('id="sip_campaign_id"', false)
+            ->assertDontSee('sipCampaignMenu', false)
             ->assertDontSee('>Add</button>', false)
             ->assertDontSee('Save SIP')
             ->assertDontSee('Last Updated')
@@ -149,13 +150,12 @@ class SipChannelsPageTest extends TestCase
         $this->assertSame('2026-07-09', $record->date_activation->format('Y-m-d'));
 
         $this->post('/sip-channels', [
-            'campaign' => 'Typed SIP Campaign',
             'etpi_sip_name' => 'ETPI_TYPED',
             'channel_count' => 2,
             'network' => 'ETPI',
             'date_activation' => '8/2/2026',
         ])->assertRedirect();
-        $this->assertDatabaseHas('channel_allocation_campaigns', ['name' => 'Typed SIP Campaign']);
+        $this->assertDatabaseMissing('channel_allocation_campaigns', ['name' => 'Typed SIP Campaign']);
         $this->assertDatabaseHas('sip_channels', ['etpi_sip_name' => 'ETPI_TYPED']);
 
         $this->get('/sip-channels')
@@ -312,7 +312,6 @@ class SipChannelsPageTest extends TestCase
         $template = $this->get('/sip-channels/import/template')->assertOk()->assertDownload('sip-channels-template.xlsx');
         [$headers] = app(XlsxService::class)->read($template->getFile()->getPathname());
         $this->assertSame([
-            'Campaign',
             'SIP Name',
             'Pilot Number',
             'Channel Count',
@@ -321,53 +320,36 @@ class SipChannelsPageTest extends TestCase
             'Date Activation',
         ], $headers);
         $this->assertNotContains('Id', $headers);
+        $this->assertNotContains('Campaign', $headers);
 
         $preview = $this->postJson('/sip-channels/import/preview', [
             'file' => $this->upload($this->spreadsheet([
-                ['Campaign', 'SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
-                ['Mynt', 'ETPI_53235320', '253235320', '14', '253235320 - 253235333', 'ETPI', '7/9/2026'],
-                ['', 'ETPI_53235334', '253235334', '2', '253235334 - 253235335', 'ETPI', ''],
-                ['-', 'ETPI_SKIP', '1', '1', '1 - 1', 'ETPI', '7/10/2026'],
-                ['Unknown Campaign', 'ETPI_X', '9', '1', '9 - 9', 'ETPI', '7/11/2026'],
+                ['SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
+                ['ETPI_53235320', '253235320', '14', '253235320 - 253235333', 'ETPI', '7/9/2026'],
+                ['ETPI_53235334', '253235334', '2', '253235334 - 253235335', 'ETPI', ''],
+                ['ETPI_ATOME', '300', '3', '300 - 302', 'ETPI', '8/1/2026'],
             ])),
         ])->assertOk()->json();
 
-        $this->assertFalse($preview['valid']);
-        $this->assertTrue($preview['rows'][0]['valid']);
-        $this->assertTrue($preview['rows'][1]['valid']);
-        $this->assertSame('Mynt', $preview['rows'][1]['campaign']);
-        $this->assertFalse($preview['rows'][2]['valid']);
-        $this->assertStringContainsString('Campaign', $preview['rows'][2]['error']);
-        $this->assertFalse($preview['rows'][3]['valid']);
-        $this->assertStringContainsString('Campaign does not exist', $preview['rows'][3]['error']);
-
-        $ok = $this->postJson('/sip-channels/import/preview', [
-            'file' => $this->upload($this->spreadsheet([
-                ['Campaign', 'SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
-                ['Mynt', 'ETPI_53235320', '253235320', '14', '253235320 - 253235333', 'ETPI', '7/9/2026'],
-                ['', 'ETPI_53235334', '253235334', '2', '253235334 - 253235335', 'ETPI', ''],
-                ['Atome', 'ETPI_ATOME', '300', '3', '300 - 302', 'ETPI', '8/1/2026'],
-            ])),
-        ])->assertOk()->json();
-        $this->assertTrue($ok['valid'], $ok['rows'][0]['error'] ?? '');
-        $this->postJson('/sip-channels/import/confirm', ['token' => $ok['token']])
+        $this->assertTrue($preview['valid'], $preview['rows'][0]['error'] ?? '');
+        $this->postJson('/sip-channels/import/confirm', ['token' => $preview['token']])
             ->assertOk()
             ->assertJson(['ok' => true, 'records' => 3]);
 
         $this->assertSame(3, SipChannel::count());
         $imported = SipChannel::where('etpi_sip_name', 'ETPI_53235320')->firstOrFail();
-        $this->assertSame('Mynt', $imported->campaign->name);
+        $this->assertNull($imported->campaign_id);
         $this->assertSame('253235320', $imported->pilot_number);
         $this->assertSame(14, $imported->channel_count);
         $this->assertSame('253235320 - 253235333', $imported->channel_range);
         $this->assertSame('ETPI', $imported->network);
         $this->assertSame('2026-07-09', $imported->date_activation->format('Y-m-d'));
-        $this->assertSame('Mynt', SipChannel::where('etpi_sip_name', 'ETPI_53235334')->first()->campaign->name);
+        $this->assertNull(SipChannel::where('etpi_sip_name', 'ETPI_53235334')->first()->campaign_id);
 
         $dup = $this->postJson('/sip-channels/import/preview', [
             'file' => $this->upload($this->spreadsheet([
-                ['Campaign', 'SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
-                ['Mynt', 'ETPI_53235320', '1', '1', '1 - 1', 'ETPI', '7/9/2026'],
+                ['SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
+                ['ETPI_53235320', '1', '1', '1 - 1', 'ETPI', '7/9/2026'],
             ])),
         ])->assertOk()->json();
         $this->assertFalse($dup['valid']);
@@ -375,9 +357,10 @@ class SipChannelsPageTest extends TestCase
 
         $export = $this->get('/sip-channels/export')->assertOk()->assertDownload('sip-channels.xlsx');
         [$exportHeaders] = app(XlsxService::class)->read($export->getFile()->getPathname());
-        $this->assertSame('Campaign', $exportHeaders[0]);
+        $this->assertSame('SIP Name', $exportHeaders[0]);
         $this->assertContains('SIP Name', $exportHeaders);
         $this->assertContains('Date Activation', $exportHeaders);
+        $this->assertNotContains('Campaign', $exportHeaders);
         $this->assertNotContains('Id', $exportHeaders);
     }
 

@@ -38,6 +38,9 @@ class SipChannel extends Model
         static::updated(function (self $sip): void {
             InventoryDependentSync::sipChannelSaved($sip);
         });
+        static::deleting(function (self $sip): void {
+            InventoryDependentSync::sipChannelDeleted($sip);
+        });
     }
 
     public function channelNumbers(): HasMany
