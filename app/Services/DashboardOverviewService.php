@@ -12,6 +12,7 @@ use App\Models\SipChannel;
 use App\Models\SmartSim;
 use App\Support\ChannelTypeClassifier;
 use App\Support\Inbound\ProgramInboundNumberValidator;
+use App\Support\NaturalSort;
 use App\Support\PageWindow;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -271,7 +272,14 @@ class DashboardOverviewService
                 ];
             })
             ->filter(fn (array $row) => $row['total'] > 0)
-            ->sortByDesc('total')
+            ->sort(function (array $left, array $right): int {
+                $byTotal = ($right['total'] ?? 0) <=> ($left['total'] ?? 0);
+                if ($byTotal !== 0) {
+                    return $byTotal;
+                }
+
+                return NaturalSort::compare($left['name'] ?? '', $right['name'] ?? '');
+            })
             ->values()
             ->all();
     }

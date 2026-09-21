@@ -9,6 +9,7 @@ use App\Models\SipChannel;
 use App\Services\Logs\AuditLogger;
 use App\Services\Sip\SipChannelImportService;
 use App\Services\XlsxService;
+use App\Support\NaturalSort;
 use App\Support\PdcEndorseDate;
 use App\Support\PublicError;
 use Illuminate\Http\RedirectResponse;
@@ -32,7 +33,9 @@ class SipChannelController extends Controller
             $perPage = 10;
         }
 
-        $query = SipChannel::query()->with('campaign')->orderBy('id');
+        $query = SipChannel::query()->with('campaign');
+        NaturalSort::apply($query, 'etpi_sip_name');
+        $query->orderBy('id');
         if ($search !== '') {
             $query->where(function ($channels) use ($search) {
                 $channels->where('etpi_sip_name', 'like', "%{$search}%")
@@ -112,7 +115,9 @@ class SipChannelController extends Controller
     public function export(Request $request, XlsxService $xlsx): BinaryFileResponse|RedirectResponse
     {
         $search = trim((string) $request->query('search'));
-        $query = SipChannel::query()->with('campaign')->latest();
+        $query = SipChannel::query()->with('campaign');
+        NaturalSort::apply($query, 'etpi_sip_name');
+        $query->orderBy('id');
         if ($search !== '') {
             $query->where(function ($channels) use ($search) {
                 $channels->where('etpi_sip_name', 'like', "%{$search}%")

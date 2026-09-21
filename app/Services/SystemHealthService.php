@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\MediaGateway;
+use App\Support\NaturalSort;
 use App\Support\OperationCatalog;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
@@ -174,10 +175,14 @@ class SystemHealthService
             }
         }
 
-        return $records->sortBy([
-            ['module', 'asc'],
-            ['name', 'asc'],
-        ])->values();
+        return $records->sort(function (array $left, array $right): int {
+            $module = strcasecmp((string) ($left['module'] ?? ''), (string) ($right['module'] ?? ''));
+            if ($module !== 0) {
+                return $module;
+            }
+
+            return NaturalSort::compare($left['name'] ?? '', $right['name'] ?? '');
+        })->values();
     }
 
     /**
@@ -274,7 +279,7 @@ class SystemHealthService
             'model' => MediaGateway::class,
             'table' => (new MediaGateway)->getTable(),
             'status' => null,
-            'name' => fn (MediaGateway $record) => $record->site_code ?: $record->site_name,
+            'name' => fn (MediaGateway $record) => trim((string) ($record->hostname ?: $record->site_code ?: $record->site_name)),
             'location' => fn (MediaGateway $record) => $record->site_name,
         ]];
 

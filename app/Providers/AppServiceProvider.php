@@ -3,10 +3,13 @@
 namespace App\Providers;
 
 use App\Models\MailSetting;
+use App\Support\NaturalSort;
 use App\View\Composers\AppLayoutComposer;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Events\ConnectionEstablished;
 use Illuminate\Foundation\Console\ServeCommand;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\View;
@@ -44,6 +47,10 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        Event::listen(ConnectionEstablished::class, function (ConnectionEstablished $event): void {
+            NaturalSort::registerSqliteFunction($event->connection);
+        });
+
         View::composer('layouts.app', AppLayoutComposer::class);
 
         if (! $this->app->environment('testing') && Schema::hasTable('mail_settings')) {

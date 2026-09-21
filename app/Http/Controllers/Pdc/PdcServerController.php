@@ -10,6 +10,7 @@ use App\Models\PdcServer;
 use App\Services\Logs\AuditLogger;
 use App\Services\Pdc\PdcServerImportService;
 use App\Services\XlsxService;
+use App\Support\NaturalSort;
 use App\Support\OperationCatalog;
 use App\Support\PdcEndorseDate;
 use App\Support\PublicError;
@@ -33,7 +34,8 @@ class PdcServerController extends Controller
             $perPage = 10;
         }
 
-        $query = PdcGroup::query()->with(['campaign', 'servers'])->orderBy('id');
+        $query = PdcGroup::query()->with(['campaign', 'servers']);
+        $this->applyGroupOrder($query);
         if ($search !== '') {
             $query->where(function ($groups) use ($search) {
                 $groups->where('location', 'like', "%{$search}%")
@@ -165,7 +167,8 @@ class PdcServerController extends Controller
     public function export(Request $request, XlsxService $xlsx): BinaryFileResponse|RedirectResponse
     {
         $search = trim((string) $request->query('search'));
-        $query = PdcGroup::query()->with(['campaign', 'servers'])->orderBy('id');
+        $query = PdcGroup::query()->with(['campaign', 'servers']);
+        $this->applyGroupOrder($query);
         if ($search !== '') {
             $query->where(function ($groups) use ($search) {
                 $groups->where('location', 'like', "%{$search}%")
@@ -434,6 +437,13 @@ class PdcServerController extends Controller
         $value = is_string($value) ? trim($value) : $value;
 
         return $value === null || $value === '' ? null : (string) $value;
+    }
+
+    private function applyGroupOrder($query): void
+    {
+        NaturalSort::applyRelated($query, 'channel_allocation_campaigns', 'name', 'pdc_groups.campaign_id');
+        NaturalSort::apply($query, 'pdc_groups.location');
+        $query->orderBy('pdc_groups.id');
     }
 
     /**

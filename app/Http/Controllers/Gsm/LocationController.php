@@ -10,6 +10,7 @@ use App\Services\Logs\AuditLogger;
 use App\Services\XlsxService;
 use App\Support\Gsm\ProgramLocationStatus;
 use App\Support\InventoryImportCatalog;
+use App\Support\NaturalSort;
 use App\Support\OperationCatalog;
 use App\Support\PublicError;
 use Illuminate\Http\Request;
@@ -60,8 +61,9 @@ class LocationController extends Controller
             $perPage = 10;
         }
 
-        $records = $this->query($name, $search)
-            ->orderBy('site_code')
+        $records = $this->query($name, $search);
+        NaturalSort::apply($records, 'site_code');
+        $records = $records
             ->paginate($perPage)
             ->withQueryString();
 
@@ -183,10 +185,11 @@ class LocationController extends Controller
         try {
             $columns = $this->exportColumns($request->user());
             $sequence = 0;
+            $exportQuery = $this->query($name, $search);
+            NaturalSort::apply($exportQuery, 'site_code');
             $path = $xlsx->export(
                 array_merge(['Id'], array_values($columns)),
-                $this->query($name, $search)
-                    ->orderBy('site_code')
+                $exportQuery
                     ->get()
                     ->map(function (MediaGateway $gateway) use ($columns, &$sequence) {
                         $sequence++;

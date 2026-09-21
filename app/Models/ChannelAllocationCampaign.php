@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\InventoryDependentSync;
+use App\Support\NaturalSort;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -64,7 +65,10 @@ class ChannelAllocationCampaign extends Model
      */
     public static function optionsForDropdown(): Collection
     {
-        return static::query()->orderBy('name')->get(['id', 'name', 'fte']);
+        $query = static::query();
+        NaturalSort::apply($query, 'name');
+
+        return $query->get(['id', 'name', 'fte']);
     }
 
     /**

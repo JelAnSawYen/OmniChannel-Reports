@@ -10,6 +10,7 @@ use App\Services\Logs\AuditLogger;
 use App\Services\Sip\ChannelRangeListImportService;
 use App\Services\XlsxService;
 use App\Support\ExportRows;
+use App\Support\NaturalSort;
 use App\Support\PublicError;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,9 +35,9 @@ class ChannelRangeListController extends Controller
 
         $query = SipChannel::query()
             ->with(['channelNumbers'])
-            ->whereHas('channelNumbers')
-            ->orderBy('etpi_sip_name')
-            ->orderBy('id');
+            ->whereHas('channelNumbers');
+        NaturalSort::apply($query, 'etpi_sip_name');
+        $query->orderBy('id');
 
         if ($search !== '') {
             $query->where(function ($channels) use ($search) {
@@ -146,9 +147,9 @@ class ChannelRangeListController extends Controller
         $query = SipChannelNumber::query()
             ->with(['sipChannel.channelNumbers'])
             ->leftJoin('sip_channels', 'sip_channels.id', '=', 'sip_channel_numbers.sip_channel_id')
-            ->select('sip_channel_numbers.*')
-            ->orderBy('sip_channels.etpi_sip_name')
-            ->orderBy('sip_channel_numbers.channel_number');
+            ->select('sip_channel_numbers.*');
+        NaturalSort::apply($query, 'sip_channels.etpi_sip_name');
+        $query->orderBy('sip_channel_numbers.channel_number');
 
         if ($search !== '') {
             $query->where(function ($numbers) use ($search) {

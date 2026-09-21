@@ -105,8 +105,10 @@ class GsmSimInventory
             return [];
         }
 
-        return $model::query()
-            ->orderBy('imei')
+        $query = $model::query();
+        NaturalSort::apply($query, 'imei');
+
+        return $query
             ->get()
             ->map(fn (Model $sim) => self::serialize($type, $sim))
             ->values()

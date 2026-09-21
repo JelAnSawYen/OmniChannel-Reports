@@ -9,6 +9,7 @@ use App\Models\ChannelAllocationCampaign;
 use App\Services\Logs\AuditLogger;
 use App\Services\XlsxService;
 use App\Support\InventoryImportCatalog;
+use App\Support\NaturalSort;
 use App\Support\OperationCatalog;
 use App\Support\PublicError;
 use Illuminate\Http\RedirectResponse;
@@ -30,7 +31,8 @@ class CampaignController extends Controller
             $perPage = 10;
         }
 
-        $query = ChannelAllocationCampaign::query()->orderBy('name');
+        $query = ChannelAllocationCampaign::query();
+        NaturalSort::apply($query, 'name');
         if ($search !== '') {
             $query->where(function ($campaigns) use ($search) {
                 $campaigns->where('name', 'like', "%{$search}%")
@@ -94,7 +96,8 @@ class CampaignController extends Controller
     public function export(Request $request, XlsxService $xlsx): BinaryFileResponse|RedirectResponse
     {
         $search = trim((string) $request->query('search'));
-        $query = ChannelAllocationCampaign::query()->orderBy('name');
+        $query = ChannelAllocationCampaign::query();
+        NaturalSort::apply($query, 'name');
         if ($search !== '') {
             $query->where(function ($campaigns) use ($search) {
                 $campaigns->where('name', 'like', "%{$search}%")

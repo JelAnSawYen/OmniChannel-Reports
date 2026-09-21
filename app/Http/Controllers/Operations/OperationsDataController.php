@@ -14,6 +14,7 @@ use App\Support\GsmSimInventory;
 use App\Support\Inbound\ProgramInboundNumberValidator;
 use App\Support\Inbound\ProgramInboundSimLookup;
 use App\Support\InventoryImportCatalog;
+use App\Support\NaturalSort;
 use App\Support\OperationCatalog;
 use App\Support\PdcEndorseDate;
 use App\Support\PublicError;
@@ -39,19 +40,25 @@ class OperationsDataController extends Controller
             $query->with(['gatewayAssignment.gateway:id,ip_address']);
         }
         $this->applyInventorySearch($query, $request, $config, $module);
+        $this->applyInventoryOrder($query, $module);
         $perPage = (int) $request->query('per_page', 10);
         if (! in_array($perPage, [5, 10, 25, 50], true)) {
             $perPage = 10;
         }
         $search = trim((string) $request->query('search'));
-        $records = $query->orderBy('id')->paginate($perPage)->withQueryString();
-        $gateways = MediaGateway::orderBy('site_code')->get(['site_code', 'site_name']);
+        $records = $query->paginate($perPage)->withQueryString();
+        $gateways = MediaGateway::query();
+        NaturalSort::apply($gateways, 'site_code');
+        $gateways = $gateways->get(['site_code', 'site_name']);
         $statusOptions = $this->statusOptions($module);
         $campaigns = OperationCatalog::isInbound($module)
             ? ChannelAllocationCampaign::optionsForDropdown()
             : collect();
         $gsmGateways = (OperationCatalog::isInbound($module) || OperationCatalog::isSim($module))
-            ? MediaGateway::query()->orderBy('ip_address')->get(['id', 'ip_address', 'port', 'network'])
+            ? tap(MediaGateway::query(), function ($gateways) {
+                NaturalSort::apply($gateways, 'hostname');
+                NaturalSort::apply($gateways, 'ip_address');
+            })->get(['id', 'ip_address', 'port', 'network', 'hostname'])
             : collect();
         $pinSimDirectory = OperationCatalog::isInbound($module)
             ? ProgramInboundSimLookup::payload()
@@ -173,6 +180,7 @@ class OperationsDataController extends Controller
         if ($isSim) {
             $query->with('gatewayAssignment');
         }
+        $this->applyInventoryOrder($query, $module);
         $headers = $isInbound
             ? array_values($config['table_columns'] ?? $config['columns'])
             : ($isSim
@@ -181,7 +189,7 @@ class OperationsDataController extends Controller
         $fields = array_keys($config['columns']);
         try {
             $sequence = 0;
-            $records = $query->latest()->get();
+            $records = $query->get();
             $rows = $isInbound
                 ? $records->flatMap(fn ($record) => $this->inboundExportRows($record))
                 : $records->map(function ($record) use ($fields, $isSim, $isDefective, &$sequence) {
@@ -368,6 +376,39 @@ class OperationsDataController extends Controller
         $data['reported_on'] = $parsed['iso'];
 
         return $data;
+    }
+
+    private function applyInventoryOrder($query, string $module): void
+    {
+        $table = $query->getModel()->getTable();
+        if (OperationCatalog::isInbound($module)) {
+            $grammar = $query->getQuery()->getGrammar();
+            $campaignName = '(SELECT '.$grammar->wrap('channel_allocation_campaigns.name')
+                .' FROM '.$grammar->wrapTable('channel_allocation_campaigns')
+                .' WHERE '.$grammar->wrap('channel_allocation_campaigns.id')
+                .' = '.$grammar->wrap($table.'.campaign_id').')';
+            NaturalSort::applyRaw($query, 'COALESCE('.$campaignName.', '.$grammar->wrap($table.'.program').')');
+            $query->orderBy($table.'.id');
+
+            return;
+        }
+
+        $column = match (true) {
+            OperationCatalog::isSim($module) => 'imei',
+            $module === 'signal-boosters' => 'model',
+            $module === 'defective-gsm' => 'asset_code',
+            $module === 'telco-cost' => 'provider',
+            $module === 'channel-prefix' => 'prefix',
+            $module === 'channel-port' => 'gateway',
+            $module === 'network-prefix' => 'network',
+            default => null,
+        };
+
+        if ($column) {
+            NaturalSort::apply($query, $column);
+        }
+
+        $query->orderBy('id');
     }
 
     private function applyInventorySearch($query, Request $request, array $config, string $module): void

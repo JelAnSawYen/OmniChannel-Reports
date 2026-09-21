@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\NaturalSort;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -50,10 +51,11 @@ class UserType extends Model
 
     public static function assignable(): Collection
     {
-        return static::query()
-            ->whereIn('name', self::ASSIGNABLE_NAMES)
-            ->orderBy('name')
-            ->get();
+        $query = static::query()
+            ->whereIn('name', self::ASSIGNABLE_NAMES);
+        NaturalSort::apply($query, 'name');
+
+        return $query->get();
     }
 
     public function users(): HasMany

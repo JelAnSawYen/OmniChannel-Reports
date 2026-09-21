@@ -15,6 +15,7 @@ use App\Services\XlsxService;
 use App\Support\Gsm\GsmGatewayWriter;
 use App\Support\GsmSimInventory;
 use App\Support\InventoryImportCatalog;
+use App\Support\NaturalSort;
 use App\Support\OperationCatalog;
 use App\Support\PublicError;
 use Illuminate\Http\Request;
@@ -28,19 +29,22 @@ class MediaGatewayController extends Controller
 
     private const SORTABLE_COLUMNS = ['id', 'hostname', 'ip_address', 'site_code', 'channel_count', 'plan', 'port', 'network', 'device_function', 'site_name', 'username'];
 
+    private const NATURAL_SORT_COLUMNS = ['hostname', 'ip_address', 'site_code', 'plan', 'network', 'device_function', 'site_name', 'username'];
+
     public function index(Request $request)
     {
         $search = trim((string) $request->query('search', ''));
         $sortBy = in_array($request->query('sort_by'), self::SORTABLE_COLUMNS, true)
             ? $request->query('sort_by')
-            : 'id';
+            : $this->defaultSortColumn();
         $sortDir = strtolower((string) $request->query('sort_dir', 'asc')) === 'desc' ? 'desc' : 'asc';
         $perPage = in_array((int) $request->query('per_page', 10), [5, 10, 25, 50], true)
             ? (int) $request->query('per_page', 10)
             : 10;
 
-        $mediaGateways = $this->buildQuery($request)
-            ->orderBy($sortBy, $sortDir)
+        $query = $this->buildQuery($request);
+        $this->applySort($query, $sortBy, $sortDir);
+        $mediaGateways = $query
             ->paginate($perPage)
             ->appends($request->query());
 
@@ -406,8 +410,8 @@ class MediaGatewayController extends Controller
 
     public function export(Request $request, XlsxService $xlsx)
     {
-        $query = $this->buildQuery($request)
-            ->orderBy($this->resolveSortColumn($request), $this->resolveSortDirection($request));
+        $query = $this->buildQuery($request);
+        $this->applySort($query, $this->resolveSortColumn($request), $this->resolveSortDirection($request));
 
         try {
             $includeSecrets = $request->user()?->canExportGatewaySecrets() ?? false;
@@ -567,7 +571,23 @@ class MediaGatewayController extends Controller
     {
         $sort = $request->query('sort_by');
 
-        return in_array($sort, self::SORTABLE_COLUMNS, true) ? $sort : 'id';
+        return in_array($sort, self::SORTABLE_COLUMNS, true) ? $sort : $this->defaultSortColumn();
+    }
+
+    private function defaultSortColumn(): string
+    {
+        return $this->isGsm() ? 'hostname' : 'site_code';
+    }
+
+    private function applySort($query, string $sortBy, string $sortDir)
+    {
+        if (in_array($sortBy, self::NATURAL_SORT_COLUMNS, true)) {
+            NaturalSort::apply($query, $sortBy, $sortDir);
+
+            return $query;
+        }
+
+        return $query->orderBy($sortBy, $sortDir);
     }
 
     /**

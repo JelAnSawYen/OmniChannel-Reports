@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\UserType;
 use App\Services\Logs\AuditLogger;
 use App\Support\MailFailure;
+use App\Support\NaturalSort;
 use App\Support\PageWindow;
 use App\Support\PasswordRules;
 use App\Support\SessionInvalidator;
@@ -22,7 +23,8 @@ class UserController extends Controller
     public function index(Request $request)
     {
         $this->denyStandardUser();
-        $query = User::with('userType')->orderBy('name');
+        $query = User::with('userType');
+        NaturalSort::apply($query, 'name');
         if ($search = trim((string) $request->query('search'))) {
             $query->where(function ($users) use ($search) {
                 $users->where('name', 'like', "%$search%")

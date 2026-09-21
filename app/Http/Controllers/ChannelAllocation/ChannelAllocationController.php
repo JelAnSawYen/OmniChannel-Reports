@@ -12,6 +12,7 @@ use App\Services\ChannelAllocation\ChannelAllocationImportService;
 use App\Services\Logs\AuditLogger;
 use App\Services\XlsxService;
 use App\Support\ChannelAllocationResolver;
+use App\Support\NaturalSort;
 use App\Support\PublicError;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -36,8 +37,8 @@ class ChannelAllocationController extends Controller
         $query = ChannelAllocationCampaign::query()
             ->listedInChannelAllocation()
             ->with('allocations')
-            ->orderBy('sort_order')
-            ->orderBy('name');
+            ->orderBy('sort_order');
+        NaturalSort::apply($query, 'name');
         if ($search !== '') {
             $query->where(function ($campaigns) use ($search) {
                 $campaigns->where('name', 'like', "%{$search}%")
@@ -56,10 +57,11 @@ class ChannelAllocationController extends Controller
 
         $campaigns = $query->paginate($perPage)->withQueryString();
         $masterCampaigns = ChannelAllocationCampaign::optionsForDropdown();
-        $sipChannelOptions = SipChannel::query()
+        $sipChannelQuery = SipChannel::query()
             ->whereNotNull('etpi_sip_name')
-            ->where('etpi_sip_name', '!=', '')
-            ->orderBy('etpi_sip_name')
+            ->where('etpi_sip_name', '!=', '');
+        NaturalSort::apply($sipChannelQuery, 'etpi_sip_name');
+        $sipChannelOptions = $sipChannelQuery
             ->get(['etpi_sip_name', 'network', 'channel_count'])
             ->map(fn (SipChannel $sip) => [
                 'value' => $sip->etpi_sip_name,
@@ -67,10 +69,11 @@ class ChannelAllocationController extends Controller
                 'count' => $sip->channel_count,
             ])
             ->values();
-        $gsmChannelOptions = MediaGateway::query()
+        $gsmChannelQuery = MediaGateway::query()
             ->whereNotNull('hostname')
-            ->where('hostname', '!=', '')
-            ->orderBy('hostname')
+            ->where('hostname', '!=', '');
+        NaturalSort::apply($gsmChannelQuery, 'hostname');
+        $gsmChannelOptions = $gsmChannelQuery
             ->get(['hostname', 'network', 'channel_count'])
             ->map(fn (MediaGateway $gateway) => [
                 'value' => $gateway->hostname,
@@ -304,8 +307,8 @@ class ChannelAllocationController extends Controller
         $query = ChannelAllocationCampaign::query()
             ->listedInChannelAllocation()
             ->with('allocations')
-            ->orderBy('sort_order')
-            ->orderBy('name');
+            ->orderBy('sort_order');
+        NaturalSort::apply($query, 'name');
         if ($search !== '') {
             $query->where(function ($campaigns) use ($search) {
                 $campaigns->where('name', 'like', "%{$search}%")

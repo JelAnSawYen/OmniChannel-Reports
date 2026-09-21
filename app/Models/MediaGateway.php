@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\GsmSimInventory;
 use App\Support\InventoryDependentSync;
+use App\Support\NaturalSort;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -55,9 +56,9 @@ class MediaGateway extends Model
         $rows = [];
         foreach (['globe' => GlobeSim::class, 'smart' => SmartSim::class] as $type => $model) {
             $sims = $model::query()
-                ->whereRaw('LOWER(TRIM(ip_address)) = ?', [$ip])
-                ->orderBy('imei')
-                ->get();
+                ->whereRaw('LOWER(TRIM(ip_address)) = ?', [$ip]);
+            NaturalSort::apply($sims, 'imei');
+            $sims = $sims->get();
             foreach ($sims as $sim) {
                 $serialized = GsmSimInventory::serialize($type, $sim);
                 $key = $type.':'.$sim->id;
@@ -76,7 +77,7 @@ class MediaGateway extends Model
                 return $portLeft <=> $portRight;
             }
 
-            return strcmp((string) $left['imei'], (string) $right['imei']);
+            return NaturalSort::compare($left['imei'] ?? '', $right['imei'] ?? '');
         });
 
         return $rows;

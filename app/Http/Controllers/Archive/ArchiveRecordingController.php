@@ -10,6 +10,7 @@ use App\Services\Logs\AuditLogger;
 use App\Services\XlsxService;
 use App\Support\Archive\ArchiveStorage;
 use App\Support\Archive\AudioDuration;
+use App\Support\NaturalSort;
 use App\Support\OperationCatalog;
 use App\Support\PublicError;
 use Illuminate\Database\Eloquent\Builder;
@@ -66,8 +67,9 @@ class ArchiveRecordingController extends Controller
         }
 
         $recordingsByCampaign = ArchiveRecording::query()
-            ->select(['id', 'campaign_id', 'file_name', 'called_at', 'location', 'status'])
-            ->orderBy('file_name')
+            ->select(['id', 'campaign_id', 'file_name', 'called_at', 'location', 'status']);
+        NaturalSort::apply($recordingsByCampaign, 'file_name');
+        $recordingsByCampaign = $recordingsByCampaign
             ->orderBy('id')
             ->get()
             ->groupBy('campaign_id');

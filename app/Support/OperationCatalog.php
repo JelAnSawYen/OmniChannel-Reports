@@ -38,7 +38,7 @@ class OperationCatalog
             $locations[$slug] = $display[$slug] ?? $site['name'];
         }
 
-        uasort($locations, fn (string $left, string $right) => strnatcasecmp($left, $right));
+        uasort($locations, fn (string $left, string $right) => NaturalSort::compare($left, $right));
 
         return $locations;
     }
