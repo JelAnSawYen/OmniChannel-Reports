@@ -264,10 +264,11 @@ class OperationsCrudSearchTest extends TestCase
             ->assertSee('>Network</label>', false)
             ->assertDontSee('Network <span class="req">*</span>', false)
             ->assertDontSee('SIM Assignments (', false)
-            ->assertSee('<option value="" selected hidden>Select Function</option>', false)
+            ->assertSee('<input class="form-control" id="device_function" name="device_function" required>', false)
+            ->assertDontSee('Select Function', false)
+            ->assertDontSee('<option value="Inbound">Inbound</option>', false)
+            ->assertDontSee('<option value="Outbound">Outbound</option>', false)
             ->assertSee('<option value="" selected hidden>Select Site</option>', false)
-            ->assertSee('<option value="Inbound">Inbound</option>', false)
-            ->assertSee('<option value="Outbound">Outbound</option>', false)
             ->assertDontSee('placeholder="Enter hostname"', false)
             ->assertDontSee('placeholder="Enter IP address (e.g. 10.5.20.108)"', false)
             ->assertDontSee('placeholder="Enter serial number"', false)
@@ -362,6 +363,31 @@ class OperationsCrudSearchTest extends TestCase
             'network' => 'Globe SIM',
             'username' => 'root',
         ])->assertUnprocessable()->assertJsonValidationErrors('site_name');
+
+        $this->postJson('/gsm-gateways', [
+            'hostname' => 'gsm-sms-001',
+            'site_name' => 'Alcar',
+            'site_code' => 'SMS001',
+            'ip_address' => '10.2.2.18',
+            'channel_count' => 4,
+            'device_function' => 'SMS',
+            'network' => 'Globe SIM',
+            'username' => 'root',
+        ])->assertCreated();
+        $sms = MediaGateway::query()->where('site_code', 'SMS001')->firstOrFail();
+        $this->assertSame('SMS', $sms->device_function);
+
+        $this->putJson('/gsm-gateways/'.$sms->id, [
+            'hostname' => 'gsm-sms-001',
+            'site_name' => 'Alcar',
+            'site_code' => 'SMS001',
+            'ip_address' => '10.2.2.18',
+            'channel_count' => 4,
+            'device_function' => 'Voice',
+            'network' => 'Globe SIM',
+            'username' => 'root',
+        ])->assertOk();
+        $this->assertSame('Voice', $sms->fresh()->device_function);
     }
 
     public function test_edit_and_delete_buttons_use_the_compact_outline_style(): void

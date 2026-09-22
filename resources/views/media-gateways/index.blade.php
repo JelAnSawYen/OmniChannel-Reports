@@ -290,14 +290,7 @@
                 @if($isGsm)
                     <div class="form-grid">
                         <div class="form-group"><label for="hostname">Hostname</label><input class="form-control" id="hostname" name="hostname" required></div>
-                        <div class="form-group">
-                            <label for="device_function">Function</label>
-                            <select class="form-control" id="device_function" name="device_function" required>
-                                <option value="" selected hidden>Select Function</option>
-                                <option value="Inbound">Inbound</option>
-                                <option value="Outbound">Outbound</option>
-                            </select>
-                        </div>
+                        <div class="form-group"><label for="device_function">Function</label><input class="form-control" id="device_function" name="device_function" required></div>
                         <div class="form-group"><label for="ip_address">IP Address</label><input class="form-control" id="ip_address" name="ip_address" required></div>
                         <div class="form-group">
                             <label for="site_name">Site</label>

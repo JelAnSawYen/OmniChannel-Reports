@@ -128,6 +128,32 @@ class InventoryImportTest extends TestCase
         $this->assertNotContains('Hostname IP', $headers);
     }
 
+    public function test_gsm_import_accepts_typed_function_text(): void
+    {
+        $this->actingAs($this->admin);
+        $headers = ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan', 'Remarks'];
+        $path = $this->spreadsheet([
+            $headers,
+            ['gsm-sms', '10.24.80.10', 'SMS-100', '4', 'SMS', 'Alcar', 'root', 'secret', '', '', '', '', ''],
+            ['gsm-voice', '10.24.80.11', 'VOICE-100', '4', 'Voice', 'Alcar', 'root', 'secret', '', '', '', '', ''],
+        ]);
+
+        $preview = $this->postJson('/gsm-gateways/import/preview', [
+            'file' => $this->upload($path),
+        ])->assertOk()->json();
+
+        $this->assertTrue($preview['valid'], $preview['rows'][0]['error'] ?? '');
+        $this->assertSame('SMS', $preview['rows'][0]['device_function']);
+        $this->assertSame('Voice', $preview['rows'][1]['device_function']);
+
+        $this->postJson('/gsm-gateways/import/confirm', ['token' => $preview['token']])
+            ->assertOk()
+            ->assertJson(['records' => 2]);
+
+        $this->assertDatabaseHas('media_gateways', ['site_code' => 'SMS-100', 'device_function' => 'SMS']);
+        $this->assertDatabaseHas('media_gateways', ['site_code' => 'VOICE-100', 'device_function' => 'Voice']);
+    }
+
     public function test_import_appends_after_existing_records_and_ignores_excel_ids(): void
     {
         $this->actingAs($this->admin);

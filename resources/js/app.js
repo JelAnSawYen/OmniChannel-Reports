@@ -1035,7 +1035,7 @@ async function initMedia(){
             const element=qs('#'+field);
             if(!element)return;
             const value=source[field]||'';
-            if((field==='site_name' || field==='device_function') && element.tagName==='SELECT' && value){
+            if(field==='site_name' && element.tagName==='SELECT' && value){
                 const exists=[...element.options].some((option)=>option.value===value);
                 if(!exists){
                     const option=document.createElement('option');
