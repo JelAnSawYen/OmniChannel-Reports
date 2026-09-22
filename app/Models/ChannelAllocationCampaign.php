@@ -24,6 +24,7 @@ class ChannelAllocationCampaign extends Model
         'remarks',
         'sort_order',
         'listed_in_channel_allocation',
+        'listed_in_campaigns',
     ];
 
     protected function casts(): array
@@ -33,7 +34,30 @@ class ChannelAllocationCampaign extends Model
             'fte' => 'integer',
             'sort_order' => 'integer',
             'listed_in_channel_allocation' => 'boolean',
+            'listed_in_campaigns' => 'boolean',
         ];
+    }
+
+    /**
+     * Master Campaign membership. Campaigns created by PDC Servers are the only
+     * ones flagged false, so they never reach the Campaigns page.
+     */
+    public function scopeListedInCampaigns($query)
+    {
+        if (! Schema::hasColumn($this->getTable(), 'listed_in_campaigns')) {
+            return $query;
+        }
+
+        return $query->where('listed_in_campaigns', true);
+    }
+
+    public function isListedInCampaigns(): bool
+    {
+        if (! Schema::hasColumn($this->getTable(), 'listed_in_campaigns')) {
+            return true;
+        }
+
+        return (bool) $this->listed_in_campaigns;
     }
 
     public function scopeListedInChannelAllocation($query)
@@ -89,6 +113,20 @@ class ChannelAllocationCampaign extends Model
     }
 
     /**
+     * Campaigns listed on the Campaigns page, for pickers that may only offer a
+     * master Campaign.
+     *
+     * @return Collection<int, $this>
+     */
+    public static function masterOptionsForDropdown(): Collection
+    {
+        $query = static::query()->listedInCampaigns();
+        NaturalSort::apply($query, 'name');
+
+        return $query->get(['id', 'name', 'fte']);
+    }
+
+    /**
      * Master Campaign lookup keyed by lowercase name for imports and references.
      *
      * @return Collection<string, $this>
@@ -100,11 +138,28 @@ class ChannelAllocationCampaign extends Model
             ->keyBy(fn (self $campaign) => mb_strtolower((string) $campaign->name));
     }
 
-    public static function fromFormValue(?string $name, mixed $id = null): ?self
+    /**
+     * Case-insensitive lookup restricted to the Campaigns page, for the pages
+     * that may only reference a campaign the master list already has.
+     */
+    public static function masterByName(string $name): ?self
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return null;
+        }
+
+        return static::query()
+            ->listedInCampaigns()
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+            ->first();
+    }
+
+    public static function fromFormValue(?string $name, mixed $id = null, bool $listedInCampaigns = true): ?self
     {
         $name = trim((string) $name);
         if ($name !== '') {
-            return static::findOrCreateByName($name);
+            return static::findOrCreateByName($name, $listedInCampaigns);
         }
 
         $id = (int) $id;
@@ -115,11 +170,15 @@ class ChannelAllocationCampaign extends Model
         return static::query()->find($id);
     }
 
-    public static function findOrCreateByName(string $name): self
+    /**
+     * An existing campaign is reused exactly as it is; $listedInCampaigns only
+     * decides whether a newly created campaign joins the Campaigns page.
+     */
+    public static function findOrCreateByName(string $name, bool $listedInCampaigns = true): self
     {
         $name = trim($name);
 
-        return DB::transaction(function () use ($name) {
+        return DB::transaction(function () use ($name, $listedInCampaigns) {
             $existing = static::query()
                 ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
                 ->lockForUpdate()
@@ -128,8 +187,13 @@ class ChannelAllocationCampaign extends Model
                 return $existing;
             }
 
+            $attributes = ['name' => $name];
+            if (! $listedInCampaigns && Schema::hasColumn((new static)->getTable(), 'listed_in_campaigns')) {
+                $attributes['listed_in_campaigns'] = false;
+            }
+
             try {
-                return static::query()->create(['name' => $name]);
+                return static::query()->create($attributes);
             } catch (UniqueConstraintViolationException) {
                 return static::query()
                     ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])

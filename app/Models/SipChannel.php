@@ -72,8 +72,16 @@ class SipChannel extends Model
         if ($range === '') {
             return ['', ''];
         }
-        if (preg_match('/^(.+?)\s+-\s+(.+)$/', $range, $matches) === 1) {
-            return [trim($matches[1]), trim($matches[2])];
+        if (str_contains($range, '-')) {
+            if (preg_match('/^(.+?)\s*-\s*(.+)$/', $range, $matches) === 1) {
+                $from = trim($matches[1]);
+                $to = trim($matches[2]);
+                if ($from !== '' && $to !== '') {
+                    return [$from, $to];
+                }
+            }
+
+            return ['', ''];
         }
 
         return [$range, $range];

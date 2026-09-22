@@ -52,7 +52,7 @@
 <?php $__empty_1 = true; $__currentLoopData = $groups; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $group): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
 <?php
     $serverCount = $group->servers->count();
-    $campaignName = $group->campaign?->name ?: '—';
+    $campaignName = $group->campaignName() !== '' ? $group->campaignName() : '—';
     $dateDisplay = $group->date_endorse ? \App\Support\PdcEndorseDate::display($group->date_endorse->format('Y-m-d')) : '—';
     $dnsLines = preg_split('/\s*[,;\r\n]+\s*/', trim((string) $group->dns)) ?: [];
     $dnsLines = array_values(array_filter($dnsLines, fn ($line) => $line !== ''));

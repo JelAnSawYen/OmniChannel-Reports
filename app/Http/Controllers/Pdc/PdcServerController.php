@@ -17,6 +17,7 @@ use App\Support\PublicError;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -40,21 +41,24 @@ class PdcServerController extends Controller
             $query->where(function ($groups) use ($search) {
                 $groups->where('location', 'like', "%{$search}%")
                     ->orWhere('dns', 'like', "%{$search}%")
-                    ->orWhereHas('campaign', fn ($campaigns) => $campaigns->where('name', 'like', "%{$search}%"))
-                    ->orWhereHas('servers', function ($servers) use ($search) {
-                        $servers->where('hostname', 'like', "%{$search}%")
-                            ->orWhere('ip_address', 'like', "%{$search}%")
-                            ->orWhere('os', 'like', "%{$search}%")
-                            ->orWhere('ram', 'like', "%{$search}%")
-                            ->orWhere('cpu', 'like', "%{$search}%")
-                            ->orWhere('storage', 'like', "%{$search}%")
-                            ->orWhere('admin_username', 'like', "%{$search}%");
-                    });
+                    ->orWhereHas('campaign', fn ($campaigns) => $campaigns->where('name', 'like', "%{$search}%"));
+                if ($this->pdcGroupsHaveCampaignName()) {
+                    $groups->orWhere('campaign_name', 'like', "%{$search}%");
+                }
+                $groups->orWhereHas('servers', function ($servers) use ($search) {
+                    $servers->where('hostname', 'like', "%{$search}%")
+                        ->orWhere('ip_address', 'like', "%{$search}%")
+                        ->orWhere('os', 'like', "%{$search}%")
+                        ->orWhere('ram', 'like', "%{$search}%")
+                        ->orWhere('cpu', 'like', "%{$search}%")
+                        ->orWhere('storage', 'like', "%{$search}%")
+                        ->orWhere('admin_username', 'like', "%{$search}%");
+                });
             });
         }
 
         $groups = (clone $query)->paginate($perPage)->withQueryString();
-        $campaigns = ChannelAllocationCampaign::optionsForDropdown();
+        $campaigns = ChannelAllocationCampaign::masterOptionsForDropdown();
         $locations = OperationCatalog::pdcSiteNames();
         $canRevealSecrets = (bool) $request->user()?->canExportGatewaySecrets();
 
@@ -173,11 +177,14 @@ class PdcServerController extends Controller
             $query->where(function ($groups) use ($search) {
                 $groups->where('location', 'like', "%{$search}%")
                     ->orWhere('dns', 'like', "%{$search}%")
-                    ->orWhereHas('campaign', fn ($campaigns) => $campaigns->where('name', 'like', "%{$search}%"))
-                    ->orWhereHas('servers', function ($servers) use ($search) {
-                        $servers->where('hostname', 'like', "%{$search}%")
-                            ->orWhere('ip_address', 'like', "%{$search}%");
-                    });
+                    ->orWhereHas('campaign', fn ($campaigns) => $campaigns->where('name', 'like', "%{$search}%"));
+                if ($this->pdcGroupsHaveCampaignName()) {
+                    $groups->orWhere('campaign_name', 'like', "%{$search}%");
+                }
+                $groups->orWhereHas('servers', function ($servers) use ($search) {
+                    $servers->where('hostname', 'like', "%{$search}%")
+                        ->orWhere('ip_address', 'like', "%{$search}%");
+                });
             });
         }
 
@@ -186,7 +193,7 @@ class PdcServerController extends Controller
         $rows = [];
 
         foreach ($query->get() as $group) {
-            $campaignName = $group->campaign?->name;
+            $campaignName = $group->campaignName();
             $date = $group->date_endorse ? PdcEndorseDate::display($group->date_endorse->format('Y-m-d')) : '';
             if ($group->servers->isEmpty()) {
                 $rows[] = $this->exportRow($campaignName, $group, $date, null, $includeSecrets);
@@ -251,9 +258,7 @@ class PdcServerController extends Controller
         } catch (\Throwable $exception) {
             return response()->json([
                 'ok' => false,
-                'message' => $exception instanceof \RuntimeException
-                    ? $exception->getMessage()
-                    : PublicError::failed('Preview', $exception),
+                'message' => PublicError::validationOrFailed('Preview', $exception),
             ], 422);
         }
 
@@ -293,7 +298,7 @@ class PdcServerController extends Controller
         } catch (\Throwable $exception) {
             return response()->json([
                 'ok' => false,
-                'message' => PublicError::failed('Import', $exception),
+                'message' => PublicError::validationOrFailed('Import', $exception),
             ], 422);
         }
 
@@ -356,23 +361,15 @@ class PdcServerController extends Controller
             'dns' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $campaign = ChannelAllocationCampaign::fromFormValue(
+        $campaign = $this->pdcCampaignFields(
             $request->input('campaign'),
-            $request->input('campaign_id')
+            $request->input('campaign_id'),
+            $id
         );
-        if ($campaign === null) {
-            throw ValidationException::withMessages([
-                'campaign' => 'Please select or type a campaign.',
-            ]);
-        }
-
-        validator(
-            ['campaign_id' => $campaign->id],
-            ['campaign_id' => [Rule::unique('pdc_groups', 'campaign_id')->ignore($id)]]
-        )->validate();
 
         $data = [
-            'campaign_id' => $campaign->id,
+            'campaign_id' => $campaign['campaign_id'],
+            'campaign_name' => $campaign['campaign_name'],
             'location' => $request->input('location'),
             'date_endorse' => $request->input('date_endorse'),
             'dns' => $request->input('dns'),
@@ -389,6 +386,66 @@ class PdcServerController extends Controller
         $data['location'] = $this->nullableString($data['location'] ?? null);
 
         return $data;
+    }
+
+    /**
+     * PDC Servers may use a Master Campaign or a name that exists only here.
+     * A missing Master Campaign is never created.
+     *
+     * @return array{campaign_id: int|null, campaign_name: string|null}
+     */
+    private function pdcCampaignFields(?string $name, mixed $id, ?int $ignoreGroupId = null): array
+    {
+        $name = trim((string) $name);
+        $master = null;
+        if ($name !== '') {
+            $master = ChannelAllocationCampaign::masterByName($name);
+        } elseif ((int) $id > 0) {
+            $master = ChannelAllocationCampaign::query()->listedInCampaigns()->find((int) $id);
+        }
+
+        if ($master) {
+            $this->assertPdcCampaignAvailable($master->name, $master->id, $ignoreGroupId);
+
+            return [
+                'campaign_id' => $master->id,
+                'campaign_name' => null,
+            ];
+        }
+
+        if ($name === '') {
+            throw ValidationException::withMessages([
+                'campaign' => 'Please select or type a campaign.',
+            ]);
+        }
+
+        $this->assertPdcCampaignAvailable($name, null, $ignoreGroupId);
+
+        return [
+            'campaign_id' => null,
+            'campaign_name' => $name,
+        ];
+    }
+
+    private function assertPdcCampaignAvailable(string $name, ?int $campaignId, ?int $ignoreGroupId): void
+    {
+        $taken = PdcGroup::query()
+            ->with('campaign')
+            ->when($ignoreGroupId, fn ($groups) => $groups->whereKeyNot($ignoreGroupId))
+            ->get()
+            ->contains(function (PdcGroup $group) use ($name, $campaignId) {
+                if ($campaignId && (int) $group->campaign_id === $campaignId) {
+                    return true;
+                }
+
+                return strcasecmp($group->campaignName(), $name) === 0;
+            });
+
+        if ($taken) {
+            throw ValidationException::withMessages([
+                'campaign' => 'Campaign already exists on PDC Servers.',
+            ]);
+        }
     }
 
     /**
@@ -441,9 +498,23 @@ class PdcServerController extends Controller
 
     private function applyGroupOrder($query): void
     {
-        NaturalSort::applyRelated($query, 'channel_allocation_campaigns', 'name', 'pdc_groups.campaign_id');
+        $grammar = $query->getQuery()->getGrammar();
+        $campaignNameSql = '(SELECT '.$grammar->wrap('channel_allocation_campaigns.name')
+            .' FROM '.$grammar->wrapTable('channel_allocation_campaigns')
+            .' WHERE '.$grammar->wrap('channel_allocation_campaigns.id')
+            .' = '.$grammar->wrap('pdc_groups.campaign_id').')';
+        if ($this->pdcGroupsHaveCampaignName()) {
+            NaturalSort::applyRaw($query, 'COALESCE('.$campaignNameSql.', '.$grammar->wrap('pdc_groups.campaign_name').')');
+        } else {
+            NaturalSort::applyRelated($query, 'channel_allocation_campaigns', 'name', 'pdc_groups.campaign_id');
+        }
         NaturalSort::apply($query, 'pdc_groups.location');
         $query->orderBy('pdc_groups.id');
+    }
+
+    private function pdcGroupsHaveCampaignName(): bool
+    {
+        return Schema::hasColumn((new PdcGroup)->getTable(), 'campaign_name');
     }
 
     /**

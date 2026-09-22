@@ -3,12 +3,15 @@
 namespace App\Services\Sip;
 
 use App\Models\SipChannel;
+use App\Models\SipChannelNumber;
 use App\Services\InventoryImportService;
 use App\Services\XlsxService;
+use App\Support\ImportRowValidationException;
 use App\Support\PdcEndorseDate;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 class SipChannelImportService
@@ -75,7 +78,13 @@ class SipChannelImportService
         $existingNames = SipChannel::query()->whereNotNull('etpi_sip_name')->pluck('etpi_sip_name')
             ->map(fn ($name) => mb_strtolower(trim((string) $name)))
             ->all();
+        $existingDigits = SipChannelNumber::query()->pluck('channel_number')
+            ->map(fn ($number) => SipChannel::numericKey((string) $number))
+            ->filter()
+            ->values()
+            ->all();
         $fileNames = [];
+        $fileDigits = [];
         $previewRows = [];
         $payload = [];
 
@@ -132,6 +141,14 @@ class SipChannelImportService
                 }
             }
 
+            $range = trim((string) $values['channel_range']);
+            if ($range !== '') {
+                $values['channel_range'] = $range;
+                foreach ($this->channelRangeErrors($range, $fileDigits, $existingDigits) as $message) {
+                    $errors[] = $message;
+                }
+            }
+
             $ok = $errors === [];
             $preview = [
                 'row' => $excelRow,
@@ -146,6 +163,7 @@ class SipChannelImportService
 
             if ($ok) {
                 $payload[] = [
+                    'row' => $excelRow,
                     'etpi_sip_name' => $etpiName,
                     'pilot_number' => $this->nullable($values['pilot_number']),
                     'channel_count' => $channelCount,
@@ -182,6 +200,7 @@ class SipChannelImportService
     public function commit(array $payload): int
     {
         $count = 0;
+        $this->revalidate($payload);
 
         DB::transaction(function () use ($payload, &$count) {
             foreach ($payload as $row) {
@@ -189,7 +208,7 @@ class SipChannelImportService
                     'etpi_sip_name' => $row['etpi_sip_name'],
                     'pilot_number' => $row['pilot_number'],
                     'channel_count' => $row['channel_count'],
-                    'channel_range' => $row['channel_range'],
+                    'channel_range' => $this->normalizedRange($row['channel_range'] ?? null),
                     'network' => $row['network'],
                     'date_activation' => $row['date_activation'],
                 ])->syncChannelNumbersFromRange();
@@ -198,6 +217,132 @@ class SipChannelImportService
         });
 
         return $count;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $payload
+     */
+    private function revalidate(array $payload): void
+    {
+        $rowErrors = [];
+        $existingNames = SipChannel::query()->whereNotNull('etpi_sip_name')->pluck('etpi_sip_name')
+            ->map(fn ($name) => mb_strtolower(trim((string) $name)))
+            ->all();
+        $existingDigits = SipChannelNumber::query()->pluck('channel_number')
+            ->map(fn ($number) => SipChannel::numericKey((string) $number))
+            ->filter()
+            ->all();
+        $fileNames = [];
+        $fileDigits = [];
+
+        foreach ($payload as $item) {
+            $row = (int) ($item['row'] ?? 0);
+            $messages = [];
+            $name = mb_strtolower(trim((string) ($item['etpi_sip_name'] ?? '')));
+            if ($name === '') {
+                $messages[] = 'SIP Name is required';
+            } elseif (isset($fileNames[$name]) || in_array($name, $existingNames, true)) {
+                $messages[] = 'SIP Name already exists';
+            } else {
+                $fileNames[$name] = $row;
+            }
+
+            $range = trim((string) ($item['channel_range'] ?? ''));
+            if ($range !== '') {
+                $messages = array_merge($messages, $this->channelRangeErrors($range, $fileDigits, $existingDigits));
+            }
+
+            if ($messages !== []) {
+                $rowErrors[$row] = array_values(array_unique($messages));
+            }
+        }
+
+        if ($rowErrors !== []) {
+            ksort($rowErrors);
+            throw new ImportRowValidationException($rowErrors);
+        }
+    }
+
+    /**
+     * @param  array<int, list<string>>  $rowErrors
+     * @return array{valid: bool, summary: array<string, int>, rows: list<array<string, mixed>>}
+     */
+    public function applyRowErrors(?string $token, array $rowErrors): array
+    {
+        $stored = $this->previewFromSession($token) ?? ['rows' => [], 'summary' => []];
+        $rows = [];
+        foreach ($stored['rows'] ?? [] as $row) {
+            $messages = $rowErrors[(int) ($row['row'] ?? 0)] ?? [];
+            if ($messages !== []) {
+                $row['valid'] = false;
+                $row['status'] = 'Error';
+                $row['error'] = implode('; ', array_values(array_unique(array_filter(
+                    array_merge($row['error'] !== '' ? [$row['error']] : [], $messages)
+                ))));
+            }
+            $rows[] = $row;
+        }
+
+        $errorCount = count(array_filter($rows, fn ($row) => ! ($row['valid'] ?? false)));
+        $summary = array_merge($stored['summary'] ?? [], [
+            'total' => count($rows),
+            'valid' => count($rows) - $errorCount,
+            'errors' => $errorCount,
+        ]);
+
+        session([self::SESSION_KEY => array_merge($stored, [
+            'valid' => false,
+            'summary' => $summary,
+            'rows' => $rows,
+            'payload' => [],
+        ])]);
+
+        return ['valid' => false, 'summary' => $summary, 'rows' => $rows];
+    }
+
+    /**
+     * @param  array<string, int>  $fileDigits
+     * @param  list<string>  $existingDigits
+     * @return list<string>
+     */
+    private function channelRangeErrors(string $range, array &$fileDigits, array $existingDigits): array
+    {
+        [$from, $to] = SipChannel::boundsFromRange($range);
+        if ($from === '' || $to === '') {
+            return ['Channel Range must include valid From and To values'];
+        }
+
+        try {
+            $numbers = SipChannel::expandRangeNumbers($from, $to);
+        } catch (ValidationException $exception) {
+            $messages = [];
+            foreach ($exception->errors() as $fieldMessages) {
+                foreach ((array) $fieldMessages as $message) {
+                    $messages[] = (string) $message;
+                }
+            }
+
+            return $messages !== [] ? $messages : ['Channel Range is invalid'];
+        }
+
+        $errors = [];
+        $conflicts = [];
+        foreach ($numbers as $number) {
+            $key = SipChannel::numericKey((string) $number);
+            if ($key === '') {
+                continue;
+            }
+            if (isset($fileDigits[$key]) || in_array($key, $existingDigits, true)) {
+                $conflicts[] = $number;
+            } else {
+                $fileDigits[$key] = 1;
+            }
+        }
+        if ($conflicts !== []) {
+            $errors[] = 'Channel number already exists: '.implode(', ', array_slice(array_values(array_unique($conflicts)), 0, 8));
+        }
+
+        return $errors;
     }
 
     /**
@@ -303,5 +448,17 @@ class SipChannelImportService
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    private function normalizedRange(mixed $range): ?string
+    {
+        $range = trim((string) $range);
+        if ($range === '') {
+            return null;
+        }
+
+        [$from, $to] = SipChannel::boundsFromRange($range);
+
+        return SipChannel::formatRangeFromBounds($from, $to);
     }
 }

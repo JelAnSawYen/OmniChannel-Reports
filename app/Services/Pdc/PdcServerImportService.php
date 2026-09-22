@@ -84,7 +84,6 @@ class PdcServerImportService
             }
         }
 
-        $campaigns = ChannelAllocationCampaign::keyedByName();
         $locations = $this->locationLookup();
         $existingIps = PdcServer::query()->whereNotNull('ip_address')->pluck('ip_address')
             ->map(fn ($ip) => strtolower(trim((string) $ip)))
@@ -130,13 +129,15 @@ class PdcServerImportService
             $locationName = null;
             $dateIso = null;
 
+            // PDC Servers may use a campaign that is not in Master Campaign.
+            // Existing master campaigns are linked; unknown names stay on the PDC group only.
             if ($values['campaign'] === '') {
                 $errors[] = 'Campaign is required';
+            } elseif (mb_strlen($values['campaign']) > 255) {
+                $errors[] = 'Campaign must be 255 characters or fewer';
             } else {
-                $campaign = $campaigns->get(mb_strtolower($values['campaign']));
-                if (! $campaign) {
-                    $errors[] = 'Campaign does not exist';
-                } else {
+                $campaign = ChannelAllocationCampaign::masterByName($values['campaign']);
+                if ($campaign) {
                     $campaignId = (int) $campaign->id;
                     $values['campaign'] = $campaign->name;
                 }
@@ -208,6 +209,7 @@ class PdcServerImportService
             if ($ok) {
                 $payload[] = [
                     'campaign_id' => $campaignId,
+                    'campaign_name' => $values['campaign'],
                     'location' => $locationName,
                     'location_cleared' => $rawValues['location'] === '-',
                     'date_endorse' => $dateIso,
@@ -257,7 +259,7 @@ class PdcServerImportService
 
         DB::transaction(function () use ($payload, &$count) {
             foreach ($payload as $row) {
-                $group = PdcGroup::query()->firstOrNew(['campaign_id' => $row['campaign_id']]);
+                $group = $this->groupForRow($row);
                 $isNew = ! $group->exists;
 
                 if ($row['location'] !== null) {
@@ -303,6 +305,42 @@ class PdcServerImportService
         });
 
         return $count;
+    }
+
+    /**
+     * Link to Master Campaign when the name already exists there. Otherwise keep
+     * the name on the PDC group only — never insert a Master Campaign record.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function groupForRow(array $row): PdcGroup
+    {
+        $campaignId = $row['campaign_id'] ? (int) $row['campaign_id'] : null;
+        $name = trim((string) ($row['campaign_name'] ?? ''));
+        if ($campaignId) {
+            $group = PdcGroup::query()->firstOrNew(['campaign_id' => $campaignId]);
+            $group->campaign_name = null;
+
+            return $group;
+        }
+
+        if ($name === '') {
+            throw new RuntimeException('Campaign is required.');
+        }
+
+        $group = PdcGroup::query()
+            ->whereNull('campaign_id')
+            ->whereRaw('LOWER(campaign_name) = ?', [mb_strtolower($name)])
+            ->first();
+
+        if ($group) {
+            return $group;
+        }
+
+        return new PdcGroup([
+            'campaign_id' => null,
+            'campaign_name' => $name,
+        ]);
     }
 
     /**

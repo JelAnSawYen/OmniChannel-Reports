@@ -36,9 +36,21 @@ class ChannelAllocationImportTest extends TestCase
         $path = $response->getFile()->getPathname();
         [$headers, $rows] = app(XlsxService::class)->read($path);
 
-        $this->assertContains('Campaign', $headers);
-        $this->assertContains('Channel', $headers);
-        $this->assertContains('Line Priority', $headers);
+        $this->assertSame([
+            'Campaign',
+            'Channel',
+            'Network',
+            'Line Priority',
+            'Channel Count',
+            'FTE',
+            'Caller ID',
+            'Prefix',
+            'Remarks',
+        ], $headers);
+        $this->assertSame(count($headers), count(array_unique($headers)));
+        $this->assertNotContains('Channel Type', $headers);
+        $this->assertNotContains('SIP Channel', $headers);
+        $this->assertNotContains('GSM Gateway', $headers);
         $this->assertNotContains('Channel Allocation', $headers);
         $this->assertNotContains('Media Gateway', $headers);
         $this->assertNotContains('Total Channel Allocated', $headers);
@@ -58,6 +70,7 @@ class ChannelAllocationImportTest extends TestCase
     {
         $this->actingAs($this->admin);
         $this->sip('CH-3', 'Globe SIM', 8);
+        ChannelAllocationCampaign::create(['name' => 'Broken']);
         $path = $this->makeSpreadsheet([
             ['Broken', '', '123', '100', '', '', '1'],
             ['Broken', '', '123', '100', '', 'UNKNOWN-CH', '1'],
@@ -75,7 +88,7 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertTrue($preview['rows'][2]['valid']);
         $this->assertSame('Globe SIM', $preview['rows'][2]['network']);
         $this->assertSame('8', $preview['rows'][2]['total_channel_allocated']);
-        $this->assertSame(0, ChannelAllocationCampaign::count());
+        $this->assertSame(1, ChannelAllocationCampaign::count());
         $this->assertSame(0, ChannelAllocation::count());
 
         $this->postJson('/channel-allocation/import/confirm', ['token' => $preview['token']])
@@ -89,6 +102,8 @@ class ChannelAllocationImportTest extends TestCase
         $this->sip('CH-A1', 'Globe SIM', 20);
         $this->sip('CH-A2', 'Smart SIM', 12);
         $this->sip('CH-B1', 'Eastern SIP', 8);
+        ChannelAllocationCampaign::create(['name' => 'Alpha Import']);
+        ChannelAllocationCampaign::create(['name' => 'Beta Import']);
         $path = $this->makeSpreadsheet([
             ['Alpha Import', '4', '555', '200', 'note', 'CH-A1', '1'],
             ['Alpha Import', '4', '555', '200', '', 'CH-A2', '2'],
@@ -103,7 +118,8 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertSame(0, $preview['summary']['errors']);
         $this->assertSame(2, $preview['summary']['campaigns']);
         $this->assertSame(3, $preview['summary']['allocations']);
-        $this->assertSame(0, ChannelAllocationCampaign::count());
+        $this->assertSame(2, ChannelAllocationCampaign::count());
+        $this->assertSame(0, ChannelAllocation::count());
 
         $this->postJson('/channel-allocation/import/confirm', ['token' => $preview['token']])
             ->assertOk()
@@ -146,11 +162,110 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertNotContains('Total Channel Allocated', $exportHeaders);
     }
 
+    public function test_preview_reports_every_field_error_on_every_invalid_row(): void
+    {
+        $this->actingAs($this->admin);
+        $this->sip('CH-OK', 'Globe SIM', 8);
+        $this->sip('CH-DUP', 'Smart SIM', 4);
+        ChannelAllocationCampaign::create(['name' => 'Mixed Campaign']);
+        $path = $this->makeSpreadsheet([
+            ['', '', str_repeat('c', 256), str_repeat('p', 101), '', '', 'ABC'],
+            ['Mixed Campaign', '2', '123', '100', '', 'CH-OK', '1'],
+            ['Mixed Campaign', '2', '123', '100', '', 'UNKNOWN-CH', '-2'],
+            ['Mixed Campaign', '2', '123', '100', '', 'CH-DUP', '3'],
+            ['Mixed Campaign', '2', '123', '100', '', 'CH-DUP', '4'],
+        ]);
+
+        $preview = $this->postJson('/channel-allocation/import/preview', [
+            'file' => $this->upload($path),
+        ])->assertOk()->json();
+
+        $this->assertFalse($preview['valid']);
+        $this->assertSame(5, $preview['summary']['total']);
+        $this->assertSame(3, $preview['summary']['errors']);
+
+        $first = $preview['rows'][0]['error'];
+        $this->assertStringContainsString('Campaign is required', $first);
+        $this->assertStringContainsString('Caller ID: ', $first);
+        $this->assertStringContainsString('Prefix: ', $first);
+        $this->assertStringContainsString('Line Priority: ', $first);
+        $this->assertStringContainsString('Channel is required', $first);
+
+        $this->assertTrue($preview['rows'][1]['valid']);
+        $this->assertStringContainsString('Channel must match an existing SIP Name or GSM Hostname', $preview['rows'][2]['error']);
+        $this->assertStringContainsString('Line Priority: ', $preview['rows'][2]['error']);
+        $this->assertTrue($preview['rows'][3]['valid']);
+        $this->assertStringContainsString('Channel: Duplicate Channel in file', $preview['rows'][4]['error']);
+
+        $this->postJson('/channel-allocation/import/confirm', ['token' => $preview['token']])->assertStatus(422);
+        $this->assertSame(0, ChannelAllocation::count());
+    }
+
+    public function test_line_priority_uses_the_same_message_as_the_add_form(): void
+    {
+        $this->actingAs($this->admin);
+        $this->sip('CH-LP', 'Globe SIM', 8);
+        $campaign = ChannelAllocationCampaign::create(['name' => 'Priority Campaign', 'listed_in_channel_allocation' => true]);
+
+        $formMessage = $this->from('/channel-allocation')
+            ->post('/channel-allocation/'.$campaign->id.'/allocations', [
+                'channel' => 'CH-LP',
+                'line_priority' => 'ABC',
+            ])
+            ->assertSessionHasErrors('line_priority')
+            ->getSession()
+            ->get('errors')
+            ->first('line_priority');
+
+        $preview = $this->postJson('/channel-allocation/import/preview', [
+            'file' => $this->upload($this->makeSpreadsheet([
+                ['Priority Campaign', '2', '', '', '', 'CH-LP', 'ABC'],
+            ])),
+        ])->assertOk()->json();
+
+        $this->assertFalse($preview['valid']);
+        $this->assertSame('Line Priority: '.$formMessage, $preview['rows'][0]['error']);
+    }
+
+    public function test_confirm_revalidates_and_returns_exact_row_errors_without_a_generic_message(): void
+    {
+        $this->actingAs($this->admin);
+        $sip = $this->sip('CH-GONE', 'Globe SIM', 8);
+        ChannelAllocationCampaign::create(['name' => 'Revalidated Campaign']);
+        $preview = $this->postJson('/channel-allocation/import/preview', [
+            'file' => $this->upload($this->makeSpreadsheet([
+                ['Revalidated Campaign', '2', '123', '100', '', 'CH-GONE', '1'],
+            ])),
+        ])->assertOk()->json();
+        $this->assertTrue($preview['valid']);
+
+        $sip->delete();
+
+        $confirm = $this->postJson('/channel-allocation/import/confirm', ['token' => $preview['token']])
+            ->assertStatus(422)
+            ->json();
+
+        $this->assertFalse($confirm['ok']);
+        $this->assertFalse($confirm['valid']);
+        $this->assertStringNotContainsString('contact an administrator', $confirm['message']);
+        $this->assertSame(1, $confirm['summary']['errors']);
+        $this->assertSame(2, $confirm['rows'][0]['row']);
+        $this->assertSame('Error', $confirm['rows'][0]['status']);
+        $this->assertStringContainsString(
+            'Channel must match an existing SIP Name or GSM Hostname',
+            $confirm['rows'][0]['error']
+        );
+        $this->assertSame(0, ChannelAllocation::count());
+        $this->assertSame(1, ChannelAllocationCampaign::where('name', 'Revalidated Campaign')->count());
+        $this->assertFalse((bool) ChannelAllocationCampaign::where('name', 'Revalidated Campaign')->value('listed_in_channel_allocation'));
+    }
+
     public function test_excel_shared_string_file_with_edited_values_is_parsed_and_previewed(): void
     {
         $this->actingAs($this->admin);
         $this->sip('CH-EDIT-1', 'Globe SIM', 15);
         $this->sip('CH-EDIT-2', 'Smart SIM', 9);
+        ChannelAllocationCampaign::create(['name' => 'Edited Campaign']);
         $path = $this->makeExcelSharedStringSpreadsheet([
             ['Campaign', 'FTE', 'Caller ID', 'Prefix', 'Remarks', 'Channel', 'Line Priority'],
             ['Edited Campaign', '5', '888', '400', 'edited', 'CH-EDIT-1', '1'],
@@ -172,13 +287,15 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertSame(0, $preview['summary']['errors']);
         $this->assertSame(1, $preview['summary']['campaigns']);
         $this->assertSame(2, $preview['summary']['allocations']);
-        $this->assertSame(0, ChannelAllocationCampaign::count());
+        $this->assertSame(1, ChannelAllocationCampaign::count());
+        $this->assertSame(0, ChannelAllocation::count());
     }
 
     public function test_excel_shared_string_file_with_errors_returns_preview_and_blocks_confirm(): void
     {
         $this->actingAs($this->admin);
         $this->sip('CH-2', 'Globe SIM', 8);
+        ChannelAllocationCampaign::create(['name' => 'Broken Edit']);
         $path = $this->makeExcelSharedStringSpreadsheet([
             ['Campaign', 'FTE', 'Caller ID', 'Prefix', 'Remarks', 'Channel', 'Line Priority'],
             ['Broken Edit', '2', '123', '100', '', '', '1'],
@@ -237,6 +354,7 @@ class ChannelAllocationImportTest extends TestCase
         $this->sip('CH-N2', 'TNT', 6);
         $this->sip('CH-N3', 'Custom Carrier X', 7);
         $this->sip('CH-N4', 'Custom Carrier X', 8);
+        ChannelAllocationCampaign::create(['name' => 'Net Import']);
         $path = $this->makeSpreadsheet([
             ['Net Import', '2', '111', '300', '', 'CH-N1', '1'],
             ['Net Import', '2', '111', '300', '', 'CH-N2', '2'],
@@ -276,6 +394,7 @@ class ChannelAllocationImportTest extends TestCase
         $this->gsm('GSM-HOST-1', 'Globe SIM', 12);
         $this->sip('SHARED-NAME', 'ETPI', 14);
         $this->gsm('SHARED-NAME', 'Globe SIM', 9);
+        ChannelAllocationCampaign::create(['name' => 'Gw Import']);
 
         $path = $this->makeSpreadsheet([
             ['Gw Import', '2', '111', '300', '', 'CH-G1', '1'],
@@ -343,6 +462,7 @@ class ChannelAllocationImportTest extends TestCase
         $this->sip('CH-P2', 'DITO SIM', 6);
         $this->sip('CH-P3', 'DITO SIM', 7);
         $this->sip('CH-P4', 'DITO SIM', 8);
+        ChannelAllocationCampaign::create(['name' => 'Prefix Import']);
         $path = $this->makeSpreadsheet([
             ['Prefix Import', '4', '111', '100', '', 'CH-P1', '1'],
             ['Prefix Import', '4', '111', '', '', 'CH-P2', '2'],
@@ -374,6 +494,7 @@ class ChannelAllocationImportTest extends TestCase
         $this->sip('CH-C2', 'DITO SIM', 6);
         $this->sip('CH-C3', 'DITO SIM', 7);
         $this->sip('CH-C4', 'DITO SIM', 8);
+        ChannelAllocationCampaign::create(['name' => 'Caller Import']);
         $path = $this->makeSpreadsheet([
             ['Caller Import', '4', '123456789, 987654321', '100', '', 'CH-C1', '1'],
             ['Caller Import', '4', '', '100', '', 'CH-C2', '2'],
@@ -405,6 +526,8 @@ class ChannelAllocationImportTest extends TestCase
         $this->sip('CH-D2', 'Globe SIM', 6);
         $this->sip('CH-D3', 'Smart SIM', 7);
         $this->sip('CH-D4', 'TNT', 8);
+        ChannelAllocationCampaign::create(['name' => 'Dash Import']);
+        ChannelAllocationCampaign::create(['name' => 'Dash Bad CH']);
         $path = $this->makeSpreadsheet([
             ['Dash Import', '4', '111', '100', '-', 'CH-D1', '1'],
             ['Dash Import', '-', '-', '-', '', 'CH-D2', '2'],
@@ -460,6 +583,7 @@ class ChannelAllocationImportTest extends TestCase
         $this->sip('CH-001', 'Globe SIM', 10);
         $this->sip('CH-002', 'Smart SIM', 11);
         $this->sip('CH-003', 'DITO SIM', 12);
+        ChannelAllocationCampaign::create(['name' => 'Campaign A']);
         $path = $this->makeSpreadsheet([
             ['Campaign A', '5', '123456789', '100', '', 'CH-001', '1'],
             ['', '', '', '', '', 'CH-002', '2'],
@@ -513,6 +637,45 @@ class ChannelAllocationImportTest extends TestCase
         ])->assertOk()->json();
         $this->assertFalse($duplicate['valid']);
         $this->assertStringContainsString('Channel already exists', $duplicate['rows'][0]['error']);
+    }
+
+    public function test_preview_rejects_campaign_missing_from_master_and_keeps_other_row_errors(): void
+    {
+        $this->actingAs($this->admin);
+        $this->sip('CH-OK', 'Globe SIM', 8);
+        ChannelAllocationCampaign::create(['name' => 'Campaign A']);
+        ChannelAllocationCampaign::create([
+            'name' => 'PDC Only',
+            'listed_in_campaigns' => false,
+        ]);
+
+        $preview = $this->postJson('/channel-allocation/import/preview', [
+            'file' => $this->upload($this->makeSpreadsheet([
+                ['TEST-CAMPAIGN', '2', str_repeat('c', 256), '100', '', 'UNKNOWN-CH', 'ABC'],
+                ['PDC Only', '2', '123', '100', '', 'CH-OK', '1'],
+                ['Campaign A', '2', '123', '100', '', 'CH-OK', '1'],
+            ])),
+        ])->assertOk()->json();
+
+        $this->assertFalse($preview['valid']);
+        $this->assertTrue($preview['rows'][2]['valid']);
+        $this->assertStringContainsString(
+            'Campaign does not exist in Master Campaign. Create the campaign in Master Campaign before adding a Channel Allocation.',
+            $preview['rows'][0]['error']
+        );
+        $this->assertStringContainsString('Caller ID: ', $preview['rows'][0]['error']);
+        $this->assertStringContainsString('Line Priority: ', $preview['rows'][0]['error']);
+        $this->assertStringContainsString('Channel must match an existing SIP Name or GSM Hostname', $preview['rows'][0]['error']);
+        $this->assertStringContainsString(
+            'Campaign does not exist in Master Campaign. Create the campaign in Master Campaign before adding a Channel Allocation.',
+            $preview['rows'][1]['error']
+        );
+
+        $this->postJson('/channel-allocation/import/confirm', ['token' => $preview['token']])->assertStatus(422);
+        $this->assertSame(0, ChannelAllocation::count());
+        $this->assertDatabaseMissing('channel_allocation_campaigns', ['name' => 'TEST-CAMPAIGN']);
+        $this->assertFalse((bool) ChannelAllocationCampaign::where('name', 'PDC Only')->value('listed_in_campaigns'));
+        $this->get('/campaigns')->assertOk()->assertDontSee('TEST-CAMPAIGN')->assertDontSee('PDC Only');
     }
 
     private function sip(string $name, string $network = 'Globe SIM', int $count = 10): SipChannel

@@ -143,10 +143,78 @@ class PdcServersPageTest extends TestCase
             'campaign' => 'Typed PDC Campaign',
             'location' => 'WFH',
         ])->assertRedirect();
-        $this->assertDatabaseHas('channel_allocation_campaigns', ['name' => 'Typed PDC Campaign']);
-        $this->assertTrue(
-            PdcGroup::query()->whereHas('campaign', fn ($campaigns) => $campaigns->where('name', 'Typed PDC Campaign'))->exists()
-        );
+        $this->assertDatabaseMissing('channel_allocation_campaigns', ['name' => 'Typed PDC Campaign']);
+        $this->assertDatabaseHas('pdc_groups', [
+            'campaign_id' => null,
+            'campaign_name' => 'Typed PDC Campaign',
+        ]);
+        $this->get('/campaigns')->assertOk()->assertDontSee('Typed PDC Campaign');
+    }
+
+    public function test_typed_campaign_is_reused_and_never_duplicated_on_add_or_edit(): void
+    {
+        $this->actingAs($this->admin);
+        ChannelAllocationCampaign::create(['name' => 'BPI Collection']);
+
+        $this->post('/pdc-servers', [
+            'campaign' => 'bpi collection',
+            'location' => 'Estancia',
+        ])->assertRedirect();
+        $this->assertSame(1, ChannelAllocationCampaign::where('name', 'BPI Collection')->count());
+        $this->assertSame(1, ChannelAllocationCampaign::count());
+
+        $this->post('/pdc-servers', [
+            'campaign' => 'Brand New PDC Campaign',
+            'location' => 'WFH',
+        ])->assertRedirect();
+        $this->assertDatabaseMissing('channel_allocation_campaigns', ['name' => 'Brand New PDC Campaign']);
+        $this->assertSame(1, ChannelAllocationCampaign::count());
+        $group = PdcGroup::where('campaign_name', 'Brand New PDC Campaign')->firstOrFail();
+        $this->assertNull($group->campaign_id);
+
+        $this->put('/pdc-servers/'.$group->id, [
+            'campaign' => 'Brand New PDC Campaign',
+            'location' => 'PDC',
+        ])->assertRedirect();
+        $this->assertSame(1, ChannelAllocationCampaign::count());
+        $this->assertSame('Brand New PDC Campaign', $group->fresh()->campaign_name);
+        $this->assertNull($group->fresh()->campaign_id);
+
+        $this->get('/pdc-servers')->assertOk()->assertSee('Brand New PDC Campaign');
+        $this->get('/campaigns')->assertOk()->assertDontSee('Brand New PDC Campaign');
+        $this->get('/campaigns')->assertOk()->assertSee('BPI Collection');
+    }
+
+    public function test_export_lists_each_campaign_once_with_its_servers_underneath(): void
+    {
+        $this->actingAs($this->admin);
+        $this->post('/pdc-servers', [
+            'campaign' => 'PDC Only Campaign',
+            'location' => 'Estancia',
+            'date_endorse' => '9/3/2026',
+            'dns' => 'pdc-only.example.com',
+        ])->assertRedirect();
+        $this->assertDatabaseMissing('channel_allocation_campaigns', ['name' => 'PDC Only Campaign']);
+        $group = PdcGroup::query()->firstOrFail();
+
+        foreach ([['pdc-one', '10.24.28.91'], ['pdc-two', '10.24.28.92']] as [$hostname, $ip]) {
+            $this->post('/pdc-servers/'.$group->id.'/servers', [
+                'hostname' => $hostname,
+                'ip_address' => $ip,
+            ])->assertRedirect();
+        }
+
+        $export = $this->get('/pdc-servers/export')->assertOk()->assertDownload('pdc-servers.xlsx');
+        [$headers, $rows] = app(XlsxService::class)->read($export->getFile()->getPathname());
+
+        $this->assertSame('Campaign', $headers[0]);
+        $this->assertCount(2, $rows);
+        $this->assertSame('PDC Only Campaign', trim((string) $rows[0][0]));
+        $this->assertSame('Estancia', trim((string) $rows[0][1]));
+        $this->assertSame('pdc-one', trim((string) $rows[0][4]));
+        $this->assertSame('', trim((string) $rows[1][0]));
+        $this->assertSame('', trim((string) $rows[1][1]));
+        $this->assertSame('pdc-two', trim((string) $rows[1][4]));
     }
 
     public function test_add_defaults_pdc_but_saves_the_selected_site(): void
@@ -590,8 +658,16 @@ class PdcServersPageTest extends TestCase
             ['Unknown Campaign', 'Estancia', '9/3/2026', 'dns', 'pdc-x', '10.24.28.70', '', '', '', '', '', '', ''],
         ]);
         $missing = $this->postJson('/pdc-servers/import/preview', ['file' => $this->upload($missingCampaign)])->assertOk()->json();
-        $this->assertFalse($missing['valid']);
-        $this->assertStringContainsString('Campaign does not exist', $missing['rows'][0]['error']);
+        $this->assertTrue($missing['valid'], $missing['rows'][0]['error'] ?? '');
+        $this->postJson('/pdc-servers/import/confirm', ['token' => $missing['token']])
+            ->assertOk()
+            ->assertJson(['ok' => true]);
+        $this->assertDatabaseMissing('channel_allocation_campaigns', ['name' => 'Unknown Campaign']);
+        $this->assertDatabaseHas('pdc_groups', [
+            'campaign_id' => null,
+            'campaign_name' => 'Unknown Campaign',
+        ]);
+        $this->get('/campaigns')->assertOk()->assertDontSee('Unknown Campaign');
 
         $badLocation = $this->spreadsheet([
             ['Campaign', 'Location', 'Date Endorse', 'DNS', 'Hostname', 'Source IP', 'OS', 'RAM', 'CPU', 'Storage', 'Admin Username', 'Password', 'SQL DB Password'],

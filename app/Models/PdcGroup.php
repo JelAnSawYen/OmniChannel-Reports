@@ -11,6 +11,7 @@ class PdcGroup extends Model
 {
     protected $fillable = [
         'campaign_id',
+        'campaign_name',
         'location',
         'date_endorse',
         'dns',
@@ -26,6 +27,20 @@ class PdcGroup extends Model
     public function campaign(): BelongsTo
     {
         return $this->belongsTo(ChannelAllocationCampaign::class, 'campaign_id');
+    }
+
+    /**
+     * Name shown on PDC Servers. Master Campaign is used when this group is
+     * linked; otherwise the name lives only on the PDC group.
+     */
+    public function campaignName(): string
+    {
+        $linked = trim((string) ($this->campaign?->name ?? ''));
+        if ($linked !== '') {
+            return $linked;
+        }
+
+        return trim((string) ($this->campaign_name ?? ''));
     }
 
     public function servers(): HasMany

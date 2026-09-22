@@ -14,6 +14,7 @@ use App\Support\OperationCatalog;
 use App\Support\PublicError;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -31,7 +32,7 @@ class CampaignController extends Controller
             $perPage = 10;
         }
 
-        $query = ChannelAllocationCampaign::query();
+        $query = ChannelAllocationCampaign::query()->listedInCampaigns();
         NaturalSort::apply($query, 'name');
         if ($search !== '') {
             $query->where(function ($campaigns) use ($search) {
@@ -54,7 +55,18 @@ class CampaignController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validateRecord($request);
+        $existing = ChannelAllocationCampaign::query()
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($data['name'])])
+            ->first();
+        if ($existing && ! $existing->isListedInCampaigns()) {
+            $existing->update(array_merge($data, ['listed_in_campaigns' => true]));
+            AuditLogger::log('Created', 'Campaigns', 'Campaign added', $existing->id, $request);
+
+            return back()->with('success', 'Campaign added successfully.');
+        }
+
         $data['sort_order'] = (int) ChannelAllocationCampaign::query()->max('sort_order') + 1;
+        $data['listed_in_campaigns'] = true;
         $record = ChannelAllocationCampaign::query()->create($data);
         AuditLogger::log('Created', 'Campaigns', 'Campaign added', $record->id, $request);
 
@@ -63,6 +75,7 @@ class CampaignController extends Controller
 
     public function update(Request $request, ChannelAllocationCampaign $campaign): RedirectResponse
     {
+        abort_unless($campaign->isListedInCampaigns(), 404);
         $data = $this->validateRecord($request, $campaign->id);
         $campaign->update($data);
         AuditLogger::log('Updated', 'Campaigns', 'Campaign updated', $campaign->id, $request);
@@ -72,6 +85,7 @@ class CampaignController extends Controller
 
     public function destroy(Request $request, ChannelAllocationCampaign $campaign): RedirectResponse
     {
+        abort_unless($campaign->isListedInCampaigns(), 404);
         $id = $campaign->id;
         $campaign->delete();
         AuditLogger::log('Deleted', 'Campaigns', 'Campaign deleted', $id, $request);
@@ -82,7 +96,7 @@ class CampaignController extends Controller
     public function bulkDestroy(Request $request): RedirectResponse
     {
         foreach ($this->validatedBulkIds($request) as $id) {
-            $campaign = ChannelAllocationCampaign::query()->find($id);
+            $campaign = ChannelAllocationCampaign::query()->listedInCampaigns()->find($id);
             if (! $campaign) {
                 continue;
             }
@@ -96,7 +110,7 @@ class CampaignController extends Controller
     public function export(Request $request, XlsxService $xlsx): BinaryFileResponse|RedirectResponse
     {
         $search = trim((string) $request->query('search'));
-        $query = ChannelAllocationCampaign::query();
+        $query = ChannelAllocationCampaign::query()->listedInCampaigns();
         NaturalSort::apply($query, 'name');
         if ($search !== '') {
             $query->where(function ($campaigns) use ($search) {
@@ -134,8 +148,13 @@ class CampaignController extends Controller
      */
     private function validateRecord(Request $request, ?int $id = null): array
     {
+        $unique = Rule::unique('channel_allocation_campaigns', 'name')->ignore($id);
+        if (Schema::hasColumn((new ChannelAllocationCampaign)->getTable(), 'listed_in_campaigns')) {
+            $unique = $unique->where('listed_in_campaigns', true);
+        }
+
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('channel_allocation_campaigns', 'name')->ignore($id)],
+            'name' => ['required', 'string', 'max:255', $unique],
             'fte' => ['required', 'integer', 'min:0'],
             'location' => ['required', 'string', Rule::in(OperationCatalog::locationNames())],
         ]);

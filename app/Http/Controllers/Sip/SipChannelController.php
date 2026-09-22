@@ -9,6 +9,7 @@ use App\Models\SipChannel;
 use App\Services\Logs\AuditLogger;
 use App\Services\Sip\SipChannelImportService;
 use App\Services\XlsxService;
+use App\Support\ImportRowValidationException;
 use App\Support\NaturalSort;
 use App\Support\PdcEndorseDate;
 use App\Support\PublicError;
@@ -186,9 +187,7 @@ class SipChannelController extends Controller
         } catch (\Throwable $exception) {
             return response()->json([
                 'ok' => false,
-                'message' => $exception instanceof \RuntimeException
-                    ? $exception->getMessage()
-                    : PublicError::failed('Preview', $exception),
+                'message' => PublicError::validationOrFailed('Preview', $exception),
             ], 422);
         }
 
@@ -217,10 +216,17 @@ class SipChannelController extends Controller
 
         try {
             $count = $import->commit($stored['payload']);
+        } catch (ImportRowValidationException $exception) {
+            $preview = $import->applyRowErrors((string) $request->input('token'), $exception->rowErrors());
+
+            return response()->json(array_merge([
+                'ok' => false,
+                'message' => 'There are errors in some rows. Please review the details below and fix them in your file.',
+            ], $preview), 422);
         } catch (\Throwable $exception) {
             return response()->json([
                 'ok' => false,
-                'message' => PublicError::failed('Import', $exception),
+                'message' => PublicError::validationOrFailed('Import', $exception),
             ], 422);
         }
 

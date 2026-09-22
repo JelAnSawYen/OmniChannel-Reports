@@ -825,7 +825,11 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const data = await readJsonResponse(response);
             if (!response.ok || !data.ok) {
-                importConfirmButton.disabled = false;
+                if (Array.isArray(data.rows)) {
+                    renderImportPreview(data);
+                } else {
+                    importConfirmButton.disabled = false;
+                }
                 const banner = document.getElementById('importErrorBanner');
                 if (banner) {
                     banner.hidden = false;

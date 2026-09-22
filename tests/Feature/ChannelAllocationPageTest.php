@@ -215,13 +215,14 @@ class ChannelAllocationPageTest extends TestCase
             'campaign_id' => $beta->id,
             'media_gateway' => '10.0.0.2',
         ])->assertRedirect();
-        $this->post('/channel-allocation', [
+        $this->from('/channel-allocation')->post('/channel-allocation', [
             'campaign' => 'Typed CA Campaign',
             'caller_id' => '999',
-        ])->assertRedirect();
-        $this->assertDatabaseHas('channel_allocation_campaigns', [
+        ])->assertRedirect('/channel-allocation')->assertSessionHasErrors([
+            'campaign' => 'Campaign does not exist in Master Campaign. Create the campaign in Master Campaign before adding a Channel Allocation.',
+        ]);
+        $this->assertDatabaseMissing('channel_allocation_campaigns', [
             'name' => 'Typed CA Campaign',
-            'caller_id' => '999',
         ]);
         $this->post('/channel-allocation/'.$alpha->id.'/allocations', [
             'channel_type' => 'sip',
@@ -250,6 +251,20 @@ class ChannelAllocationPageTest extends TestCase
             'prefix' => '100',
             'remarks' => 'Updated',
         ])->assertRedirect();
+
+        $this->from('/channel-allocation')->put('/channel-allocation/'.$alpha->id, [
+            'campaign' => 'TEST-CAMPAIGN',
+            'caller_id' => '123',
+            'prefix' => '100',
+            'remarks' => 'Updated',
+        ])->assertRedirect('/channel-allocation')->assertSessionHasErrors([
+            'campaign' => 'Campaign does not exist in Master Campaign. Create the campaign in Master Campaign before adding a Channel Allocation.',
+        ]);
+        $this->assertDatabaseHas('channel_allocation_campaigns', [
+            'id' => $alpha->id,
+            'name' => 'Alpha Campaign',
+        ]);
+        $this->assertDatabaseMissing('channel_allocation_campaigns', ['name' => 'TEST-CAMPAIGN']);
 
         $this->assertDatabaseHas('channel_allocation_campaigns', [
             'id' => $alpha->id,
@@ -517,6 +532,27 @@ class ChannelAllocationPageTest extends TestCase
         $this->assertDatabaseHas('sip_channels', ['id' => $sip->id, 'etpi_sip_name' => 'SIP_MASTER_KEEP']);
         $this->assertDatabaseMissing('channel_allocations', ['campaign_id' => $campaign->id]);
         $this->get('/campaigns')->assertOk()->assertSee('Master Keep');
+    }
+
+    public function test_pdc_created_campaign_is_not_usable_in_channel_allocation(): void
+    {
+        $this->actingAs($this->admin);
+        $this->post('/pdc-servers', [
+            'campaign' => 'PDC Only Campaign',
+            'location' => 'Estancia',
+        ])->assertRedirect();
+        $this->assertDatabaseMissing('channel_allocation_campaigns', ['name' => 'PDC Only Campaign']);
+
+        $html = $this->get('/channel-allocation')->assertOk()->getContent();
+        $this->assertStringNotContainsString('>PDC Only Campaign</button>', $html);
+
+        $this->from('/channel-allocation')->post('/channel-allocation', [
+            'campaign' => 'PDC Only Campaign',
+        ])->assertRedirect('/channel-allocation')->assertSessionHasErrors([
+            'campaign' => 'Campaign does not exist in Master Campaign. Create the campaign in Master Campaign before adding a Channel Allocation.',
+        ]);
+        $this->assertDatabaseMissing('channel_allocation_campaigns', ['name' => 'PDC Only Campaign']);
+        $this->get('/campaigns')->assertOk()->assertDontSee('PDC Only Campaign');
     }
 
     private function createSipChannel(string $name, string $network, int $count): SipChannel

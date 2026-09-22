@@ -4,8 +4,9 @@ namespace App\Services\ChannelAllocation;
 
 use App\Models\ChannelAllocationCampaign;
 use App\Support\ChannelAllocationResolver;
+use App\Support\ChannelAllocationRules;
+use App\Support\ImportRowValidationException;
 use App\Services\XlsxService;
-use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -22,12 +23,14 @@ class ChannelAllocationImportService
     {
         return [
             'Campaign',
+            'Channel',
+            'Network',
+            'Line Priority',
+            'Channel Count',
             'FTE',
             'Caller ID',
             'Prefix',
             'Remarks',
-            'Channel',
-            'Line Priority',
         ];
     }
 
@@ -92,24 +95,29 @@ class ChannelAllocationImportService
                 $remarks = $carryRemarks;
             }
 
-            $errors = [];
-            if ($campaignName === '') {
-                $errors[] = 'Campaign is required';
-            } elseif (mb_strlen($campaignName) > 255) {
-                $errors[] = 'Campaign must be 255 characters or fewer';
-            }
+            $normalizedPriority = $this->normalizeInteger($linePriority);
+            $ruleErrors = $this->ruleErrors([
+                'campaign' => $campaignName,
+                'caller_id' => $callerId,
+                'prefix' => $prefix,
+                'remarks' => $remarks,
+                'line_priority' => $normalizedPriority === '' ? null : $normalizedPriority,
+            ]);
+            $errors = array_merge(...array_values($ruleErrors ?: [[]]));
 
-            $linePriorityValue = $this->parseInteger($linePriority, 'Line Priority', false, $errors);
+            $linePriorityValue = $normalizedPriority === '' || isset($ruleErrors['line_priority'])
+                ? null
+                : (int) $normalizedPriority;
             $resolved = ChannelAllocationResolver::resolve($channel);
             if (! ($resolved['ok'] ?? false)) {
-                $errors[] = $resolved['error'] ?? 'Channel is invalid';
+                $errors[] = $this->fieldError('channel', $resolved['error'] ?? 'Channel is invalid');
             }
 
             $campaignKey = mb_strtolower($campaignName);
             $allocationKey = $campaignKey.'|'.mb_strtolower($channel);
             if ($campaignName !== '' && $channel !== '' && $channel !== '-') {
                 if (isset($fileAllocations[$allocationKey])) {
-                    $errors[] = 'Duplicate Channel in file';
+                    $errors[] = $this->fieldError('channel', 'Duplicate Channel in file');
                 } else {
                     $fileAllocations[$allocationKey] = $excelRow;
                 }
@@ -118,7 +126,7 @@ class ChannelAllocationImportService
                 if ($existing && $existing->allocations->contains(function ($allocation) use ($channel) {
                     return strcasecmp($allocation->channelLabel(), $channel) === 0;
                 })) {
-                    $errors[] = 'Channel already exists';
+                    $errors[] = $this->fieldError('channel', 'Channel already exists');
                 }
             }
 
@@ -165,6 +173,7 @@ class ChannelAllocationImportService
                     }
                 }
                 $payloadCampaigns[$campaignKey]['allocations'][] = [
+                    'row' => $excelRow,
                     'media_gateway' => $resolved['media_gateway'],
                     'channel_allocation' => $resolved['channel'],
                     'network' => $resolved['network'],
@@ -212,33 +221,34 @@ class ChannelAllocationImportService
         $campaignCount = 0;
         $allocationCount = 0;
 
+        $this->revalidate($payload);
+
         DB::transaction(function () use ($payload, &$campaignCount, &$allocationCount) {
             foreach ($payload as $item) {
                 $campaign = ChannelAllocationCampaign::query()
+                    ->listedInCampaigns()
                     ->whereRaw('LOWER(name) = ?', [mb_strtolower((string) $item['name'])])
                     ->lockForUpdate()
                     ->first();
 
                 if (! $campaign) {
-                    try {
-                        $campaign = ChannelAllocationCampaign::query()->create([
-                            'name' => $item['name'],
-                            'caller_id' => $item['caller_id'],
-                            'prefix' => $item['prefix'],
-                            'remarks' => $item['remarks'],
-                            'total_channels_allocated' => 0,
-                            'sort_order' => (int) ChannelAllocationCampaign::query()->max('sort_order') + 1,
-                            'listed_in_channel_allocation' => true,
-                        ]);
-                        $campaignCount++;
-                    } catch (UniqueConstraintViolationException) {
-                        $campaign = ChannelAllocationCampaign::query()
-                            ->whereRaw('LOWER(name) = ?', [mb_strtolower((string) $item['name'])])
-                            ->lockForUpdate()
-                            ->firstOrFail();
+                    $rowErrors = [];
+                    foreach ($item['allocations'] as $allocation) {
+                        $row = (int) ($allocation['row'] ?? 0);
+                        $rowErrors[$row][] = $this->fieldError('campaign', ChannelAllocationRules::CAMPAIGN_NOT_IN_MASTER);
                     }
+                    throw new ImportRowValidationException($rowErrors);
                 }
 
+                $wasListed = (bool) $campaign->listed_in_channel_allocation;
+                if (! $wasListed) {
+                    $campaign->update([
+                        'caller_id' => $item['caller_id'],
+                        'prefix' => $item['prefix'],
+                        'remarks' => $item['remarks'],
+                    ]);
+                    $campaignCount++;
+                }
                 $campaign->markListedInChannelAllocation();
 
                 $sort = (int) $campaign->allocations()->max('sort_order');
@@ -260,6 +270,100 @@ class ChannelAllocationImportService
         });
 
         return ['campaigns' => $campaignCount, 'allocations' => $allocationCount];
+    }
+
+    /**
+     * Re-run the row rules on the server before writing, so data that changed
+     * between Preview and Confirm cannot slip through.
+     *
+     * @param  list<array<string, mixed>>  $payload
+     */
+    private function revalidate(array $payload): void
+    {
+        $rowErrors = [];
+
+        foreach ($payload as $item) {
+            $campaignName = (string) ($item['name'] ?? '');
+            $campaign = ChannelAllocationCampaign::query()
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower($campaignName)])
+                ->with('allocations')
+                ->first();
+            $taken = $campaign
+                ? $campaign->allocations->map(fn ($allocation) => mb_strtolower((string) $allocation->channelLabel()))->all()
+                : [];
+
+            foreach ($item['allocations'] as $allocation) {
+                $row = (int) ($allocation['row'] ?? 0);
+                $channel = (string) ($allocation['channel_allocation'] ?? '');
+                $messages = $this->ruleErrors([
+                    'campaign' => $campaignName,
+                    'caller_id' => $item['caller_id'],
+                    'prefix' => $item['prefix'],
+                    'remarks' => $item['remarks'],
+                    'line_priority' => $allocation['line_priority'],
+                ]);
+                $messages = array_merge(...array_values($messages ?: [[]]));
+
+                $resolved = ChannelAllocationResolver::resolve($channel);
+                if (! ($resolved['ok'] ?? false)) {
+                    $messages[] = $this->fieldError('channel', $resolved['error'] ?? 'Channel is invalid');
+                } elseif (in_array(mb_strtolower($channel), $taken, true)) {
+                    $messages[] = $this->fieldError('channel', 'Channel already exists');
+                }
+
+                if ($messages !== []) {
+                    $rowErrors[$row] = array_values(array_unique(array_merge($rowErrors[$row] ?? [], $messages)));
+
+                    continue;
+                }
+
+                $taken[] = mb_strtolower($channel);
+            }
+        }
+
+        if ($rowErrors !== []) {
+            ksort($rowErrors);
+            throw new ImportRowValidationException($rowErrors);
+        }
+    }
+
+    /**
+     * Flag the stored preview rows with the exact messages found during Confirm.
+     *
+     * @param  array<int, list<string>>  $rowErrors
+     * @return array{valid: bool, summary: array<string, int>, rows: list<array<string, mixed>>}
+     */
+    public function applyRowErrors(?string $token, array $rowErrors): array
+    {
+        $stored = $this->previewFromSession($token) ?? ['rows' => [], 'summary' => []];
+        $rows = [];
+        foreach ($stored['rows'] ?? [] as $row) {
+            $messages = $rowErrors[(int) ($row['row'] ?? 0)] ?? [];
+            if ($messages !== []) {
+                $row['valid'] = false;
+                $row['status'] = 'Error';
+                $row['error'] = implode('; ', array_values(array_unique(array_filter(
+                    array_merge($row['error'] !== '' ? [$row['error']] : [], $messages)
+                ))));
+            }
+            $rows[] = $row;
+        }
+
+        $errorCount = count(array_filter($rows, fn ($row) => ! ($row['valid'] ?? false)));
+        $summary = array_merge($stored['summary'] ?? [], [
+            'total' => count($rows),
+            'valid' => count($rows) - $errorCount,
+            'errors' => $errorCount,
+        ]);
+
+        session([self::SESSION_KEY => array_merge($stored, [
+            'valid' => false,
+            'summary' => $summary,
+            'rows' => $rows,
+            'payload' => [],
+        ])]);
+
+        return ['valid' => false, 'summary' => $summary, 'rows' => $rows];
     }
 
     public function storePreview(array $preview): string
@@ -357,35 +461,56 @@ class ChannelAllocationImportService
     }
 
     /**
-     * @param  list<string>  $errors
+     * Validate a row with the same rules the Add / Edit forms use.
+     *
+     * @param  array<string, mixed>  $values
+     * @return array<string, list<string>>
      */
-    private function parseInteger(string $value, string $label, bool $required, array &$errors): ?int
+    private function ruleErrors(array $values): array
     {
-        if ($value === '') {
-            if ($required) {
-                $errors[] = $label.' is required';
+        $validator = validator(
+            $values,
+            ChannelAllocationRules::importRow(),
+            ChannelAllocationRules::importMessages()
+        );
+
+        $errors = [];
+        foreach ($validator->errors()->messages() as $field => $messages) {
+            foreach ((array) $messages as $message) {
+                $errors[$field][] = $this->fieldError($field, (string) $message);
             }
-
-            return null;
         }
 
+        $name = trim((string) ($values['campaign'] ?? ''));
+        if ($name !== '' && empty($errors['campaign']) && ChannelAllocationCampaign::masterByName($name) === null) {
+            $errors['campaign'][] = $this->fieldError('campaign', ChannelAllocationRules::CAMPAIGN_NOT_IN_MASTER);
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Name the column the problem belongs to without repeating it when the
+     * message already starts with that label.
+     */
+    private function fieldError(string $field, string $message): string
+    {
+        $label = ChannelAllocationRules::label($field);
+        $message = trim($message);
+        if (stripos($message, $label) === 0) {
+            return $message;
+        }
+
+        return $label.': '.$message;
+    }
+
+    private function normalizeInteger(string $value): string
+    {
+        $value = trim($value);
         if (preg_match('/^-?\d+\.0+$/', $value)) {
-            $value = (string) (int) $value;
+            return (string) (int) $value;
         }
 
-        if (! preg_match('/^-?\d+$/', $value)) {
-            $errors[] = $label.' must be a whole number';
-
-            return null;
-        }
-
-        $number = (int) $value;
-        if ($number < 0) {
-            $errors[] = $label.' must be 0 or greater';
-
-            return null;
-        }
-
-        return $number;
+        return $value;
     }
 }

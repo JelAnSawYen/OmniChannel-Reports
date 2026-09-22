@@ -53,7 +53,7 @@
 @forelse($groups as $group)
 @php
     $serverCount = $group->servers->count();
-    $campaignName = $group->campaign?->name ?: '—';
+    $campaignName = $group->campaignName() !== '' ? $group->campaignName() : '—';
     $dateDisplay = $group->date_endorse ? \App\Support\PdcEndorseDate::display($group->date_endorse->format('Y-m-d')) : '—';
     $dnsLines = preg_split('/\s*[,;\r\n]+\s*/', trim((string) $group->dns)) ?: [];
     $dnsLines = array_values(array_filter($dnsLines, fn ($line) => $line !== ''));

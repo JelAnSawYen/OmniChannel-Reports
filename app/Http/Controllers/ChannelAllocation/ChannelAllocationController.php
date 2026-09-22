@@ -12,6 +12,8 @@ use App\Services\ChannelAllocation\ChannelAllocationImportService;
 use App\Services\Logs\AuditLogger;
 use App\Services\XlsxService;
 use App\Support\ChannelAllocationResolver;
+use App\Support\ChannelAllocationRules;
+use App\Support\ImportRowValidationException;
 use App\Support\NaturalSort;
 use App\Support\PublicError;
 use Illuminate\Http\RedirectResponse;
@@ -56,7 +58,7 @@ class ChannelAllocationController extends Controller
         }
 
         $campaigns = $query->paginate($perPage)->withQueryString();
-        $masterCampaigns = ChannelAllocationCampaign::optionsForDropdown();
+        $masterCampaigns = ChannelAllocationCampaign::masterOptionsForDropdown();
         $sipChannelQuery = SipChannel::query()
             ->whereNotNull('etpi_sip_name')
             ->where('etpi_sip_name', '!=', '');
@@ -96,9 +98,15 @@ class ChannelAllocationController extends Controller
     {
         $data = $request->validate($this->campaignRules(true));
         $allocation = $this->optionalAllocation($request);
-        $campaignRecord = ChannelAllocationCampaign::fromFormValue($data['campaign'] ?? null, $data['campaign_id'] ?? null);
+        $name = trim((string) ($data['campaign'] ?? ''));
+        $id = (int) ($data['campaign_id'] ?? 0);
+        $campaignRecord = $this->masterCampaign($name, $id);
         if ($campaignRecord === null) {
-            return back()->withErrors(['campaign' => 'Please select or type a campaign.'])->withInput();
+            return back()->withErrors([
+                'campaign' => $name !== '' || $id > 0
+                    ? ChannelAllocationRules::CAMPAIGN_NOT_IN_MASTER
+                    : 'Please select a campaign.',
+            ])->withInput();
         }
         unset($data['campaign'], $data['campaign_id']);
 
@@ -139,16 +147,21 @@ class ChannelAllocationController extends Controller
         $data = $request->validate(array_merge($this->campaignRules(), [
             'campaign' => ['nullable', 'string', 'max:255', Rule::unique('channel_allocation_campaigns', 'name')->ignore($campaign->id)],
         ]));
+        $name = trim((string) ($data['campaign'] ?? ''));
+        if ($name !== '' && ChannelAllocationCampaign::masterByName($name) === null) {
+            return back()->withErrors([
+                'campaign' => ChannelAllocationRules::CAMPAIGN_NOT_IN_MASTER,
+            ])->withInput();
+        }
 
         try {
-            DB::transaction(function () use ($campaign, $data) {
+            DB::transaction(function () use ($campaign, $data, $name) {
                 $locked = ChannelAllocationCampaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
                 $payload = [
                     'caller_id' => $data['caller_id'] ?? null,
                     'prefix' => $data['prefix'] ?? null,
                     'remarks' => $data['remarks'] ?? null,
                 ];
-                $name = trim((string) ($data['campaign'] ?? ''));
                 if ($name !== '') {
                     $payload['name'] = $name;
                 }
@@ -423,9 +436,7 @@ class ChannelAllocationController extends Controller
         } catch (\Throwable $exception) {
             return response()->json([
                 'ok' => false,
-                'message' => $exception instanceof \RuntimeException
-                    ? $exception->getMessage()
-                    : PublicError::failed('Preview', $exception),
+                'message' => PublicError::validationOrFailed('Preview', $exception),
             ], 422);
         }
 
@@ -453,10 +464,17 @@ class ChannelAllocationController extends Controller
 
         try {
             $result = $import->commit($stored['payload']);
+        } catch (ImportRowValidationException $exception) {
+            $preview = $import->applyRowErrors((string) $request->input('token'), $exception->rowErrors());
+
+            return response()->json(array_merge([
+                'ok' => false,
+                'message' => 'There are errors in some rows. Please review the details below and fix them in your file.',
+            ], $preview), 422);
         } catch (\Throwable $exception) {
             return response()->json([
                 'ok' => false,
-                'message' => PublicError::failed('Import', $exception),
+                'message' => PublicError::validationOrFailed('Import', $exception),
             ], 422);
         }
 
@@ -508,22 +526,28 @@ class ChannelAllocationController extends Controller
     }
 
     /**
+     * Channel Allocation may only use a campaign the Master Campaign page lists,
+     * so a typed name is looked up instead of created.
+     */
+    private function masterCampaign(string $name, int $id): ?ChannelAllocationCampaign
+    {
+        if ($name !== '') {
+            return ChannelAllocationCampaign::masterByName($name);
+        }
+
+        if ($id < 1) {
+            return null;
+        }
+
+        return ChannelAllocationCampaign::query()->listedInCampaigns()->find($id);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function campaignRules(bool $creating = false): array
     {
-        $rules = [
-            'media_gateway' => 'nullable|string|max:255',
-            'caller_id' => 'nullable|string|max:255',
-            'prefix' => 'nullable|string|max:100',
-            'remarks' => 'nullable|string|max:2000',
-        ];
-        if ($creating) {
-            $rules['campaign'] = ['required_without:campaign_id', 'nullable', 'string', 'max:255'];
-            $rules['campaign_id'] = ['required_without:campaign', 'nullable', 'integer'];
-        }
-
-        return $rules;
+        return ChannelAllocationRules::campaign($creating);
     }
 
     /**
@@ -531,12 +555,7 @@ class ChannelAllocationController extends Controller
      */
     private function allocationRules(): array
     {
-        return [
-            'channel_type' => 'nullable|in:sip,gsm',
-            'channel' => 'required|string|max:255',
-            'line_priority' => 'nullable|integer|min:0',
-            'remarks' => 'nullable|string|max:2000',
-        ];
+        return ChannelAllocationRules::allocation();
     }
 
     /**

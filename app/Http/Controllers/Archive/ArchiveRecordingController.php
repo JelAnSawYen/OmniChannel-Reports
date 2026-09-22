@@ -299,9 +299,7 @@ class ArchiveRecordingController extends Controller
         } catch (\Throwable $exception) {
             return response()->json([
                 'ok' => false,
-                'message' => $exception instanceof \RuntimeException
-                    ? $exception->getMessage()
-                    : PublicError::failed('Preview', $exception),
+                'message' => PublicError::validationOrFailed('Preview', $exception),
             ], 422);
         }
 
@@ -333,7 +331,7 @@ class ArchiveRecordingController extends Controller
         } catch (\Throwable $exception) {
             return response()->json([
                 'ok' => false,
-                'message' => PublicError::failed('Import', $exception),
+                'message' => PublicError::validationOrFailed('Import', $exception),
             ], 422);
         }
 

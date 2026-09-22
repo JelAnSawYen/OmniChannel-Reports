@@ -364,6 +364,86 @@ class SipChannelsPageTest extends TestCase
         $this->assertNotContains('Id', $exportHeaders);
     }
 
+    public function test_import_confirm_reports_the_exact_channel_range_conflict(): void
+    {
+        $this->actingAs($this->admin);
+        $this->post('/sip-channels', [
+            'etpi_sip_name' => 'ETPI_EXISTING',
+            'from' => '253235320',
+            'to' => '253235321',
+        ])->assertRedirect();
+
+        $preview = $this->postJson('/sip-channels/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                ['SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
+                ['ETPI_OVERLAP', '253235320', '2', '253235320 - 253235321', 'ETPI', ''],
+            ])),
+        ])->assertOk()->json();
+
+        $this->assertFalse($preview['valid']);
+        $this->assertStringContainsString('Channel number already exists', $preview['rows'][0]['error']);
+        $this->assertStringContainsString('253235320', $preview['rows'][0]['error']);
+        $this->assertStringNotContainsString('contact an administrator', $preview['rows'][0]['error']);
+
+        $confirm = $this->postJson('/sip-channels/import/confirm', ['token' => $preview['token']])
+            ->assertStatus(422)
+            ->json();
+
+        $this->assertStringNotContainsString('contact an administrator', $confirm['message']);
+        $this->assertSame(0, SipChannel::where('etpi_sip_name', 'ETPI_OVERLAP')->count());
+    }
+
+    public function test_channel_range_accepts_optional_spaces_around_the_dash(): void
+    {
+        $this->actingAs($this->admin);
+        foreach (['100-200', '100 - 200', '100- 200', '100 -200'] as $range) {
+            [$from, $to] = SipChannel::boundsFromRange($range);
+            $this->assertSame(['100', '200'], [$from, $to], $range);
+        }
+
+        $this->post('/sip-channels', [
+            'etpi_sip_name' => 'RANGE_SPACES',
+            'from' => '100',
+            'to' => '200',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('100 - 200', SipChannel::where('etpi_sip_name', 'RANGE_SPACES')->value('channel_range'));
+
+        $preview = $this->postJson('/sip-channels/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                ['SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
+                ['RANGE_A', '', '', '300-310', '', ''],
+                ['RANGE_B', '', '', '320 - 330', '', ''],
+                ['RANGE_C', '', '', '340- 350', '', ''],
+                ['RANGE_D', '', '', '360 -370', '', ''],
+                ['RANGE_BAD', '', '', '400-', '', ''],
+            ])),
+        ])->assertOk()->json();
+
+        $this->assertTrue($preview['rows'][0]['valid'], $preview['rows'][0]['error'] ?? '');
+        $this->assertTrue($preview['rows'][1]['valid'], $preview['rows'][1]['error'] ?? '');
+        $this->assertTrue($preview['rows'][2]['valid'], $preview['rows'][2]['error'] ?? '');
+        $this->assertTrue($preview['rows'][3]['valid'], $preview['rows'][3]['error'] ?? '');
+        $this->assertFalse($preview['rows'][4]['valid']);
+        $this->assertNotSame('', $preview['rows'][4]['error']);
+
+        $this->postJson('/sip-channels/import/confirm', ['token' => $preview['token']])->assertStatus(422);
+        $this->assertSame(0, SipChannel::where('etpi_sip_name', 'RANGE_A')->count());
+
+        $ok = $this->postJson('/sip-channels/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                ['SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
+                ['RANGE_A', '', '', '300-310', '', ''],
+                ['RANGE_B', '', '', '320 - 330', '', ''],
+                ['RANGE_C', '', '', '340- 350', '', ''],
+                ['RANGE_D', '', '', '360 -370', '', ''],
+            ])),
+        ])->assertOk()->json();
+        $this->assertTrue($ok['valid'], $ok['rows'][0]['error'] ?? '');
+        $this->postJson('/sip-channels/import/confirm', ['token' => $ok['token']])->assertOk();
+        $this->assertSame('300 - 310', SipChannel::where('etpi_sip_name', 'RANGE_A')->value('channel_range'));
+        $this->assertSame('360 - 370', SipChannel::where('etpi_sip_name', 'RANGE_D')->value('channel_range'));
+    }
+
     public function test_standard_user_cannot_access_sip_channels(): void
     {
         $this->actingAs($this->standard)->get('/sip-channels')->assertForbidden();

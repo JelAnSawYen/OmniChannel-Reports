@@ -427,8 +427,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function splitChannelRange(range) {
         const value = String(range ?? '').trim();
         if (value === '') return ['', ''];
-        const match = value.match(/^(.+?)\s+-\s+(.+)$/);
-        if (match) return [match[1].trim(), match[2].trim()];
+        const match = value.match(/^(.+?)\s*-\s*(.+)$/);
+        if (match && match[1].trim() !== '' && match[2].trim() !== '') {
+            return [match[1].trim(), match[2].trim()];
+        }
+        if (value.includes('-')) return ['', ''];
         return [value, value];
     }
 

@@ -231,6 +231,40 @@ class CampaignsPageTest extends TestCase
         $this->assertDatabaseHas('channel_allocation_campaigns', ['id' => $campaign->id, 'name' => 'Locked']);
     }
 
+    public function test_master_campaign_add_lists_a_pdc_created_name_without_duplicating(): void
+    {
+        $this->actingAs($this->admin);
+        $this->post('/pdc-servers', [
+            'campaign' => 'Campaign C',
+            'location' => 'Estancia',
+        ])->assertRedirect();
+        $this->assertDatabaseMissing('channel_allocation_campaigns', ['name' => 'Campaign C']);
+        $this->assertDatabaseHas('pdc_groups', ['campaign_name' => 'Campaign C']);
+        $this->get('/campaigns')->assertOk()->assertDontSee('Campaign C');
+
+        $this->from('/channel-allocation')->post('/channel-allocation', [
+            'campaign' => 'Campaign C',
+        ])->assertRedirect('/channel-allocation')->assertSessionHasErrors('campaign');
+
+        $this->post('/campaigns', [
+            'name' => 'Campaign C',
+            'fte' => 3,
+            'location' => 'WFH',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame(1, ChannelAllocationCampaign::where('name', 'Campaign C')->count());
+        $listed = ChannelAllocationCampaign::where('name', 'Campaign C')->firstOrFail();
+        $this->assertTrue((bool) $listed->listed_in_campaigns);
+        $this->assertSame(3, (int) $listed->fte);
+        $this->assertSame('WFH', $listed->location);
+        $this->get('/campaigns')->assertOk()->assertSee('Campaign C');
+
+        $this->post('/channel-allocation', [
+            'campaign' => 'Campaign C',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertTrue((bool) $listed->fresh()->listed_in_channel_allocation);
+    }
+
     public function test_campaign_data_transfer_uses_campaigns_fte_location(): void
     {
         $this->actingAs($this->admin);
