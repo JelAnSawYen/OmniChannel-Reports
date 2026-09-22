@@ -103,6 +103,10 @@
             $editValues['port'] = $record->port ?: '';
             continue;
         }
+        if ($isSim && $field === 'hostname') {
+            $editValues['hostname'] = \App\Support\GsmSimInventory::hostnameForSim($record);
+            continue;
+        }
         $value = $record->{$field};
         if ($value instanceof \DateTimeInterface) {
             $value = $useMdyDate
@@ -175,8 +179,8 @@
                 <span class="num-align" data-label="{{ $label }}">₱{{ number_format((float) $record->$field, 2) }}</span>
             @elseif($isSim && $field === 'port')
                 {{ $record->displayPort() }}
-            @elseif($isSim && $field === 'ip_address')
-                {{ $record->displayIp() }}
+            @elseif($isSim && $field === 'hostname')
+                {{ $record->displayHostname() }}
             @elseif($field==='status')
                 <span class="status-pill {{ in_array($record->$field, ['Active', 'Available']) ? 'online' : (in_array($record->$field, ['In Use', 'Expiring']) ? 'unknown' : 'offline') }}">{{ $record->$field }}</span>
             @elseif(in_array($field, ['contract_start', 'contract_end', 'reported_on'], true))
@@ -262,7 +266,7 @@
                                     @forelse($campaigns as $campaign)
                                         <button class="pin-campaign-option" type="button" role="option" data-name="{{ $campaign->name }}">{{ $campaign->name }}</button>
                                     @empty
-                                        <div class="pin-campaign-empty">No campaigns yet. Type a new name.</div>
+                                        <div class="pin-campaign-empty">No Master Campaign available.</div>
                                     @endforelse
                                 </div>
                             </div>
@@ -335,17 +339,17 @@
                                     <option value="{{ $locationName }}">{{ $locationName }}</option>
                                 @endforeach
                             </select>
-                        @elseif($isSim && $field === 'ip_address')
-                            <select class="form-control" name="{{ $field }}" id="field_{{ $field }}" required>
+                        @elseif($isSim && $field === 'hostname')
+                            <select class="form-control" name="hostname" id="field_hostname" required>
                                 <option value="" selected hidden></option>
-                                @foreach($gsmGateways->unique('ip_address') as $gateway)
-                                    @if($gateway->ip_address)
-                                        <option value="{{ $gateway->ip_address }}">{{ $gateway->ip_address }}</option>
+                                @foreach($gsmGateways->unique('hostname') as $gateway)
+                                    @if($gateway->hostname)
+                                        <option value="{{ $gateway->hostname }}" data-channel-count="{{ (int) $gateway->channel_count }}" data-ip="{{ $gateway->ip_address }}">{{ $gateway->hostname }}</option>
                                     @endif
                                 @endforeach
                             </select>
                         @elseif($isSim && $field === 'port')
-                            <input class="form-control" type="number" min="1" max="512" name="port" id="field_port">
+                            <input class="form-control" type="number" min="1" name="port" id="field_port" required>
                         @elseif($field==='description')
                             <textarea class="form-control" name="{{ $field }}" id="field_{{ $field }}"></textarea>
                         @elseif($field==='specs')
@@ -359,7 +363,7 @@
                         @elseif(in_array($field, ['monthly_cost','retention_days']))
                             <input class="form-control" type="number" step="0.01" min="0" name="{{ $field }}" id="field_{{ $field }}">
                         @else
-                            <input class="form-control" name="{{ $field }}" id="field_{{ $field }}" {{ in_array($field, ['description','channel','gateway','peer','context','codec','imsi','assigned_to','location','role','program','assigned_channel','issue','reported_on','retention_days','network','plan','ip_address','account_number']) ? '' : 'required' }}>
+                            <input class="form-control" name="{{ $field }}" id="field_{{ $field }}" {{ (($isSim && in_array($field, ['imei', 'mobile_number'], true)) || in_array($field, ['description','channel','gateway','peer','context','codec','imsi','assigned_to','location','role','program','assigned_channel','issue','reported_on','retention_days','network','plan','ip_address','account_number','remarks'])) ? '' : 'required' }}>
                         @endif
                     </div>
                     @endforeach
@@ -390,6 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     document.getElementById('operationAddButton')?.addEventListener('click', () => {
         resetAdd();
+        syncSimPortLimit();
         modal?.classList.add('visible');
     });
     document.addEventListener('click', (event) => {
@@ -414,8 +419,22 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             field.value = value;
         });
+        syncSimPortLimit();
         modal?.classList.add('visible');
     });
+    const hostnameField = document.getElementById('field_hostname');
+    const portField = document.getElementById('field_port');
+    function syncSimPortLimit() {
+        if (!hostnameField || !portField) return;
+        const selected = hostnameField.selectedOptions[0];
+        const count = Number(selected?.dataset.channelCount || 0);
+        if (count > 0) {
+            portField.max = String(count);
+        } else {
+            portField.removeAttribute('max');
+        }
+    }
+    hostnameField?.addEventListener('change', syncSimPortLimit);
 });
 </script>
 @if($isInbound)
@@ -680,15 +699,30 @@ document.addEventListener('DOMContentLoaded', () => {
         renderLandlineChips();
     });
 
+    const campaignNames = () => options().map((option) => String(option.dataset.name || '').trim().toLowerCase()).filter(Boolean);
+    const campaignMatchesMaster = () => {
+        const value = String(input?.value || '').trim().toLowerCase();
+        return value !== '' && campaignNames().includes(value);
+    };
+
     inboundForm?.addEventListener('submit', (event) => {
         mobileInput?.setCustomValidity('');
         landlineInput?.setCustomValidity('');
         network?.setCustomValidity('');
+        input?.setCustomValidity('');
         if (mobileInput?.value.trim()) addMobile(mobileInput.value);
         if (landlineInput?.value.trim()) addLandline(landlineInput.value);
         if (mobileInput && mobileInput.validity.valid) mobileInput.value = '';
         if (landlineInput && landlineInput.validity.valid) landlineInput.value = '';
-        if ((mobileInput && !mobileInput.validity.valid) || (landlineInput && !landlineInput.validity.valid) || (network && !network.validity.valid)) {
+        if (input && String(input.value || '').trim() !== '' && !campaignMatchesMaster()) {
+            event.preventDefault();
+            input.setCustomValidity('');
+            if (typeof window.omniFlash === 'function') {
+                window.omniFlash(@json(\App\Support\ChannelAllocationRules::CAMPAIGN_NOT_IN_MASTER), 'error');
+            }
+            return;
+        }
+        if ((mobileInput && !mobileInput.validity.valid) || (landlineInput && !landlineInput.validity.valid) || (network && !network.validity.valid) || (input && !input.validity.valid)) {
             event.preventDefault();
             return;
         }
@@ -705,6 +739,7 @@ document.addEventListener('DOMContentLoaded', () => {
             network?.reportValidity();
         }
     });
+    input?.addEventListener('input', () => input.setCustomValidity(''));
 
     const resetNumbers = () => {
         selected.splice(0, selected.length);
@@ -714,6 +749,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (mobileInput) mobileInput.value = '';
         if (landlineInput) landlineInput.value = '';
         network?.setCustomValidity('');
+        input?.setCustomValidity('');
         setMobileEnabled();
     };
     document.getElementById('operationAddButton')?.addEventListener('click', resetNumbers);

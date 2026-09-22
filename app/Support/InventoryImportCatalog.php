@@ -7,6 +7,7 @@ use App\Models\ChannelAllocationCampaign;
 use App\Models\MediaGateway;
 use App\Models\PdcServer;
 use App\Support\Gsm\GsmGatewayImportMapper;
+use App\Support\Gsm\SimInventoryImportMapper;
 use App\Support\Inbound\ProgramInboundImportMapper;
 
 class InventoryImportCatalog
@@ -85,6 +86,7 @@ class InventoryImportCatalog
                 'mobile_number' => 'Mobile Number',
                 'assignment_network' => 'Network',
                 'assignment_plan' => 'Plan',
+                'assignment_remarks' => 'Remarks',
             ],
             'required' => ['hostname', 'ip_address', 'site_code', 'channel_count', 'device_function', 'site_name', 'username'],
             'ip_fields' => [],
@@ -93,7 +95,7 @@ class InventoryImportCatalog
             'options' => [
                 'site_name' => OperationCatalog::locationNames(),
             ],
-            'no_carry' => ['assignment_port', 'imei', 'mobile_number', 'assignment_network', 'assignment_plan'],
+            'no_carry' => ['assignment_port', 'imei', 'mobile_number', 'assignment_network', 'assignment_plan', 'assignment_remarks'],
             'header_aliases' => [
                 'IP Address' => 'ip_address',
             ],
@@ -263,11 +265,15 @@ class InventoryImportCatalog
     private static function simImportExtras(): array
     {
         return [
-            'required' => ['imei', 'mobile_number'],
+            'required' => [],
             'unique' => ['imei', 'mobile_number'],
-            'gateway_ip_fields' => ['ip_address'],
+            'integer_fields' => ['port'],
             'mdy_date_fields' => ['contract_start', 'contract_end'],
             'include_id' => false,
+            'empty_markers' => ['-'],
+            'no_carry' => ['imei', 'mobile_number', 'plan', 'hostname', 'port', 'account_number', 'contract_start', 'contract_end'],
+            'to_record' => [SimInventoryImportMapper::class, 'map'],
+            'commit' => [SimInventoryImportMapper::class, 'commit'],
         ];
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\GsmSimInventory;
 use App\Support\InventoryDependentSync;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -18,6 +19,7 @@ class GlobeSim extends Model
         'account_number',
         'contract_start',
         'contract_end',
+        'remarks',
         'location',
         'status',
     ];
@@ -31,6 +33,13 @@ class GlobeSim extends Model
     public function gatewayAssignment(): HasOne
     {
         return $this->hasOne(GatewaySimAssignment::class, 'sim_id')->where('sim_type', 'globe');
+    }
+
+    public function displayHostname(): string
+    {
+        $hostname = GsmSimInventory::hostnameForSim($this);
+
+        return $hostname !== '' ? $hostname : '—';
     }
 
     public function displayIp(): string
@@ -51,7 +60,7 @@ class GlobeSim extends Model
     {
         static::creating(function (GlobeSim $sim): void {
             if ($sim->network === null || $sim->network === '') {
-                $sim->network = 'Globe';
+                $sim->network = 'Globe SIM';
             }
         });
         static::saved(function (GlobeSim $sim): void {

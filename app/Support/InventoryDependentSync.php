@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\ChannelAllocation;
 use App\Models\ChannelAllocationCampaign;
 use App\Models\ChannelPort;
+use App\Models\GatewaySimAssignment;
 use App\Models\GlobeSim;
 use App\Models\MediaGateway;
 use App\Models\NetworkPrefix;
@@ -201,6 +202,10 @@ class InventoryDependentSync
     public static function simDeleted(GlobeSim|SmartSim $sim): void
     {
         $mobile = trim((string) ($sim->mobile_number ?? ''));
+        GatewaySimAssignment::query()
+            ->where('sim_type', $sim instanceof SmartSim ? 'smart' : 'globe')
+            ->where('sim_id', $sim->id)
+            ->delete();
         ProgramInboundSimLookup::flush();
         self::refreshInboundForSimMobiles($sim, $mobile, $mobile, true);
     }

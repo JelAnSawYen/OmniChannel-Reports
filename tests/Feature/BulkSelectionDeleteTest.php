@@ -357,6 +357,7 @@ class BulkSelectionDeleteTest extends TestCase
             'site_name' => 'Alcar',
             'site_code' => 'NEST01',
             'ip_address' => '10.9.8.1',
+            'channel_count' => 3,
             'username' => 'root',
             'database' => 'asteriskcdrdb',
         ]);
@@ -402,6 +403,7 @@ class BulkSelectionDeleteTest extends TestCase
             'network' => 'Globe',
             'plan' => 'IP Nested',
             'ip_address' => '10.9.8.1',
+            'port' => 3,
             'status' => 'Active',
         ]);
 
@@ -424,7 +426,9 @@ class BulkSelectionDeleteTest extends TestCase
         );
         $emptyStart = strpos($html, 'id="gsm-panel-'.$empty->id.'"');
         $this->assertNotFalse($emptyStart);
-        $emptyPanel = substr($html, $emptyStart, 2500);
+        $emptyEnd = strpos($html, '</table>', $emptyStart);
+        $this->assertNotFalse($emptyEnd);
+        $emptyPanel = substr($html, $emptyStart, $emptyEnd - $emptyStart);
         $this->assertStringContainsString('No SIM assignments.', $emptyPanel);
         $this->assertStringNotContainsString('data-bulk-row="nested"', $emptyPanel);
 

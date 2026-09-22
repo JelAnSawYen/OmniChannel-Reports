@@ -274,6 +274,68 @@ class MediaGatewayController extends Controller
         ]);
     }
 
+    public function updatePortRemarks(Request $request, MediaGateway $mediaGateway)
+    {
+        abort_unless($this->isGsm(), 404);
+        abort_unless($request->user()?->hasPermission('media.edit'), 403, 'You do not have permission to perform this action.');
+        $this->denyStandardMutation();
+
+        $simId = (int) $request->input('sim_id', 0);
+        if ($simId < 1) {
+            $data = $request->validate([
+                'port' => ['required', 'integer', 'min:1'],
+                'remarks' => ['nullable', 'string', 'max:1000'],
+            ]);
+            GsmGatewayWriter::saveEmptyPortRemarks(
+                $mediaGateway,
+                (int) $data['port'],
+                $data['remarks'] ?? null
+            );
+        } else {
+            $data = $request->validate([
+                'sim_type' => ['required', 'in:globe,smart'],
+                'sim_id' => ['required', 'integer', 'min:1'],
+                'port' => ['required', 'integer', 'min:1'],
+                'remarks' => ['nullable', 'string', 'max:1000'],
+            ]);
+
+            GsmGatewayWriter::updateLinkedSimRemarks(
+                $mediaGateway,
+                (string) $data['sim_type'],
+                (int) $data['sim_id'],
+                (int) $data['port'],
+                $data['remarks'] ?? null
+            );
+        }
+
+        AuditLogger::log(
+            'Updated',
+            'Media Gateways',
+            'Updated port remarks on gateway '.$mediaGateway->site_code,
+            $mediaGateway->id,
+            $request
+        );
+
+        return response()->json([
+            'message' => 'Port remarks updated successfully.',
+            'record' => $this->jsonRecord($mediaGateway->fresh(['assignments'])),
+        ]);
+    }
+
+    public function destroyEmptyPort(Request $request, MediaGateway $mediaGateway, int $port)
+    {
+        abort_unless($this->isGsm(), 404);
+        abort_unless($request->user()?->hasPermission('media.delete'), 403, 'You do not have permission to perform this action.');
+        $this->denyStandardMutation();
+
+        GsmGatewayWriter::clearEmptyPort($mediaGateway, $port);
+
+        return response()->json([
+            'message' => 'Port assignment removed successfully.',
+            'record' => $this->jsonRecord($mediaGateway->fresh(['assignments'])),
+        ]);
+    }
+
     public function destroyAssignment(Request $request, MediaGateway $mediaGateway, GatewaySimAssignment $assignment)
     {
         abort_unless($this->isGsm(), 404);
@@ -281,7 +343,7 @@ class MediaGatewayController extends Controller
         $this->denyStandardMutation();
         abort_unless((int) $assignment->media_gateway_id === (int) $mediaGateway->id, 404);
 
-        $assignment->delete();
+        GsmGatewayWriter::unlinkSim($mediaGateway, (string) $assignment->sim_type, (int) $assignment->sim_id);
 
         AuditLogger::log(
             'Deleted',
@@ -428,7 +490,7 @@ class MediaGatewayController extends Controller
                     $headers[] = 'User';
                     $headers[] = 'Password';
                 }
-                $headers = array_merge($headers, ['Port', 'IMEI', 'Mobile Number', 'Network', 'Plan']);
+                $headers = array_merge($headers, ['Port', 'IMEI', 'Mobile Number', 'Network', 'Plan', 'Remarks']);
                 $path = $xlsx->export(
                     $headers,
                     $query->with('assignments')->get()->flatMap(function ($gateway) use ($includeSecrets) {
@@ -610,7 +672,7 @@ class MediaGatewayController extends Controller
 
         $assignments = $gateway->assignmentPayload();
         if ($assignments === []) {
-            return [array_merge($base, ['', '', '', (string) ($gateway->network ?? ''), ''])];
+            return [array_merge($base, ['', '', '', (string) ($gateway->network ?? ''), '', ''])];
         }
 
         $rows = [];
@@ -622,6 +684,7 @@ class MediaGatewayController extends Controller
                 (string) ($assignment['mobile_number'] ?? ''),
                 $index === 0 ? (string) ($gateway->network ?? '') : (string) ($assignment['network'] ?? ''),
                 (string) ($assignment['plan'] ?? ''),
+                (string) ($assignment['remarks'] ?? ''),
             ]);
         }
 

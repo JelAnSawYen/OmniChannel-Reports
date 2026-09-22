@@ -36,18 +36,18 @@ class OperationsCrudSearchTest extends TestCase
     {
         return [
             'globe-sim' => ['globe-sim', [
-                'create' => ['imei' => '356938035643809', 'mobile_number' => '09170000001', 'network' => 'Globe', 'plan' => 'Plan A', 'ip_address' => '10.70.0.1', 'account_number' => 'ACC-ALPHA', 'contract_start' => '1/1/2026', 'contract_end' => '12/31/2026'],
-                'other' => ['imei' => '356938035643810', 'mobile_number' => '09170000002', 'network' => 'Globe', 'plan' => 'Plan B', 'ip_address' => '10.70.0.2', 'account_number' => 'ACC-BETA', 'contract_start' => '2/1/2026', 'contract_end' => '11/30/2026'],
-                'update' => ['imei' => '356938035643809', 'mobile_number' => '09170000001', 'network' => 'Globe', 'plan' => 'Plan A', 'ip_address' => '10.70.0.1', 'account_number' => 'ACC-ALPHA-UPD', 'contract_start' => '1/1/2026', 'contract_end' => '12/31/2026'],
+                'create' => ['imei' => '356938035643809', 'mobile_number' => '09170000001', 'plan' => 'Plan A', 'hostname' => 'host-a-globe-sim', 'port' => 1, 'account_number' => 'ACC-ALPHA', 'contract_start' => '1/1/2026', 'contract_end' => '12/31/2026'],
+                'other' => ['imei' => '356938035643810', 'mobile_number' => '09170000002', 'plan' => 'Plan B', 'hostname' => 'host-b-globe-sim', 'port' => 1, 'account_number' => 'ACC-BETA', 'contract_start' => '2/1/2026', 'contract_end' => '11/30/2026'],
+                'update' => ['imei' => '356938035643809', 'mobile_number' => '09170000001', 'plan' => 'Plan A', 'hostname' => 'host-a-globe-sim', 'port' => 1, 'account_number' => 'ACC-ALPHA-UPD', 'contract_start' => '1/1/2026', 'contract_end' => '12/31/2026'],
                 'updated' => ['account_number' => 'ACC-ALPHA-UPD', 'plan' => 'Plan A'],
                 'kept' => ['mobile_number' => '09170000002'],
                 'search' => 'ACC-ALPHA-UPD',
                 'hidden' => '09170000002',
             ]],
             'smart-sim' => ['smart-sim', [
-                'create' => ['imei' => '356938035643901', 'mobile_number' => '09280000001', 'network' => 'Smart', 'plan' => 'Plan A', 'ip_address' => '10.80.0.1', 'account_number' => 'ACC-ALPHA', 'contract_start' => '1/1/2026', 'contract_end' => '12/31/2026'],
-                'other' => ['imei' => '356938035643902', 'mobile_number' => '09280000002', 'network' => 'Smart', 'plan' => 'Plan B', 'ip_address' => '10.80.0.2', 'account_number' => 'ACC-BETA', 'contract_start' => '2/1/2026', 'contract_end' => '11/30/2026'],
-                'update' => ['imei' => '356938035643901', 'mobile_number' => '09280000001', 'network' => 'Smart', 'plan' => 'Plan A', 'ip_address' => '10.80.0.1', 'account_number' => 'ACC-ALPHA-UPD', 'contract_start' => '1/1/2026', 'contract_end' => '12/31/2026'],
+                'create' => ['imei' => '356938035643901', 'mobile_number' => '09280000001', 'plan' => 'Plan A', 'hostname' => 'host-a-smart-sim', 'port' => 1, 'account_number' => 'ACC-ALPHA', 'contract_start' => '1/1/2026', 'contract_end' => '12/31/2026'],
+                'other' => ['imei' => '356938035643902', 'mobile_number' => '09280000002', 'plan' => 'Plan B', 'hostname' => 'host-b-smart-sim', 'port' => 1, 'account_number' => 'ACC-BETA', 'contract_start' => '2/1/2026', 'contract_end' => '11/30/2026'],
+                'update' => ['imei' => '356938035643901', 'mobile_number' => '09280000001', 'plan' => 'Plan A', 'hostname' => 'host-a-smart-sim', 'port' => 1, 'account_number' => 'ACC-ALPHA-UPD', 'contract_start' => '1/1/2026', 'contract_end' => '12/31/2026'],
                 'updated' => ['account_number' => 'ACC-ALPHA-UPD', 'plan' => 'Plan A'],
                 'kept' => ['mobile_number' => '09280000002'],
                 'search' => 'ACC-ALPHA-UPD',
@@ -93,22 +93,29 @@ class OperationsCrudSearchTest extends TestCase
 
         if (in_array($module, ['globe-sim', 'smart-sim'], true)) {
             MediaGateway::create([
+                'hostname' => $case['create']['hostname'],
                 'site_name' => 'Alcar',
                 'site_code' => 'SIM-IP-A-'.$module,
-                'ip_address' => $case['create']['ip_address'],
+                'ip_address' => $module === 'globe-sim' ? '10.70.0.1' : '10.80.0.1',
                 'username' => 'root',
                 'database' => 'asteriskcdrdb',
+                'channel_count' => 16,
             ]);
             MediaGateway::create([
+                'hostname' => $case['other']['hostname'],
                 'site_name' => 'Alcar',
                 'site_code' => 'SIM-IP-B-'.$module,
-                'ip_address' => $case['other']['ip_address'],
+                'ip_address' => $module === 'globe-sim' ? '10.70.0.2' : '10.80.0.2',
                 'username' => 'root',
                 'database' => 'asteriskcdrdb',
+                'channel_count' => 16,
             ]);
         }
 
         if ($module === 'program-inbound-numbers') {
+            ChannelAllocationCampaign::create(['name' => 'Program A']);
+            ChannelAllocationCampaign::create(['name' => 'Program B']);
+            ChannelAllocationCampaign::create(['name' => 'Program A Updated']);
             $campaign = ChannelAllocationCampaign::create(['name' => 'PIN Search']);
             $sip = SipChannel::create([
                 'campaign_id' => $campaign->id,
@@ -247,12 +254,11 @@ class OperationsCrudSearchTest extends TestCase
             ->assertDontSee('id="gsmSimModal"', false)
             ->assertDontSee('Search SIM (IMEI or Mobile Number)...', false)
             ->assertDontSee('data-gsm-sim-add', false)
-            ->assertDontSee('<select class="form-control" id="network" name="network" required>', false)
-            ->assertDontSee('<select class="form-control" id="network" name="network">', false)
-            ->assertDontSee('<option value="" selected hidden>Select Network</option>', false)
-            ->assertDontSee('<option value="Globe SIM">Globe SIM</option>', false)
-            ->assertDontSee('<option value="Smart SIM">Smart SIM</option>', false)
-            ->assertSee('<input class="form-control" id="network" name="network">', false)
+            ->assertSee('<select class="form-control" id="network" name="network">', false)
+            ->assertSee('<option value="" selected hidden>Select Network</option>', false)
+            ->assertSee('<option value="Globe SIM">Globe SIM</option>', false)
+            ->assertSee('<option value="Smart SIM">Smart SIM</option>', false)
+            ->assertDontSee('<input class="form-control" id="network" name="network">', false)
             ->assertSee('data-sort="network"', false)
             ->assertSee('data-edit-network="Smart SIM"', false)
             ->assertSee('>Network</label>', false)
@@ -303,12 +309,24 @@ class OperationsCrudSearchTest extends TestCase
             'network' => 'Eastern',
             'username' => 'root',
             'database' => 'asteriskcdrdb',
+        ])->assertUnprocessable()->assertJsonValidationErrors('network');
+
+        $this->putJson('/gsm-gateways/'.$target->id, [
+            'hostname' => 'gsm-tgt-001',
+            'site_name' => 'CTN',
+            'site_code' => 'TGT001',
+            'ip_address' => '10.2.2.3',
+            'channel_count' => 8,
+            'device_function' => 'Inbound',
+            'network' => 'Globe SIM',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
         ])->assertOk();
 
         $this->assertDatabaseHas('media_gateways', [
             'id' => $target->id,
             'site_name' => 'CTN',
-            'network' => 'Eastern',
+            'network' => 'Globe SIM',
         ]);
         $this->assertDatabaseHas('media_gateways', [
             'id' => $keep->id,
@@ -398,7 +416,8 @@ class OperationsCrudSearchTest extends TestCase
         $this->assertMatchesRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-sim-nested \{\s*width: 100%;\s*table-layout: fixed;/', $css);
         $this->assertStringContainsString('body[data-page="gsm-gateways"] .gsm-sim-nested > colgroup > col', $css);
         $this->assertStringContainsString('body[data-page="gsm-gateways"] .gsm-sim-nested thead th:last-child', $css);
-        $this->assertMatchesRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-sim-nested tbody td:last-child \{\s*width: 25%;\s*min-width: 0;/', $css);
+        $this->assertStringContainsString('body[data-page="gsm-gateways"] .gsm-sim-nested tbody td.gsm-sim-port', $css);
+        $this->assertMatchesRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-sim-nested tbody td:last-child \{\s*width: auto;\s*min-width: 0;/', $css);
         $this->assertMatchesRegularExpression('/body\[data-page="gsm-gateways"\] \.gsm-sim-nested tbody td:last-child \{[\s\S]*?padding: 18\.75px 15px;/', $css);
 
         $this->actingAs($this->admin)->get('/program-location/estancia')

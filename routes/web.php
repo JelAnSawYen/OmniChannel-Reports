@@ -71,6 +71,8 @@ Route::middleware(['auth', 'account.active'])->group(function () {
             $gatewayRoutes();
             Route::post('/{mediaGateway}/assignments', [MediaGatewayController::class, 'storeAssignment'])->middleware(['permission:media.create', 'throttle:sensitive'])->whereNumber('mediaGateway')->name('assignments.store');
             Route::delete('/{mediaGateway}/assignments/bulk', [MediaGatewayController::class, 'bulkDestroyAssignments'])->middleware('permission:media.delete')->whereNumber('mediaGateway')->name('assignments.bulk-destroy');
+            Route::delete('/{mediaGateway}/ports/{port}', [MediaGatewayController::class, 'destroyEmptyPort'])->middleware('permission:media.delete')->whereNumber('mediaGateway')->whereNumber('port')->name('ports.destroy');
+            Route::patch('/{mediaGateway}/port-remarks', [MediaGatewayController::class, 'updatePortRemarks'])->middleware(['permission:media.edit', 'throttle:sensitive'])->whereNumber('mediaGateway')->name('assignments.remarks');
             Route::put('/{mediaGateway}/assignments/{assignment}', [MediaGatewayController::class, 'updateAssignment'])->middleware(['permission:media.edit', 'throttle:sensitive'])->whereNumber('mediaGateway')->whereNumber('assignment')->name('assignments.update');
             Route::delete('/{mediaGateway}/assignments/{assignment}', [MediaGatewayController::class, 'destroyAssignment'])->middleware('permission:media.delete')->whereNumber('mediaGateway')->whereNumber('assignment')->name('assignments.destroy');
         });

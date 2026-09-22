@@ -136,6 +136,7 @@ function flash(message,type='success'){
     bindFlashClose(el);
     window.setTimeout(()=>el.remove(),2000);
 }
+window.omniFlash=flash;
 
 function initGlobal(){
     if(document.body.dataset.uiBound==='1')return;
@@ -854,42 +855,61 @@ async function initMedia(){
         </span>`;
     }
 
-    function nestedSimTable(g,canDelete){
-        const assignments=g.assignments||[];
+    const nestedSimColumns=[
+        {key:'port', label:'Port', cellClass:'gsm-sim-port', colClass:'gsm-sim-col-port'},
+        {key:'imei', label:'IMEI', cellClass:'', colClass:'gsm-sim-col-imei'},
+        {key:'mobile_number', label:'Mobile Number', cellClass:'', colClass:'gsm-sim-col-mobile'},
+        {key:'plan', label:'Plan', cellClass:'', colClass:'gsm-sim-col-plan'},
+        {key:'remarks', label:'Remarks', cellClass:'', colClass:'gsm-sim-col-remarks'},
+    ];
+
+    function nestedCell(item, key){
+        const value=item?.[key];
+        if(value===null||value===undefined||String(value).trim()==='')return '—';
+        return String(value);
+    }
+
+    function nestedSimTable(g,canEdit,canDelete){
+        const assignments=Array.isArray(g.assignments)?g.assignments:[];
         const bulkUrl=base+'/'+g.id+'/assignments/bulk';
         const rows=assignments.length
             ? assignments.map(item=>{
                 const assignmentId=Number(item.assignment_id||0);
                 const simType=String(item.sim_type||'').trim();
                 const simId=Number(item.id||0);
+                const hasSim=assignmentId>0||simId>0;
                 const bulkId=assignmentId?String(assignmentId):(simType && simId?`${simType}-${simId}`:'');
-                const bulk=canDelete && bulkId?` data-bulk-row="nested" data-bulk-id="${escapeHtml(bulkId)}" data-bulk-url="${escapeHtml(bulkUrl)}" data-bulk-ajax="1"`:'';
-                return `<tr${bulk}>
-                <td>${escapeHtml(item.imei||'—')}</td>
-                <td>${escapeHtml(item.mobile_number||'—')}</td>
-                <td>${escapeHtml(item.plan||'—')}</td>
-                <td>${escapeHtml(item.port||'—')}</td>
-            </tr>`;
+                const bulk=canDelete && hasSim && bulkId?` data-bulk-row="nested" data-bulk-id="${escapeHtml(bulkId)}" data-bulk-url="${escapeHtml(bulkUrl)}" data-bulk-ajax="1"`:'';
+                const payload={
+                    gateway_id:g.id,
+                    assignment_id:assignmentId,
+                    sim_type:simType,
+                    sim_id:simId,
+                    port:item.port??'',
+                    imei:item.imei||'',
+                    mobile_number:item.mobile_number||'',
+                    plan:item.plan||'',
+                    network:item.network||'',
+                    remarks:item.remarks||''
+                };
+                const actions=(canEdit||canDelete)
+                    ? `<div class="row-actions">
+                        ${canEdit?`<button type="button" class="action-btn edit" data-port-remarks="${escapeHtml(JSON.stringify(payload))}" title="Edit Remarks" aria-label="Edit Remarks">${editIcon}</button>`:''}
+                        ${canDelete?`<button type="button" class="action-btn delete" data-port-delete="${escapeHtml(bulkId)}" data-port-gateway="${escapeHtml(g.id)}" data-port-assignment="${escapeHtml(assignmentId)}" data-port-number="${escapeHtml(item.port??'')}" title="Delete Port Assignment" aria-label="Delete Port Assignment">${deleteIcon}</button>`:''}
+                    </div>`
+                    : '';
+                const cells=nestedSimColumns.map(column=>`<td${column.cellClass?` class="${column.cellClass}"`:''}>${escapeHtml(nestedCell(item, column.key))}</td>`).join('');
+                return `<tr${bulk}>${cells}<td class="actions-column">${actions}</td></tr>`;
             }).join('')
-            : `<tr><td colspan="4"><div class="empty-state">No SIM assignments.</div></td></tr>`;
+            : `<tr><td colspan="6"><div class="empty-state">No SIM assignments.</div></td></tr>`;
+        const cols=nestedSimColumns.map(column=>`<col class="${column.colClass}">`).join('')+'<col class="gsm-sim-col-actions">';
+        const heads=nestedSimColumns.map(column=>`<th>${column.label}</th>`).join('')+'<th class="actions-column">Actions</th>';
         return `<tr class="ca-nested-row" id="gsm-panel-${escapeHtml(g.id)}" hidden>
             <td colspan="10">
                 <div class="ca-nested">
                     <table class="gsm-sim-nested" aria-label="SIM assignments">
-                        <colgroup>
-                            <col class="gsm-sim-col-imei">
-                            <col class="gsm-sim-col-mobile">
-                            <col class="gsm-sim-col-plan">
-                            <col class="gsm-sim-col-port">
-                        </colgroup>
-                        <thead>
-                            <tr>
-                                <th>IMEI</th>
-                                <th>Mobile Number</th>
-                                <th>Plan</th>
-                                <th>Port</th>
-                            </tr>
-                        </thead>
+                        <colgroup>${cols}</colgroup>
+                        <thead><tr>${heads}</tr></thead>
                         <tbody>${rows}</tbody>
                     </table>
                 </div>
@@ -939,7 +959,7 @@ async function initMedia(){
                 <td>${escapeHtml(g.username)}</td>
                 <td>${passwordCell(g,canReveal)}</td>
                 <td class="actions-column">${actionsCell(g,canEdit,canDelete,canReveal)}</td>
-            </tr>${nestedSimTable(g,canDelete)}`;
+            </tr>${nestedSimTable(g,canEdit,canDelete)}`;
                 }
                 return `<tr${canDelete?` data-bulk-row="main" data-bulk-id="${escapeHtml(g.id)}" data-bulk-url="${escapeHtml(base+'/bulk')}" data-bulk-ajax="1"`:''}>
                 <td>${escapeHtml(g.ip_address)}</td>
@@ -1138,10 +1158,113 @@ async function initMedia(){
         });
     }
 
+    let portRemarksTarget=null;
+
+    function openPortRemarks(button){
+        let values={};
+        try{values=JSON.parse(button.dataset.portRemarks||'{}');}catch(_error){values={};}
+        portRemarksTarget=values;
+        const set=(id,value)=>{const el=qs(id); if(el)el.value=value??'';};
+        set('#portRemarksPort', values.port??'');
+        set('#portRemarksImei', values.imei||'');
+        set('#portRemarksMobile', values.mobile_number||'');
+        set('#portRemarksPlan', values.plan||'');
+        set('#portRemarksNetwork', values.network||'');
+        set('#portRemarksInput', values.remarks||'');
+        showModal('gsmPortRemarksModal');
+    }
+
+    async function savePortRemarks(event){
+        event.preventDefault();
+        if(!portRemarksTarget)return;
+        const submit=event.target?.querySelector('button[type="submit"]');
+        if(submit)submit.disabled=true;
+        const gatewayId=portRemarksTarget.gateway_id;
+        try{
+            const response=await fetch(base+'/'+encodeURIComponent(gatewayId)+'/port-remarks',{
+                method:'PATCH',
+                headers:{
+                    Accept:'application/json',
+                    'Content-Type':'application/json',
+                    'X-CSRF-TOKEN':csrf(),
+                    'X-Requested-With':'XMLHttpRequest'
+                },
+                body:JSON.stringify({
+                    sim_type:portRemarksTarget.sim_type,
+                    sim_id:portRemarksTarget.sim_id,
+                    port:portRemarksTarget.port,
+                    remarks:qs('#portRemarksInput')?.value||''
+                })
+            });
+            const data=await response.json().catch(()=>({}));
+            if(!response.ok){
+                const validation=Object.values(data.errors||{}).flat().join(' ');
+                throw new Error(data.message||validation||'Unable to update remarks.');
+            }
+            hideModal('gsmPortRemarksModal');
+            flash(data.message||'Port remarks updated successfully.');
+            await load(state.page);
+        }catch(error){
+            flash(error.message||'Unable to update remarks.','error');
+        }finally{
+            if(submit)submit.disabled=false;
+        }
+    }
+
+    function deletePortAssignment(button){
+        const gatewayId=button.dataset.portGateway;
+        const assignmentId=Number(button.dataset.portAssignment||0);
+        const bulkId=button.dataset.portDelete||'';
+        const portNumber=button.dataset.portNumber||'';
+        const run=async()=>{
+            const url=assignmentId>0
+                ? base+'/'+encodeURIComponent(gatewayId)+'/assignments/'+encodeURIComponent(assignmentId)
+                : (bulkId
+                    ? base+'/'+encodeURIComponent(gatewayId)+'/assignments/bulk'
+                    : base+'/'+encodeURIComponent(gatewayId)+'/ports/'+encodeURIComponent(portNumber));
+            const response=await fetch(url,{
+                method:'DELETE',
+                headers:{
+                    Accept:'application/json',
+                    'Content-Type':'application/json',
+                    'X-CSRF-TOKEN':csrf(),
+                    'X-Requested-With':'XMLHttpRequest'
+                },
+                body:assignmentId>0||!bulkId?undefined:JSON.stringify({ids:[bulkId]})
+            });
+            const data=await response.json().catch(()=>({}));
+            if(!response.ok)throw new Error(data.message||'Unable to delete this port assignment.');
+            flash(data.message||'SIM assignment deleted successfully.');
+            await load(state.page);
+        };
+        const confirmDelete=()=>run().catch(error=>flash(error.message||'Unable to delete this port assignment.','error'));
+        if(typeof window.omniOpenConfirm==='function'){
+            window.omniOpenConfirm({
+                titleText:'Delete Port Assignment',
+                messageText:'Remove only this port assignment? The GSM Gateway and the SIM record will stay.',
+                okText:'Delete',
+                cancelText:'Cancel',
+                onConfirm:confirmDelete
+            });
+            return;
+        }
+        confirmDelete();
+    }
+
     function bindRowEvents(){
         qsa('#mediaGatewayRows [data-edit-id]').forEach(button=>button.onclick=()=>{
             closeGsmMenus();
             openEdit(button);
+        });
+        qsa('#mediaGatewayRows [data-port-remarks]').forEach(button=>button.onclick=event=>{
+            event.preventDefault();
+            event.stopPropagation();
+            openPortRemarks(button);
+        });
+        qsa('#mediaGatewayRows [data-port-delete]').forEach(button=>button.onclick=event=>{
+            event.preventDefault();
+            event.stopPropagation();
+            deletePortAssignment(button);
         });
         qsa('#mediaGatewayRows [data-delete-id]').forEach(button=>button.onclick=()=>{
             deleteId=button.dataset.deleteId;
@@ -1162,6 +1285,7 @@ async function initMedia(){
         input.type=input.type==='password'?'text':'password';
     });
     dom.form?.addEventListener('submit',save);
+    qs('#gsmPortRemarksForm')?.addEventListener('submit',savePortRemarks);
     dom.deleteConfirm?.addEventListener('click',remove);
 
     if(isGsm && !document.body.dataset.gsmMenuBound){

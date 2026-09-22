@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Gsm;
 
+use App\Support\GsmSimInventory;
 use App\Support\OperationCatalog;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -34,9 +35,17 @@ class StoreMediaGatewayRequest extends FormRequest
             $rules['hostname'] = ['required', 'string', 'max:255'];
             $rules['channel_count'] = ['required', 'integer', 'min:1', 'max:512'];
             $rules['device_function'] = ['required', 'string', 'max:255'];
+            $rules['network'] = ['nullable', 'string', Rule::in(GsmSimInventory::networks())];
         }
 
         return $rules;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->isGsm() && $this->has('network') && trim((string) $this->input('network')) === '') {
+            $this->merge(['network' => null]);
+        }
     }
 
     protected function passedValidation(): void

@@ -102,6 +102,10 @@
             $editValues['port'] = $record->port ?: '';
             continue;
         }
+        if ($isSim && $field === 'hostname') {
+            $editValues['hostname'] = \App\Support\GsmSimInventory::hostnameForSim($record);
+            continue;
+        }
         $value = $record->{$field};
         if ($value instanceof \DateTimeInterface) {
             $value = $useMdyDate
@@ -175,8 +179,8 @@
             <?php elseif($isSim && $field === 'port'): ?>
                 <?php echo e($record->displayPort()); ?>
 
-            <?php elseif($isSim && $field === 'ip_address'): ?>
-                <?php echo e($record->displayIp()); ?>
+            <?php elseif($isSim && $field === 'hostname'): ?>
+                <?php echo e($record->displayHostname()); ?>
 
             <?php elseif($field==='status'): ?>
                 <span class="status-pill <?php echo e(in_array($record->$field, ['Active', 'Available']) ? 'online' : (in_array($record->$field, ['In Use', 'Expiring']) ? 'unknown' : 'offline')); ?>"><?php echo e($record->$field); ?></span>
@@ -266,7 +270,7 @@
                                     <?php $__empty_1 = true; $__currentLoopData = $campaigns; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $campaign): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
                                         <button class="pin-campaign-option" type="button" role="option" data-name="<?php echo e($campaign->name); ?>"><?php echo e($campaign->name); ?></button>
                                     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
-                                        <div class="pin-campaign-empty">No campaigns yet. Type a new name.</div>
+                                        <div class="pin-campaign-empty">No Master Campaign available.</div>
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -339,17 +343,17 @@
                                     <option value="<?php echo e($locationName); ?>"><?php echo e($locationName); ?></option>
                                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                             </select>
-                        <?php elseif($isSim && $field === 'ip_address'): ?>
-                            <select class="form-control" name="<?php echo e($field); ?>" id="field_<?php echo e($field); ?>" required>
+                        <?php elseif($isSim && $field === 'hostname'): ?>
+                            <select class="form-control" name="hostname" id="field_hostname" required>
                                 <option value="" selected hidden></option>
-                                <?php $__currentLoopData = $gsmGateways->unique('ip_address'); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $gateway): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                                    <?php if($gateway->ip_address): ?>
-                                        <option value="<?php echo e($gateway->ip_address); ?>"><?php echo e($gateway->ip_address); ?></option>
+                                <?php $__currentLoopData = $gsmGateways->unique('hostname'); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $gateway): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                    <?php if($gateway->hostname): ?>
+                                        <option value="<?php echo e($gateway->hostname); ?>" data-channel-count="<?php echo e((int) $gateway->channel_count); ?>" data-ip="<?php echo e($gateway->ip_address); ?>"><?php echo e($gateway->hostname); ?></option>
                                     <?php endif; ?>
                                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                             </select>
                         <?php elseif($isSim && $field === 'port'): ?>
-                            <input class="form-control" type="number" min="1" max="512" name="port" id="field_port">
+                            <input class="form-control" type="number" min="1" name="port" id="field_port" required>
                         <?php elseif($field==='description'): ?>
                             <textarea class="form-control" name="<?php echo e($field); ?>" id="field_<?php echo e($field); ?>"></textarea>
                         <?php elseif($field==='specs'): ?>
@@ -363,7 +367,7 @@
                         <?php elseif(in_array($field, ['monthly_cost','retention_days'])): ?>
                             <input class="form-control" type="number" step="0.01" min="0" name="<?php echo e($field); ?>" id="field_<?php echo e($field); ?>">
                         <?php else: ?>
-                            <input class="form-control" name="<?php echo e($field); ?>" id="field_<?php echo e($field); ?>" <?php echo e(in_array($field, ['description','channel','gateway','peer','context','codec','imsi','assigned_to','location','role','program','assigned_channel','issue','reported_on','retention_days','network','plan','ip_address','account_number']) ? '' : 'required'); ?>>
+                            <input class="form-control" name="<?php echo e($field); ?>" id="field_<?php echo e($field); ?>" <?php echo e((($isSim && in_array($field, ['imei', 'mobile_number'], true)) || in_array($field, ['description','channel','gateway','peer','context','codec','imsi','assigned_to','location','role','program','assigned_channel','issue','reported_on','retention_days','network','plan','ip_address','account_number','remarks'])) ? '' : 'required'); ?>>
                         <?php endif; ?>
                     </div>
                     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
@@ -394,6 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     document.getElementById('operationAddButton')?.addEventListener('click', () => {
         resetAdd();
+        syncSimPortLimit();
         modal?.classList.add('visible');
     });
     document.addEventListener('click', (event) => {
@@ -418,8 +423,22 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             field.value = value;
         });
+        syncSimPortLimit();
         modal?.classList.add('visible');
     });
+    const hostnameField = document.getElementById('field_hostname');
+    const portField = document.getElementById('field_port');
+    function syncSimPortLimit() {
+        if (!hostnameField || !portField) return;
+        const selected = hostnameField.selectedOptions[0];
+        const count = Number(selected?.dataset.channelCount || 0);
+        if (count > 0) {
+            portField.max = String(count);
+        } else {
+            portField.removeAttribute('max');
+        }
+    }
+    hostnameField?.addEventListener('change', syncSimPortLimit);
 });
 </script>
 <?php if($isInbound): ?>
@@ -684,15 +703,30 @@ document.addEventListener('DOMContentLoaded', () => {
         renderLandlineChips();
     });
 
+    const campaignNames = () => options().map((option) => String(option.dataset.name || '').trim().toLowerCase()).filter(Boolean);
+    const campaignMatchesMaster = () => {
+        const value = String(input?.value || '').trim().toLowerCase();
+        return value !== '' && campaignNames().includes(value);
+    };
+
     inboundForm?.addEventListener('submit', (event) => {
         mobileInput?.setCustomValidity('');
         landlineInput?.setCustomValidity('');
         network?.setCustomValidity('');
+        input?.setCustomValidity('');
         if (mobileInput?.value.trim()) addMobile(mobileInput.value);
         if (landlineInput?.value.trim()) addLandline(landlineInput.value);
         if (mobileInput && mobileInput.validity.valid) mobileInput.value = '';
         if (landlineInput && landlineInput.validity.valid) landlineInput.value = '';
-        if ((mobileInput && !mobileInput.validity.valid) || (landlineInput && !landlineInput.validity.valid) || (network && !network.validity.valid)) {
+        if (input && String(input.value || '').trim() !== '' && !campaignMatchesMaster()) {
+            event.preventDefault();
+            input.setCustomValidity('');
+            if (typeof window.omniFlash === 'function') {
+                window.omniFlash(<?php echo json_encode(\App\Support\ChannelAllocationRules::CAMPAIGN_NOT_IN_MASTER, 15, 512) ?>, 'error');
+            }
+            return;
+        }
+        if ((mobileInput && !mobileInput.validity.valid) || (landlineInput && !landlineInput.validity.valid) || (network && !network.validity.valid) || (input && !input.validity.valid)) {
             event.preventDefault();
             return;
         }
@@ -709,6 +743,7 @@ document.addEventListener('DOMContentLoaded', () => {
             network?.reportValidity();
         }
     });
+    input?.addEventListener('input', () => input.setCustomValidity(''));
 
     const resetNumbers = () => {
         selected.splice(0, selected.length);
@@ -718,6 +753,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (mobileInput) mobileInput.value = '';
         if (landlineInput) landlineInput.value = '';
         network?.setCustomValidity('');
+        input?.setCustomValidity('');
         setMobileEnabled();
     };
     document.getElementById('operationAddButton')?.addEventListener('click', resetNumbers);

@@ -9,6 +9,7 @@ use App\Models\ChannelAllocationCampaign;
 use App\Models\MediaGateway;
 use App\Services\Logs\AuditLogger;
 use App\Services\XlsxService;
+use App\Support\Gsm\GsmGatewayWriter;
 use App\Support\GsmSimInventory;
 use App\Support\Inbound\ProgramInboundNumberValidator;
 use App\Support\Inbound\ProgramInboundSimLookup;
@@ -36,7 +37,7 @@ class OperationsDataController extends Controller
             $query->with(['campaign:id,name']);
         }
         if (OperationCatalog::isSim($module)) {
-            $query->with(['gatewayAssignment.gateway:id,ip_address']);
+            $query->with(['gatewayAssignment.gateway:id,hostname,ip_address']);
         }
         $this->applyInventorySearch($query, $request, $config, $module);
         $this->applyInventoryOrder($query, $module);
@@ -51,13 +52,13 @@ class OperationsDataController extends Controller
         $gateways = $gateways->get(['site_code', 'site_name']);
         $statusOptions = $this->statusOptions($module);
         $campaigns = OperationCatalog::isInbound($module)
-            ? ChannelAllocationCampaign::optionsForDropdown()
+            ? ChannelAllocationCampaign::masterOptionsForDropdown()
             : collect();
         $gsmGateways = (OperationCatalog::isInbound($module) || OperationCatalog::isSim($module))
             ? tap(MediaGateway::query(), function ($gateways) {
                 NaturalSort::apply($gateways, 'hostname');
                 NaturalSort::apply($gateways, 'ip_address');
-            })->get(['id', 'ip_address', 'port', 'network', 'hostname'])
+            })->get(['id', 'ip_address', 'port', 'network', 'hostname', 'channel_count'])
             : collect();
         $pinSimDirectory = OperationCatalog::isInbound($module)
             ? ProgramInboundSimLookup::payload()
@@ -76,6 +77,9 @@ class OperationsDataController extends Controller
     public function store(Request $request, string $module)
     {
         $config = $this->config($module);
+        if (OperationCatalog::isSim($module)) {
+            $this->prepareSimRequest($request);
+        }
         $data = $request->validate($this->rules($module), $this->messages($module));
         if (OperationCatalog::isSim($module)) {
             $data = $this->applySimDefaults($module, $data);
@@ -97,6 +101,9 @@ class OperationsDataController extends Controller
         } catch (UniqueConstraintViolationException $exception) {
             throw $this->uniqueConstraintValidation($module, $exception);
         }
+        if (OperationCatalog::isSim($module)) {
+            $this->syncSimAssignment($module, $record);
+        }
         AuditLogger::log('Created', $config['title'], $config['title'].' record added', $record->id, $request);
 
         return back()->with('success', $config['title'].' record added successfully.');
@@ -105,9 +112,12 @@ class OperationsDataController extends Controller
     public function update(Request $request)
     {
         [$config, $module, $id, $record] = $this->resolveRecord($request);
+        if (OperationCatalog::isSim($module)) {
+            $this->prepareSimRequest($request);
+        }
         $data = $request->validate($this->rules($module, $id), $this->messages($module));
         if (OperationCatalog::isSim($module)) {
-            $data = $this->applySimDefaults($module, $data);
+            $data = $this->applySimDefaults($module, $data, $id);
             $data = $this->parseSimDates($data);
         }
         if (OperationCatalog::isDefective($module)) {
@@ -125,6 +135,9 @@ class OperationsDataController extends Controller
             $record->update($data);
         } catch (UniqueConstraintViolationException $exception) {
             throw $this->uniqueConstraintValidation($module, $exception);
+        }
+        if (OperationCatalog::isSim($module)) {
+            $this->syncSimAssignment($module, $record->fresh() ?? $record);
         }
         AuditLogger::log('Updated', $config['title'], $config['title'].' record updated', $record->id, $request);
 
@@ -169,7 +182,7 @@ class OperationsDataController extends Controller
             $query->with(['campaign:id,name']);
         }
         if ($isSim) {
-            $query->with('gatewayAssignment');
+            $query->with(['gatewayAssignment.gateway:id,hostname,ip_address']);
         }
         $this->applyInventoryOrder($query, $module);
         $headers = $isInbound
@@ -191,6 +204,9 @@ class OperationsDataController extends Controller
                             $port = $record->port;
 
                             return $port ? (string) $port : '';
+                        }
+                        if ($isSim && $field === 'hostname') {
+                            return GsmSimInventory::hostnameForSim($record);
                         }
 
                         $value = $record->{$field};
@@ -287,20 +303,32 @@ class OperationsDataController extends Controller
         };
     }
 
+    private function prepareSimRequest(Request $request): void
+    {
+        $merged = [];
+        foreach (['imei', 'mobile_number', 'plan', 'account_number', 'contract_start', 'contract_end', 'hostname', 'port'] as $field) {
+            if (! $request->exists($field)) {
+                continue;
+            }
+            $merged[$field] = GsmSimInventory::blankSimValue($request->input($field));
+        }
+        $request->merge($merged);
+    }
+
     /**
      * @return array<string, mixed>
      */
     private function simRules(string $table, ?int $id = null): array
     {
         return [
-            'imei' => ['required', 'string', 'max:50', Rule::unique($table, 'imei')->ignore($id)],
-            'mobile_number' => ['required', 'string', 'max:50', Rule::unique($table, 'mobile_number')->ignore($id)],
-            'plan' => ['required', 'string', 'max:255'],
-            'ip_address' => ['required', 'ipv4', Rule::exists('media_gateways', 'ip_address')],
-            'port' => ['nullable', 'integer', 'min:1', 'max:512'],
-            'account_number' => ['required', 'string', 'max:255'],
-            'contract_start' => ['required', 'string'],
-            'contract_end' => ['required', 'string'],
+            'imei' => ['nullable', 'string', 'max:50', Rule::unique($table, 'imei')->ignore($id)],
+            'mobile_number' => ['nullable', 'string', 'max:50', Rule::unique($table, 'mobile_number')->ignore($id)],
+            'plan' => ['nullable', 'string', 'max:255'],
+            'hostname' => ['required', 'string', 'max:255'],
+            'port' => ['required', 'integer', 'min:1'],
+            'account_number' => ['nullable', 'string', 'max:255'],
+            'contract_start' => ['nullable', 'string'],
+            'contract_end' => ['nullable', 'string'],
         ];
     }
 
@@ -311,7 +339,13 @@ class OperationsDataController extends Controller
     private function parseSimDates(array $data): array
     {
         foreach (['contract_start' => 'Contract Start', 'contract_end' => 'Contract End'] as $field => $label) {
-            $parsed = PdcEndorseDate::parse($data[$field] ?? '');
+            $raw = GsmSimInventory::blankSimValue($data[$field] ?? null);
+            if ($raw === null) {
+                $data[$field] = null;
+
+                continue;
+            }
+            $parsed = PdcEndorseDate::parse($raw);
             if (! $parsed['valid']) {
                 throw ValidationException::withMessages([
                     $field => $label.' must be a valid date on or after 1/1/2000.',
@@ -327,14 +361,71 @@ class OperationsDataController extends Controller
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
-    private function applySimDefaults(string $module, array $data): array
+    private function applySimDefaults(string $module, array $data, ?int $id = null): array
     {
-        unset($data['network']);
-        $data['network'] = $module === 'smart-sim' ? 'Smart' : 'Globe';
-        $port = $data['port'] ?? null;
-        $data['port'] = is_numeric($port) && (int) $port > 0 ? (int) $port : null;
+        $expected = $module === 'smart-sim' ? GsmSimInventory::SMART : GsmSimInventory::GLOBE;
+
+        $hostname = trim((string) ($data['hostname'] ?? ''));
+        $gateway = GsmSimInventory::findGatewayByHostname($hostname);
+        if (! $gateway) {
+            throw ValidationException::withMessages([
+                'hostname' => 'Hostname must match an existing GSM Gateway.',
+            ]);
+        }
+
+        if (! GsmSimInventory::hasCompanionValue($data)) {
+            throw ValidationException::withMessages([
+                'imei' => GsmSimInventory::COMPANION_REQUIRED,
+            ]);
+        }
+
+        foreach (['imei', 'mobile_number', 'plan', 'account_number'] as $field) {
+            $data[$field] = GsmSimInventory::blankSimValue($data[$field] ?? null);
+        }
+
+        $portRaw = $data['port'] ?? null;
+        if (! is_numeric($portRaw) || (int) $portRaw < 1) {
+            throw ValidationException::withMessages([
+                'port' => 'Port must be a number.',
+            ]);
+        }
+        $port = (int) $portRaw;
+        $max = (int) $gateway->channel_count;
+        if ($max > 0 && $port > $max) {
+            throw ValidationException::withMessages([
+                'port' => 'Port must not exceed Channel Count.',
+            ]);
+        }
+
+        $type = $module === 'smart-sim' ? 'smart' : 'globe';
+        if (GsmSimInventory::portIsTaken($gateway, $port, $type, $id)) {
+            throw ValidationException::withMessages([
+                'port' => 'Port is already assigned on this GSM Gateway.',
+            ]);
+        }
+
+        $data['ip_address'] = $gateway->ip_address;
+        $data['port'] = $port;
+        $data['network'] = GsmSimInventory::canonicalNetwork($gateway->network ?? null) ?: $expected;
+        unset($data['hostname'], $data['remarks']);
 
         return $data;
+    }
+
+    private function syncSimAssignment(string $module, $record): void
+    {
+        $gateway = GsmSimInventory::findGatewayByIp((string) $record->ip_address);
+        $port = (int) ($record->port ?? 0);
+        if (! $gateway || $port < 1) {
+            return;
+        }
+
+        GsmGatewayWriter::syncSimPort(
+            $gateway,
+            $module === 'smart-sim' ? 'smart' : 'globe',
+            (int) $record->id,
+            $port
+        );
     }
 
     /**
@@ -391,13 +482,28 @@ class OperationsDataController extends Controller
     {
         if ($search = trim((string) $request->query('search'))) {
             $query->where(function ($q) use ($search, $config, $module) {
+                $isSim = OperationCatalog::isSim($module);
                 foreach (array_keys($config['columns']) as $i => $field) {
+                    if ($isSim && $field === 'hostname') {
+                        $q->orWhereHas('gatewayAssignment.gateway', function ($gateways) use ($search): void {
+                            $gateways->where('hostname', 'like', "%{$search}%");
+                        });
+                        $ips = MediaGateway::query()
+                            ->where('hostname', 'like', "%{$search}%")
+                            ->pluck('ip_address')
+                            ->filter(fn ($ip) => trim((string) $ip) !== '')
+                            ->all();
+                        if ($ips !== []) {
+                            $q->orWhereIn('ip_address', $ips);
+                        }
+                        continue;
+                    }
                     $i === 0 ? $q->where($field, 'like', "%$search%") : $q->orWhere($field, 'like', "%$search%");
                 }
                 if (OperationCatalog::isInbound($module)) {
                     $q->orWhereHas('campaign', fn ($campaigns) => $campaigns->where('name', 'like', "%{$search}%"));
                 }
-                if (OperationCatalog::isSim($module)) {
+                if ($isSim) {
                     $parsed = PdcEndorseDate::parse($search);
                     if ($parsed['valid'] && ! $parsed['empty']) {
                         $q->orWhereDate('contract_start', $parsed['iso'])->orWhereDate('contract_end', $parsed['iso']);
@@ -487,12 +593,23 @@ class OperationsDataController extends Controller
     }
 
     /**
+     * Program Inbound Numbers may only use a campaign listed on Master Campaign.
+     * A missing Master Campaign is never created.
+     *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
     private function syncInboundCampaign(array $data): array
     {
-        $campaign = ChannelAllocationCampaign::findOrCreateByName((string) ($data['campaign'] ?? ''));
+        $name = trim((string) ($data['campaign'] ?? ''));
+        $campaign = ChannelAllocationCampaign::masterByName($name);
+        if ($campaign === null) {
+            throw ValidationException::withMessages([
+                'campaign' => $name === ''
+                    ? ProgramInboundNumberValidator::CAMPAIGN_REQUIRED
+                    : ProgramInboundNumberValidator::CAMPAIGN_MISSING,
+            ]);
+        }
         $data['campaign_id'] = $campaign->id;
         $data['program'] = $campaign->name;
         unset($data['campaign']);
@@ -505,6 +622,15 @@ class OperationsDataController extends Controller
      */
     private function messages(string $module): array
     {
+        if (OperationCatalog::isSim($module)) {
+            return [
+                'hostname.required' => 'Hostname must match an existing GSM Gateway.',
+                'port.required' => 'Port must be a number.',
+                'port.integer' => 'Port must be a number.',
+                'port.min' => 'Port must be a number.',
+            ];
+        }
+
         if (! OperationCatalog::isInbound($module)) {
             return [];
         }
@@ -543,12 +669,11 @@ class OperationsDataController extends Controller
         }
         $seen = [];
         $campaignName = trim((string) ($data['campaign'] ?? ''));
-        $campaignId = $campaignName === ''
-            ? null
-            : ChannelAllocationCampaign::query()
-                ->whereRaw('LOWER(name) = ?', [mb_strtolower($campaignName)])
-                ->value('id');
-        $campaignId = $campaignId ? (int) $campaignId : null;
+        $masterCampaign = $campaignName === '' ? null : ChannelAllocationCampaign::masterByName($campaignName);
+        if ($campaignName !== '' && $masterCampaign === null) {
+            $messages['campaign'] = ProgramInboundNumberValidator::CAMPAIGN_MISSING;
+        }
+        $campaignId = $masterCampaign ? (int) $masterCampaign->id : null;
         foreach (ProgramInboundNumberValidator::uniquenessErrors(
             $mobiles,
             $landlines,

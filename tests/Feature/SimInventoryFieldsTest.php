@@ -38,8 +38,8 @@ class SimInventoryFieldsTest extends TestCase
     public static function simModules(): array
     {
         return [
-            'globe-sim' => ['globe-sim', GlobeSim::class, 'globe_sims', 'Globe'],
-            'smart-sim' => ['smart-sim', SmartSim::class, 'smart_sims', 'Smart'],
+            'globe-sim' => ['globe-sim', GlobeSim::class, 'globe_sims', 'Globe SIM'],
+            'smart-sim' => ['smart-sim', SmartSim::class, 'smart_sims', 'Smart SIM'],
         ];
     }
 
@@ -49,11 +49,14 @@ class SimInventoryFieldsTest extends TestCase
         $this->actingAs($this->admin);
 
         MediaGateway::create([
+            'hostname' => 'sim-gw-'.$module,
             'site_name' => 'Alcar',
             'site_code' => 'SIM-GW-'.$module,
             'ip_address' => '10.73.1.1',
             'username' => 'root',
             'database' => 'asteriskcdrdb',
+            'channel_count' => 16,
+            'network' => $network,
         ]);
 
         $page = $this->get('/'.$module)->assertOk();
@@ -65,23 +68,28 @@ class SimInventoryFieldsTest extends TestCase
             'IMEI',
             'Mobile Number',
             'Plan',
-            'IP',
+            'Hostname',
             'Port',
             'Account Number',
             'Contract Start',
             'Contract End',
             'Actions',
         ]);
-        $this->assertStringNotContainsString('<th>Network</th>', $html);
+        $tableHtml = Str::betweenFirst($html, 'class="sim-table"', '</table>');
+        $this->assertStringNotContainsString('>Network</th>', $tableHtml);
+        $this->assertStringNotContainsString('>Remarks</th>', $tableHtml);
         $page->assertSee('field_imei', false)
             ->assertSee('field_mobile_number', false)
             ->assertSee('field_plan', false)
-            ->assertSee('field_ip_address', false)
-            ->assertSee('<select class="form-control" name="ip_address" id="field_ip_address" required>', false)
-            ->assertSee('<option value="10.73.1.1">10.73.1.1</option>', false)
+            ->assertSee('field_hostname', false)
+            ->assertSee('<select class="form-control" name="hostname" id="field_hostname" required>', false)
+            ->assertSee('value="sim-gw-'.$module.'"', false)
+            ->assertSee('>sim-gw-'.$module.'</option>', false)
             ->assertSee('field_port', false)
-            ->assertSee('<input class="form-control" type="number" min="1" max="512" name="port" id="field_port">', false)
+            ->assertSee('<input class="form-control" type="number" min="1" name="port" id="field_port" required>', false)
             ->assertDontSee('Port <span class="req">*</span>', false)
+            ->assertDontSee('field_network', false)
+            ->assertDontSee('field_remarks', false)
             ->assertSee('field_account_number', false)
             ->assertSee('field_contract_start', false)
             ->assertSee('field_contract_end', false)
@@ -106,9 +114,8 @@ class SimInventoryFieldsTest extends TestCase
         $payload = [
             'imei' => '356938035644001',
             'mobile_number' => '09173330001',
-            'network' => $network,
             'plan' => 'Unli Surf',
-            'ip_address' => '10.73.1.1',
+            'hostname' => 'sim-gw-'.$module,
             'port' => 3,
             'account_number' => 'ACC-3001',
             'contract_start' => '3/1/2026',
@@ -123,7 +130,8 @@ class SimInventoryFieldsTest extends TestCase
         $this->assertSame('Unli Surf', $record->plan);
         $this->assertSame('10.73.1.1', $record->ip_address);
         $this->assertSame(3, (int) $record->port);
-        $this->assertNull($record->fresh()->gatewayAssignment);
+        $this->assertNull($record->fresh()->remarks);
+        $this->assertNotNull($record->fresh()->gatewayAssignment);
         $this->assertSame('ACC-3001', $record->account_number);
         $this->assertSame('2026-03-01', $record->contract_start?->format('Y-m-d'));
         $this->assertSame('2026-09-03', $record->contract_end?->format('Y-m-d'));
@@ -135,22 +143,23 @@ class SimInventoryFieldsTest extends TestCase
         $this->assertStringNotContainsString('2026-09-03', $showHtml);
         $show->assertSee('356938035644001')
             ->assertSee('09173330001')
-            ->assertSee($network)
             ->assertSee('Unli Surf')
-            ->assertSee('10.73.1.1')
+            ->assertSee('sim-gw-'.$module)
             ->assertSee('ACC-3001')
             ->assertSee('3/1/2026')
             ->assertSee('9/3/2026');
         $this->assertStringContainsString('3\/1\/2026', $showHtml);
         $this->assertStringContainsString('9\/3\/2026', $showHtml);
         $this->assertStringContainsString('"port":3', $showHtml);
+        $this->assertStringContainsString('"hostname":"sim-gw-'.$module.'"', $showHtml);
         $this->assertStringContainsString('data-id="'.$record->id.'"', $showHtml);
         $this->assertStringNotContainsString('<th>Last Updated</th>', $showHtml);
-        $this->assertStringNotContainsString('<th>Network</th>', $showHtml);
         $tableHtml = Str::betweenFirst($showHtml, 'class="sim-table"', '</table>');
         $this->assertStringContainsString('>Port</th>', $tableHtml);
         $this->assertStringNotContainsString('>Network</th>', $tableHtml);
-        $this->assertTrue(strpos($tableHtml, '>IP</th>') < strpos($tableHtml, '>Port</th>'));
+        $this->assertStringNotContainsString('>Remarks</th>', $tableHtml);
+        $this->assertTrue(strpos($tableHtml, '>Hostname</th>') < strpos($tableHtml, '>Port</th>'));
+        $this->assertStringContainsString('sim-gw-'.$module, $tableHtml);
 
         $updated = $payload;
         $updated['account_number'] = 'ACC-3001-EDIT';
@@ -162,7 +171,7 @@ class SimInventoryFieldsTest extends TestCase
         $this->assertSame('2026-03-01', $record->contract_start?->format('Y-m-d'));
         $this->assertSame('2026-10-15', $record->contract_end?->format('Y-m-d'));
         $this->assertSame(5, (int) $record->port);
-        $this->assertNull($record->gatewayAssignment);
+        $this->assertNotNull($record->gatewayAssignment);
 
         $this->delete('/'.$module.'/'.$record->id)->assertRedirect();
         $this->assertDatabaseMissing($table, ['id' => $record->id]);
@@ -174,74 +183,57 @@ class SimInventoryFieldsTest extends TestCase
         $this->actingAs($this->admin);
 
         MediaGateway::create([
+            'hostname' => 'sim-val-'.$module,
             'site_name' => 'Alcar',
             'site_code' => 'SIM-VAL-'.$module,
             'ip_address' => '10.73.2.1',
             'username' => 'root',
             'database' => 'asteriskcdrdb',
+            'channel_count' => 8,
         ]);
 
-        $this->from('/'.$module)->post('/'.$module, [
-            'imei' => '',
-            'mobile_number' => '09173330009',
+        $validBase = [
             'plan' => 'Plan A',
-            'ip_address' => '10.73.2.1',
+            'hostname' => 'sim-val-'.$module,
+            'port' => 2,
             'account_number' => 'ACC-VAL-1',
             'contract_start' => '3/1/2026',
             'contract_end' => '9/3/2026',
-        ])->assertSessionHasErrors(['imei']);
+        ];
 
-        $this->from('/'.$module)->post('/'.$module, [
-            'imei' => '356938035644009',
-            'mobile_number' => '',
-            'plan' => 'Plan A',
-            'ip_address' => '10.73.2.1',
-            'account_number' => 'ACC-VAL-1',
-            'contract_start' => '3/1/2026',
-            'contract_end' => '9/3/2026',
-        ])->assertSessionHasErrors(['mobile_number']);
-
-        $this->from('/'.$module)->post('/'.$module, [
+        $this->from('/'.$module)->post('/'.$module, array_merge($validBase, [
             'imei' => '356938035644010',
             'mobile_number' => '09173330010',
-            'plan' => 'Plan A',
-            'ip_address' => 'not-an-ip',
-            'account_number' => 'ACC-VAL-1',
-            'contract_start' => '3/1/2026',
-            'contract_end' => '9/3/2026',
-        ])->assertSessionHasErrors(['ip_address']);
+            'hostname' => 'missing-gateway',
+        ]))->assertSessionHasErrors(['hostname']);
 
-        $this->from('/'.$module)->post('/'.$module, [
+        $this->from('/'.$module)->post('/'.$module, array_merge($validBase, [
+            'imei' => '356938035644014',
+            'mobile_number' => '09173330014',
+            'port' => 9,
+        ]))->assertSessionHasErrors(['port']);
+
+        $this->from('/'.$module)->post('/'.$module, array_merge($validBase, [
             'imei' => '356938035644011',
             'mobile_number' => '09173330011',
-            'plan' => 'Plan A',
-            'ip_address' => '10.73.2.1',
-            'account_number' => 'ACC-VAL-1',
             'contract_start' => '12/1/2026',
             'contract_end' => '1/1/2026',
-        ])->assertSessionHas('error', 'Contract end date must be on or after the contract start date.');
+        ]))->assertSessionHas('error', 'Contract end date must be on or after the contract start date.');
 
         foreach (['9/32/2026', '13/3/2026'] as $invalid) {
-            $this->from('/'.$module)->post('/'.$module, [
+            $this->from('/'.$module)->post('/'.$module, array_merge($validBase, [
                 'imei' => '356938035644012',
                 'mobile_number' => '09173330012',
-                'plan' => 'Plan A',
-                'ip_address' => '10.73.2.1',
-                'account_number' => 'ACC-VAL-1',
                 'contract_start' => $invalid,
-                'contract_end' => '9/3/2026',
-            ])->assertSessionHasErrors(['contract_start']);
+            ]))->assertSessionHasErrors(['contract_start']);
         }
 
-        $this->post('/'.$module, [
+        $this->post('/'.$module, array_merge($validBase, [
             'imei' => '356938035644013',
             'mobile_number' => '09173330013',
-            'plan' => 'Plan A',
-            'ip_address' => '10.73.2.1',
-            'account_number' => 'ACC-VAL-1',
             'contract_start' => '2026-03-01',
             'contract_end' => '2026-09-03',
-        ])->assertRedirect();
+        ]))->assertRedirect();
         $this->assertSame('2026-03-01', $model::query()->where('imei', '356938035644013')->first()?->contract_start?->format('Y-m-d'));
 
         $this->assertSame(1, $model::count());
@@ -262,7 +254,7 @@ class SimInventoryFieldsTest extends TestCase
             'imei',
             'mobile_number',
             'plan',
-            'ip_address',
+            'hostname',
             'port',
             'account_number',
             'contract_start',
@@ -272,7 +264,7 @@ class SimInventoryFieldsTest extends TestCase
             'IMEI',
             'Mobile Number',
             'Plan',
-            'IP',
+            'Hostname',
             'Port',
             'Account Number',
             'Contract Start',
@@ -282,7 +274,7 @@ class SimInventoryFieldsTest extends TestCase
             'IMEI',
             'Mobile Number',
             'Plan',
-            'IP',
+            'Hostname',
             'Port',
             'Account Number',
             'Contract Start',
@@ -292,7 +284,8 @@ class SimInventoryFieldsTest extends TestCase
             'IMEI',
             'Mobile Number',
             'Plan',
-            'IP',
+            'Hostname',
+            'Port',
             'Account Number',
             'Contract Start',
             'Contract End',
@@ -307,11 +300,12 @@ class SimInventoryFieldsTest extends TestCase
     }
 
     #[DataProvider('simModules')]
-    public function test_table_shows_gsm_gateway_port_beside_ip(string $module, string $model, string $table, string $network): void
+    public function test_table_shows_gsm_gateway_hostname_beside_port(string $module, string $model, string $table, string $network): void
     {
         $this->actingAs($this->admin);
 
         $gateway = MediaGateway::create([
+            'hostname' => 'sim-port-'.$module,
             'site_name' => 'Alcar',
             'site_code' => 'SIM-PORT-'.$module,
             'ip_address' => '10.73.9.9',
@@ -339,11 +333,13 @@ class SimInventoryFieldsTest extends TestCase
 
         $page = $this->get('/'.$module)->assertOk();
         $tableHtml = Str::betweenFirst($page->getContent(), 'class="sim-table"', '</table>');
-        $this->assertStringContainsString('>IP</th>', $tableHtml);
+        $this->assertStringContainsString('>Hostname</th>', $tableHtml);
         $this->assertStringContainsString('>Port</th>', $tableHtml);
-        $this->assertTrue(strpos($tableHtml, '>IP</th>') < strpos($tableHtml, '>Port</th>'));
+        $this->assertTrue(strpos($tableHtml, '>Hostname</th>') < strpos($tableHtml, '>Port</th>'));
         $this->assertStringNotContainsString('>Network</th>', $tableHtml);
-        $this->assertStringContainsString('10.73.9.9', $tableHtml);
+        $this->assertStringContainsString('sim-port-'.$module, $tableHtml);
+        $this->assertStringNotContainsString('>IP</th>', $tableHtml);
+        $this->assertStringNotContainsString('>10.73.9.9<', $tableHtml);
         $this->assertMatchesRegularExpression('/>\s*4\s*</', $tableHtml);
         $this->assertStringNotContainsString('>9</td>', $tableHtml);
         $this->assertSame('4', $sim->displayPort());
@@ -353,7 +349,7 @@ class SimInventoryFieldsTest extends TestCase
     public function test_legacy_sim_columns_are_preserved_and_existing_values_can_still_be_stored(): void
     {
         foreach (['globe_sims', 'smart_sims'] as $table) {
-            foreach (['sim_number', 'imsi', 'assigned_to', 'location', 'status', 'imei', 'mobile_number', 'network', 'plan', 'ip_address', 'port', 'account_number', 'contract_start', 'contract_end'] as $column) {
+            foreach (['sim_number', 'imsi', 'assigned_to', 'location', 'status', 'imei', 'mobile_number', 'network', 'plan', 'ip_address', 'port', 'account_number', 'contract_start', 'contract_end', 'remarks'] as $column) {
                 $this->assertTrue(Schema::hasColumn($table, $column), $table.'.'.$column);
             }
         }
@@ -394,7 +390,8 @@ class SimInventoryFieldsTest extends TestCase
             'IMEI',
             'Mobile Number',
             'Plan',
-            'IP',
+            'Hostname',
+            'Port',
             'Account Number',
             'Contract Start',
             'Contract End',
@@ -473,7 +470,7 @@ class SimInventoryFieldsTest extends TestCase
             'imei' => $module === 'globe-sim' ? '356938035648001' : '356938035648101',
             'mobile_number' => $module === 'globe-sim' ? '09178880001' : '09288880001',
             'plan' => 'Unli Surf',
-            'ip_address' => '10.73.8.8',
+            'hostname' => 'sim-port-host',
             'port' => 12,
             'account_number' => 'ACC-IND',
             'contract_start' => '3/1/2026',
@@ -482,7 +479,7 @@ class SimInventoryFieldsTest extends TestCase
 
         $sim = $model::query()->firstOrFail();
         $this->assertSame(12, (int) $sim->port);
-        $this->assertNull($sim->gatewayAssignment);
+        $this->assertNotNull($sim->gatewayAssignment);
 
         $this->putJson('/gsm-gateways/'.$gateway->id, [
             'hostname' => 'sim-port-host-edit',
@@ -491,7 +488,7 @@ class SimInventoryFieldsTest extends TestCase
             'ip_address' => '10.73.8.80',
             'channel_count' => 16,
             'device_function' => 'Inbound',
-            'network' => $network === 'Smart' ? 'Smart SIM' : 'Globe SIM',
+            'network' => $network,
             'username' => 'root',
             'database' => 'asteriskcdrdb',
         ])->assertOk();
@@ -504,5 +501,54 @@ class SimInventoryFieldsTest extends TestCase
         $sim->refresh();
         $this->assertSame(12, (int) $sim->port);
         $this->assertDatabaseHas('media_gateways', ['id' => $keep->id]);
+    }
+
+    #[DataProvider('simModules')]
+    public function test_sim_saves_with_hostname_port_and_one_other_field(string $module, string $model): void
+    {
+        $this->actingAs($this->admin);
+        MediaGateway::create([
+            'hostname' => 'sparse-gw-'.$module,
+            'site_name' => 'Alcar',
+            'site_code' => 'SPARSE-'.$module,
+            'ip_address' => '10.73.9.1',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'channel_count' => 4,
+            'network' => $module === 'smart-sim' ? 'Smart SIM' : 'Globe SIM',
+        ]);
+
+        $this->post('/'.$module, [
+            'hostname' => 'sparse-gw-'.$module,
+            'port' => 2,
+            'plan' => '-',
+            'imei' => '-',
+            'mobile_number' => '',
+            'account_number' => '',
+            'contract_start' => '3/1/2026',
+            'contract_end' => '-',
+        ])->assertRedirect();
+
+        $record = $model::query()->firstOrFail();
+        $this->assertNull($record->imei);
+        $this->assertNull($record->plan);
+        $this->assertNull($record->mobile_number);
+        $this->assertNull($record->account_number);
+        $this->assertNull($record->contract_end);
+        $this->assertSame('2026-03-01', $record->contract_start?->format('Y-m-d'));
+        $this->assertSame(2, (int) $record->port);
+        $this->assertNotNull($record->gatewayAssignment);
+
+        $this->post('/'.$module, [
+            'hostname' => 'sparse-gw-'.$module,
+            'port' => 3,
+            'imei' => '-',
+            'mobile_number' => '-',
+            'plan' => '-',
+            'account_number' => '-',
+            'contract_start' => '-',
+            'contract_end' => '',
+        ])->assertSessionHasErrors('imei');
+        $this->assertSame(1, $model::query()->count());
     }
 }

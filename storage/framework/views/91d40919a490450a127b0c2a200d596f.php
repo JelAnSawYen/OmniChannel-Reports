@@ -137,36 +137,77 @@
 <tr class="ca-nested-row" id="gsm-panel-<?php echo e($gateway->id); ?>" hidden>
     <td colspan="<?php echo e($colspan); ?>">
         <div class="ca-nested">
+            <?php
+                $nestedColumns = [
+                    ['key' => 'port', 'label' => 'Port', 'class' => 'gsm-sim-port', 'col' => 'gsm-sim-col-port'],
+                    ['key' => 'imei', 'label' => 'IMEI', 'class' => '', 'col' => 'gsm-sim-col-imei'],
+                    ['key' => 'mobile_number', 'label' => 'Mobile Number', 'class' => '', 'col' => 'gsm-sim-col-mobile'],
+                    ['key' => 'plan', 'label' => 'Plan', 'class' => '', 'col' => 'gsm-sim-col-plan'],
+                    ['key' => 'remarks', 'label' => 'Remarks', 'class' => '', 'col' => 'gsm-sim-col-remarks'],
+                ];
+            ?>
             <table class="gsm-sim-nested" aria-label="SIM assignments">
                 <colgroup>
-                    <col class="gsm-sim-col-imei">
-                    <col class="gsm-sim-col-mobile">
-                    <col class="gsm-sim-col-plan">
-                    <col class="gsm-sim-col-port">
+                    <?php $__currentLoopData = $nestedColumns; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $column): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                        <col class="<?php echo e($column['col']); ?>">
+                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                    <col class="gsm-sim-col-actions">
                 </colgroup>
                 <thead>
                     <tr>
-                        <th>IMEI</th>
-                        <th>Mobile Number</th>
-                        <th>Plan</th>
-                        <th>Port</th>
+                        <?php $__currentLoopData = $nestedColumns; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $column): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                            <th><?php echo e($column['label']); ?></th>
+                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                        <th class="actions-column">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php $__empty_2 = true; $__currentLoopData = $assignments; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $assignment): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_2 = false; ?>
                     <?php
-                        $nestedBulkId = ! empty($assignment['assignment_id'])
+                        $hasSim = (int) ($assignment['assignment_id'] ?? 0) > 0 || (int) ($assignment['id'] ?? 0) > 0;
+                        $nestedBulkId = (int) ($assignment['assignment_id'] ?? 0) > 0
                             ? (string) $assignment['assignment_id']
                             : ((string) ($assignment['sim_type'] ?? '').'-'.(string) ($assignment['id'] ?? ''));
+                        $portValues = [
+                            'gateway_id' => $gateway->id,
+                            'assignment_id' => (int) ($assignment['assignment_id'] ?? 0),
+                            'sim_type' => (string) ($assignment['sim_type'] ?? ''),
+                            'sim_id' => (int) ($assignment['id'] ?? 0),
+                            'port' => $assignment['port'] ?? '',
+                            'imei' => (string) ($assignment['imei'] ?? ''),
+                            'mobile_number' => (string) ($assignment['mobile_number'] ?? ''),
+                            'plan' => (string) ($assignment['plan'] ?? ''),
+                            'network' => (string) ($assignment['network'] ?? ''),
+                            'remarks' => (string) ($assignment['remarks'] ?? ''),
+                        ];
                     ?>
-                    <tr <?php if(auth()->user()->hasPermission('media.delete') && auth()->user()->canMutateGateways() && $nestedBulkId !== '-' && $nestedBulkId !== ''): ?> data-bulk-row="nested" data-bulk-id="<?php echo e($nestedBulkId); ?>" data-bulk-url="<?php echo e(route('gsm-gateways.assignments.bulk-destroy', $gateway)); ?>" data-bulk-ajax="1" <?php endif; ?>>
-                        <td><?php echo e($assignment['imei'] ?: '—'); ?></td>
-                        <td><?php echo e($assignment['mobile_number'] ?: '—'); ?></td>
-                        <td><?php echo e($assignment['plan'] ?: '—'); ?></td>
-                        <td><?php echo e($assignment['port'] !== '' && $assignment['port'] !== null ? $assignment['port'] : '—'); ?></td>
+                    <tr <?php if($hasSim && auth()->user()->hasPermission('media.delete') && auth()->user()->canMutateGateways() && $nestedBulkId !== '-' && $nestedBulkId !== ''): ?> data-bulk-row="nested" data-bulk-id="<?php echo e($nestedBulkId); ?>" data-bulk-url="<?php echo e(route('gsm-gateways.assignments.bulk-destroy', $gateway)); ?>" data-bulk-ajax="1" <?php endif; ?>>
+                        <?php $__currentLoopData = $nestedColumns; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $column): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                            <?php
+                                $cell = $assignment[$column['key']] ?? '';
+                                $text = ($cell !== '' && $cell !== null) ? $cell : '—';
+                            ?>
+                            <td <?php if($column['class'] !== ''): ?> class="<?php echo e($column['class']); ?>" <?php endif; ?>><?php echo e($text); ?></td>
+                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                        <td class="actions-column">
+                            <?php if(auth()->user()->canMutateGateways() && (auth()->user()->hasPermission('media.edit') || auth()->user()->hasPermission('media.delete'))): ?>
+                            <div class="row-actions">
+                                <?php if(auth()->user()->hasPermission('media.edit')): ?>
+                                    <button type="button" class="action-btn edit" data-port-remarks='<?php echo json_encode($portValues, 15, 512) ?>' title="Edit Remarks" aria-label="Edit Remarks">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
+                                    </button>
+                                <?php endif; ?>
+                                <?php if(auth()->user()->hasPermission('media.delete')): ?>
+                                    <button type="button" class="action-btn delete" data-port-delete="<?php echo e($nestedBulkId); ?>" data-port-gateway="<?php echo e($gateway->id); ?>" data-port-assignment="<?php echo e((int) ($assignment['assignment_id'] ?? 0)); ?>" data-port-number="<?php echo e($assignment['port']); ?>" title="Delete Port Assignment" aria-label="Delete Port Assignment">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="m6 7 1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>
+                                    </button>
+                                <?php endif; ?>
+                            </div>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_2): ?>
-                    <tr><td colspan="4"><div class="empty-state">No SIM assignments.</div></td></tr>
+                    <tr><td colspan="6"><div class="empty-state">No SIM assignments.</div></td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
@@ -269,7 +310,15 @@
                         <div class="form-group"><label for="site_code">Serial Number</label><input class="form-control" id="site_code" name="site_code" required></div>
                         <div class="form-group"><label for="username">User</label><input class="form-control" id="username" name="username" required></div>
                         <div class="form-group"><label for="channel_count">Channel Count</label><input class="form-control" id="channel_count" name="channel_count" type="number" min="1" max="512" required></div>
-                        <div class="form-group"><label for="network">Network</label><input class="form-control" id="network" name="network"></div>
+                        <div class="form-group">
+                            <label for="network">Network</label>
+                            <select class="form-control" id="network" name="network">
+                                <option value="" selected hidden>Select Network</option>
+                                <?php $__currentLoopData = \App\Support\GsmSimInventory::networks(); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $gsmNetwork): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                    <option value="<?php echo e($gsmNetwork); ?>"><?php echo e($gsmNetwork); ?></option>
+                                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                            </select>
+                        </div>
                         <div class="form-group">
                             <label for="password">Password</label>
                             <div class="pdc-password-field">
@@ -312,6 +361,30 @@
 </div>
 <?php endif; ?>
 
+<?php if($isGsm && auth()->user()->canMutateGateways() && auth()->user()->hasPermission('media.edit')): ?>
+<div class="modal-backdrop" id="gsmPortRemarksModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Edit Remarks</h3>
+            <button type="button" class="close-btn" data-close="gsmPortRemarksModal">×</button>
+        </div>
+        <form id="gsmPortRemarksForm">
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="form-group"><label for="portRemarksPort">Port</label><input class="form-control" id="portRemarksPort" readonly></div>
+                    <div class="form-group"><label for="portRemarksImei">IMEI</label><input class="form-control" id="portRemarksImei" readonly></div>
+                    <div class="form-group"><label for="portRemarksMobile">Mobile Number</label><input class="form-control" id="portRemarksMobile" readonly></div>
+                    <div class="form-group"><label for="portRemarksPlan">Plan</label><input class="form-control" id="portRemarksPlan" readonly></div>
+                    <div class="form-group"><label for="portRemarksNetwork">Network</label><input class="form-control" id="portRemarksNetwork" readonly></div>
+                    <div class="form-group full"><label for="portRemarksInput">Remarks</label><textarea class="form-control" id="portRemarksInput" name="remarks" maxlength="1000"></textarea></div>
+                </div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn secondary" data-close="gsmPortRemarksModal">Cancel</button><button type="submit" class="btn primary">Save</button></div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
 <?php if(auth()->user()->canMutateGateways() && auth()->user()->hasPermission('media.delete')): ?>
 <div class="modal-backdrop" id="deleteModal">
     <div class="modal small">
@@ -326,7 +399,7 @@
     'confirmUrl' => (auth()->user()->hasPermission('media.create') && auth()->user()->canMutateGateways()) ? route($isGsm ? 'gsm-gateways.import.confirm' : 'media-gateways.import.confirm') : '',
     'errorsUrl' => (auth()->user()->hasPermission('media.create') && auth()->user()->canMutateGateways()) ? route($isGsm ? 'gsm-gateways.import.errors' : 'media-gateways.import.errors') : '',
     'previewFields' => $isGsm
-        ? ['hostname', 'ip_address', 'site_code', 'channel_count', 'device_function', 'site_name', 'username', 'password', 'assignment_port', 'imei', 'mobile_number', 'assignment_network', 'assignment_plan']
+        ? ['hostname', 'ip_address', 'site_code', 'channel_count', 'device_function', 'site_name', 'username', 'password', 'assignment_port', 'imei', 'mobile_number', 'assignment_network', 'assignment_plan', 'assignment_remarks']
         : ['ip_address', 'site_code', 'plan', 'port', 'network', 'device_function', 'site_name', 'username', 'password'],
 ], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 <?php $__env->stopPush(); ?>

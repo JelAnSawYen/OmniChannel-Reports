@@ -13,6 +13,8 @@ use App\Models\SmartSim;
 use App\Models\User;
 use App\Models\UserType;
 use App\Services\XlsxService;
+use App\Support\ChannelAllocationRules;
+use App\Support\Inbound\ProgramInboundNumberValidator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
@@ -117,27 +119,35 @@ class ProgramInboundNumbersPageTest extends TestCase
         $this->assertMatchesRegularExpression('/\.pin-stack\s*\{[^}]*flex-direction:\s*column/', $css);
     }
 
-    public function test_campaign_uses_existing_records_and_does_not_duplicate(): void
+    public function test_campaign_dropdown_lists_master_campaigns_and_rejects_unknown(): void
     {
         $this->actingAs($this->admin);
         $before = ChannelAllocationCampaign::count();
         $existing = ChannelAllocationCampaign::create(['name' => 'Mynt']);
+        $pdcOnly = ChannelAllocationCampaign::create([
+            'name' => 'PDC Only Campaign',
+            'listed_in_campaigns' => false,
+        ]);
 
         $page = $this->get('/program-inbound-numbers')->assertOk();
         $html = $page->getContent();
         $this->assertStringContainsString('id="field_campaign"', $html);
         $this->assertStringContainsString('Select or type a campaign...', $html);
         $this->assertStringContainsString('data-name="Mynt"', $html);
+        $this->assertStringNotContainsString('data-name="PDC Only Campaign"', $html);
         $this->assertStringContainsString('pin-campaign-combo', $html);
+        $this->assertStringNotContainsString('No campaigns yet. Type a new name.', $html);
+        $this->assertStringNotContainsString('Type a new name.', $html);
+        $this->assertStringContainsString('No Master Campaign available.', file_get_contents(resource_path('views/operations/index.blade.php')));
         $this->assertStringContainsString('.pin-campaign-option[hidden]', file_get_contents(resource_path('css/app.css')));
         $this->assertStringNotContainsString('id="field_program"', $html);
 
         $this->post('/program-inbound-numbers', [
             'campaign' => 'mynt',
             'landline_numbers' => ['09170001111'],
-        ])->assertRedirect();
+        ])->assertRedirect()->assertSessionHasNoErrors();
 
-        $this->assertSame($before + 1, ChannelAllocationCampaign::count());
+        $this->assertSame($before + 2, ChannelAllocationCampaign::count());
         $this->assertDatabaseHas('program_inbound_numbers', [
             'number' => '09170001111',
             'campaign_id' => $existing->id,
@@ -147,16 +157,41 @@ class ProgramInboundNumbersPageTest extends TestCase
         $this->post('/program-inbound-numbers', [
             'campaign' => 'RCBC Bankard',
             'landline_numbers' => ['09170002222'],
-        ])->assertRedirect();
+        ])->assertRedirect()->assertSessionHasErrors([
+            'campaign' => ProgramInboundNumberValidator::CAMPAIGN_MISSING,
+        ]);
 
         $this->assertSame($before + 2, ChannelAllocationCampaign::count());
-        $created = ChannelAllocationCampaign::query()->where('name', 'RCBC Bankard')->first();
-        $this->assertNotNull($created);
-        $this->assertDatabaseHas('program_inbound_numbers', [
-            'number' => '09170002222',
-            'campaign_id' => $created->id,
-            'program' => 'RCBC Bankard',
+        $this->assertDatabaseMissing('channel_allocation_campaigns', ['name' => 'RCBC Bankard']);
+        $this->assertDatabaseMissing('program_inbound_numbers', ['number' => '09170002222']);
+
+        $this->post('/program-inbound-numbers', [
+            'campaign' => 'PDC Only Campaign',
+            'landline_numbers' => ['111'],
+        ])->assertRedirect()->assertSessionHasErrors([
+            'campaign' => ProgramInboundNumberValidator::CAMPAIGN_MISSING,
         ]);
+        $this->assertSame($pdcOnly->id, ChannelAllocationCampaign::query()->where('name', 'PDC Only Campaign')->value('id'));
+        $this->assertDatabaseMissing('program_inbound_numbers', ['number' => '111']);
+
+        $record = ProgramInboundNumber::query()->where('number', '09170001111')->firstOrFail();
+        $this->put('/program-inbound-numbers/'.$record->id, [
+            'campaign' => 'Unknown Edit Campaign',
+            'landline_numbers' => ['09170001111'],
+        ])->assertRedirect()->assertSessionHasErrors([
+            'campaign' => ProgramInboundNumberValidator::CAMPAIGN_MISSING,
+        ]);
+        $record->refresh();
+        $this->assertSame($existing->id, $record->campaign_id);
+
+        $this->put('/program-inbound-numbers/'.$record->id, [
+            'campaign' => 'Mynt',
+            'landline_numbers' => ['09170001111'],
+            'remarks' => 'Still valid master campaign',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $record->refresh();
+        $this->assertSame('Still valid master campaign', $record->remarks);
+        $this->assertSame($existing->id, $record->campaign_id);
     }
 
     public function test_network_filters_mobiles_and_auto_fills_gateway_port(): void
@@ -351,6 +386,7 @@ class ProgramInboundNumbersPageTest extends TestCase
         $this->assertTrue($plusPos > $transferPos);
 
         ChannelAllocationCampaign::create(['name' => 'Visible Campaign']);
+        ChannelAllocationCampaign::create(['name' => 'Hidden Campaign']);
         $this->post('/program-inbound-numbers', [
             'campaign' => 'Visible Campaign',
             'landline_numbers' => ['111'],
@@ -425,7 +461,8 @@ class ProgramInboundNumbersPageTest extends TestCase
         $this->assertSame('53229521', $preview['rows'][1]['landline']);
         $this->assertSame('', $preview['rows'][1]['gsm_gateway']);
         $this->assertFalse($preview['rows'][2]['valid']);
-        $this->assertStringContainsString('Campaign does not exist', $preview['rows'][2]['error']);
+        $this->assertStringContainsString(ProgramInboundNumberValidator::CAMPAIGN_MISSING, $preview['rows'][2]['error']);
+        $this->assertDatabaseMissing('channel_allocation_campaigns', ['name' => 'Unknown Campaign']);
         $this->assertFalse($preview['rows'][3]['valid']);
         $this->assertStringContainsString('GSM Gateway', $preview['rows'][3]['error']);
         $this->assertFalse($preview['rows'][4]['valid']);
@@ -501,6 +538,9 @@ class ProgramInboundNumbersPageTest extends TestCase
         $html = $this->get('/program-inbound-numbers')->assertOk()->getContent();
         $this->assertStringContainsString('setCustomValidity', $html);
         $this->assertStringContainsString('must contain only digits', $html);
+        $this->assertStringContainsString(ChannelAllocationRules::CAMPAIGN_NOT_IN_MASTER, $html);
+        $this->assertStringContainsString('omniFlash', $html);
+        $this->assertStringNotContainsString('before adding a Program Inbound Number.', $html);
 
         $this->post('/program-inbound-numbers', [
             'landline_numbers' => ['53229111'],
@@ -578,7 +618,7 @@ class ProgramInboundNumbersPageTest extends TestCase
 
         $this->assertFalse($preview['valid']);
         $this->assertStringContainsString('Campaign is required', $preview['rows'][0]['error']);
-        $this->assertStringContainsString('Campaign does not exist', $preview['rows'][1]['error']);
+        $this->assertSame(ProgramInboundNumberValidator::CAMPAIGN_MISSING, $preview['rows'][1]['error']);
         $this->assertStringContainsString('Mobile must contain only digits', $preview['rows'][2]['error']);
         $this->assertStringContainsString('Landline must contain only digits', $preview['rows'][3]['error']);
         $this->assertStringContainsString('already exists', $preview['rows'][4]['error']);

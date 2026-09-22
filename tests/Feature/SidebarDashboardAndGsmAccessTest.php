@@ -424,7 +424,10 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
 
         $gatewayId = $create->json('record.id');
         $this->assertNotEmpty($gatewayId);
-        $this->assertSame([], $create->json('record.assignments'));
+        $this->assertCount(2, $create->json('record.assignments'));
+        $this->assertSame(1, $create->json('record.assignments.0.port'));
+        $this->assertSame('', $create->json('record.assignments.0.imei'));
+        $this->assertSame(2, $create->json('record.assignments.1.port'));
 
         $this->getJson('/gsm-gateways/sims?network=Globe SIM')
             ->assertOk()
@@ -464,8 +467,8 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             ->assertSee('data-open-modal="add-media-gateway"', false)
             ->assertSee('class="ca-menu-item edit"', false)
             ->assertSee('class="ca-menu-item delete"', false)
-            ->assertDontSee('class="action-btn edit"', false)
-            ->assertDontSee('class="action-btn delete"', false)
+            ->assertSee('data-port-remarks', false)
+            ->assertSee('data-port-delete', false)
             ->assertDontSee('data-gsm-sim-add', false)
             ->assertDontSee('data-gsm-sim-edit', false)
             ->assertDontSee('data-gsm-sim-delete', false)
@@ -475,12 +478,15 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
             ->assertDontSee('type="radio"', false);
 
         $nested = Str::betweenFirst($page->getContent(), 'class="gsm-sim-nested"', '</table>');
+        $this->assertStringContainsString('>Port</th>', $nested);
         $this->assertStringContainsString('>IMEI</th>', $nested);
         $this->assertStringContainsString('>Mobile Number</th>', $nested);
         $this->assertStringContainsString('>Plan</th>', $nested);
-        $this->assertStringContainsString('>Port</th>', $nested);
+        $this->assertStringContainsString('>Remarks</th>', $nested);
+        $this->assertStringContainsString('>Actions</th>', $nested);
+        $this->assertTrue(strpos($nested, '>Port</th>') < strpos($nested, '>IMEI</th>'));
+        $this->assertTrue(strpos($nested, '>Remarks</th>') < strpos($nested, '>Actions</th>'));
         $this->assertStringNotContainsString('>IP</th>', $nested);
-        $this->assertStringNotContainsString('Actions', $nested);
         $this->assertStringNotContainsString('plus-btn', $nested);
 
         $this->actingAs($this->user($this->standardType));
@@ -541,91 +547,233 @@ class SidebarDashboardAndGsmAccessTest extends TestCase
         $this->assertSame(2, GatewaySimAssignment::query()->where('media_gateway_id', $gatewayId)->count());
     }
 
-    public function test_gsm_gateway_automatically_displays_sims_by_matching_ip(): void
+    public function test_gsm_gateway_displays_ports_from_channel_count_and_places_sims_by_hostname_and_port(): void
     {
         $this->actingAs($this->user($this->adminType));
 
-        $first = MediaGateway::create([
-            'hostname' => 'globe_globesib',
+        $gateway = MediaGateway::create([
+            'hostname' => 'Jelan',
             'site_name' => 'Alcar',
             'site_code' => 'SNIP01',
             'ip_address' => '192.168.1.1',
-            'channel_count' => 8,
+            'channel_count' => 5,
             'device_function' => 'Inbound',
             'username' => 'root',
             'database' => 'asteriskcdrdb',
         ]);
-        $second = MediaGateway::create([
-            'hostname' => 'globe_other',
-            'site_name' => 'Alcar',
-            'site_code' => 'SNIP02',
-            'ip_address' => '192.168.1.10',
-            'channel_count' => 8,
-            'device_function' => 'Outbound',
-            'username' => 'root',
-            'database' => 'asteriskcdrdb',
-        ]);
 
-        $globeA = GlobeSim::create([
-            'imei' => 'IMEI0001',
-            'mobile_number' => '0963125501',
+        $this->post('/globe-sim', [
+            'imei' => 'IMEI-G1',
+            'mobile_number' => '0963125515',
             'plan' => 'Postpaid',
-            'ip_address' => '192.168.1.1',
-            'account_number' => 'ACC-0001',
-            'contract_start' => '2026-03-01',
-            'contract_end' => '2026-09-03',
-            'status' => 'Active',
-        ]);
-        GlobeSim::create([
-            'imei' => 'IMEI0002',
-            'mobile_number' => '0963125502',
-            'plan' => 'Postpaid',
-            'ip_address' => '192.168.1.1',
-            'account_number' => 'ACC-0002',
-            'contract_start' => '2026-03-01',
-            'contract_end' => '2026-09-03',
-            'status' => 'Active',
-        ]);
-        SmartSim::create([
-            'imei' => 'IMEI0003',
-            'mobile_number' => '0963125503',
-            'plan' => 'Prepaid',
-            'ip_address' => '192.168.1.10',
-            'account_number' => 'ACC-0003',
-            'contract_start' => '2026-03-01',
-            'contract_end' => '2026-09-03',
-            'status' => 'Active',
-        ]);
-
-        $this->assertSame(0, GatewaySimAssignment::count());
-
-        $records = collect($this->getJson('/gsm-gateways')->assertOk()->json('records'));
-        $firstRecord = $records->firstWhere('id', $first->id);
-        $secondRecord = $records->firstWhere('id', $second->id);
-
-        $this->assertSame(['IMEI0001', 'IMEI0002'], array_column($firstRecord['assignments'], 'imei'));
-        $this->assertSame(['IMEI0003'], array_column($secondRecord['assignments'], 'imei'));
-        $this->assertSame('192.168.1.1', $firstRecord['assignments'][0]['ip_address']);
-        $this->assertSame('Postpaid', $firstRecord['assignments'][0]['plan']);
-        $this->assertSame(0, GatewaySimAssignment::count());
-
-        $this->put('/globe-sim/'.$globeA->id, [
-            'imei' => 'IMEI0001',
-            'mobile_number' => '0963125501',
-            'plan' => 'Postpaid',
-            'ip_address' => '192.168.1.10',
+            'hostname' => 'Jelan',
+            'port' => 1,
             'account_number' => 'ACC-0001',
             'contract_start' => '3/1/2026',
             'contract_end' => '9/3/2026',
         ])->assertRedirect();
+        $this->post('/smart-sim', [
+            'imei' => 'IMEI-S3',
+            'mobile_number' => '0963125510',
+            'plan' => 'Prepaid',
+            'hostname' => 'Jelan',
+            'port' => 3,
+            'account_number' => 'ACC-0003',
+            'contract_start' => '3/1/2026',
+            'contract_end' => '9/3/2026',
+        ])->assertRedirect();
+        SmartSim::query()->where('imei', 'IMEI-S3')->update(['remarks' => 'Defective']);
+        $this->post('/globe-sim', [
+            'imei' => 'IMEI-G5',
+            'mobile_number' => '09628307759',
+            'plan' => 'Postpaid',
+            'hostname' => 'Jelan',
+            'port' => 5,
+            'account_number' => 'ACC-0005',
+            'contract_start' => '3/1/2026',
+            'contract_end' => '9/3/2026',
+        ])->assertRedirect();
 
-        $this->assertSame(0, GatewaySimAssignment::count());
+        $records = collect($this->getJson('/gsm-gateways')->assertOk()->json('records'));
+        $payload = $records->firstWhere('id', $gateway->id)['assignments'];
+        $this->assertCount(5, $payload);
+        $this->assertSame([1, 2, 3, 4, 5], array_column($payload, 'port'));
+        $this->assertSame('0963125515', $payload[0]['mobile_number']);
+        $this->assertSame('', $payload[1]['imei']);
+        $this->assertSame('0963125510', $payload[2]['mobile_number']);
+        $this->assertSame('Defective', $payload[2]['remarks']);
+        $this->assertSame('', $payload[3]['imei']);
+        $this->assertSame('09628307759', $payload[4]['mobile_number']);
+        $this->assertSame('', $payload[4]['remarks']);
 
-        $moved = collect($this->getJson('/gsm-gateways')->assertOk()->json('records'));
-        $firstRecord = $moved->firstWhere('id', $first->id);
-        $secondRecord = $moved->firstWhere('id', $second->id);
-        $this->assertSame(['IMEI0002'], array_column($firstRecord['assignments'], 'imei'));
-        $this->assertEqualsCanonicalizing(['IMEI0001', 'IMEI0003'], array_column($secondRecord['assignments'], 'imei'));
+        $page = $this->get('/gsm-gateways')->assertOk();
+        $nested = Str::betweenFirst($page->getContent(), 'class="gsm-sim-nested"', '</table>');
+        $this->assertStringContainsString('>Port</th>', $nested);
+        $this->assertStringContainsString('0963125515', $nested);
+        $this->assertStringContainsString('Defective', $nested);
+        $this->assertGreaterThanOrEqual(5, substr_count($nested, '—'));
+
+        $smart = SmartSim::query()->where('imei', 'IMEI-S3')->firstOrFail();
+        $this->put('/smart-sim/'.$smart->id, [
+            'imei' => 'IMEI-S3',
+            'mobile_number' => '0963125510',
+            'plan' => 'Prepaid',
+            'hostname' => 'Jelan',
+            'port' => 2,
+            'account_number' => 'ACC-0003',
+            'contract_start' => '3/1/2026',
+            'contract_end' => '9/3/2026',
+        ])->assertRedirect();
+        $smart->refresh();
+        $smart->forceFill(['remarks' => 'For replacement'])->save();
+
+        $moved = collect($this->getJson('/gsm-gateways')->assertOk()->json('records'))
+            ->firstWhere('id', $gateway->id)['assignments'];
+        $this->assertSame('', $moved[2]['imei']);
+        $this->assertSame('0963125510', $moved[1]['mobile_number']);
+        $this->assertSame('For replacement', $moved[1]['remarks']);
+    }
+
+    public function test_gsm_port_actions_update_remarks_only_and_delete_one_assignment(): void
+    {
+        $this->actingAs($this->user($this->adminType));
+
+        $gateway = MediaGateway::create([
+            'hostname' => 'port-actions',
+            'site_name' => 'Alcar',
+            'site_code' => 'PORTACT1',
+            'ip_address' => '10.5.20.77',
+            'channel_count' => 5,
+            'network' => 'Globe SIM',
+            'device_function' => 'Inbound',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+        ]);
+        $first = GlobeSim::create([
+            'imei' => 'PORT-IMEI-1',
+            'mobile_number' => '09170000011',
+            'plan' => 'Plan One',
+            'network' => 'Globe SIM',
+            'port' => 1,
+            'ip_address' => '10.5.20.77',
+            'remarks' => 'Keep me',
+            'status' => 'Active',
+        ]);
+        $second = SmartSim::create([
+            'imei' => 'PORT-IMEI-3',
+            'mobile_number' => '09170000013',
+            'plan' => 'Plan Three',
+            'network' => 'Smart SIM',
+            'port' => 3,
+            'ip_address' => '10.5.20.77',
+            'remarks' => 'Stay on three',
+            'status' => 'Active',
+        ]);
+        $firstAssignment = GatewaySimAssignment::create([
+            'media_gateway_id' => $gateway->id,
+            'sim_type' => 'globe',
+            'sim_id' => $first->id,
+            'port' => 1,
+        ]);
+        GatewaySimAssignment::create([
+            'media_gateway_id' => $gateway->id,
+            'sim_type' => 'smart',
+            'sim_id' => $second->id,
+            'port' => 3,
+        ]);
+
+        $this->patchJson('/gsm-gateways/'.$gateway->id.'/port-remarks', [
+            'sim_type' => 'globe',
+            'sim_id' => $first->id,
+            'port' => 1,
+            'remarks' => '',
+        ])->assertOk();
+
+        $first->refresh();
+        $second->refresh();
+        $this->assertNull($first->remarks);
+        $this->assertSame(1, (int) $first->port);
+        $this->assertSame('PORT-IMEI-1', $first->imei);
+        $this->assertSame('09170000011', $first->mobile_number);
+        $this->assertSame('Plan One', $first->plan);
+        $this->assertSame('Stay on three', $second->remarks);
+        $this->assertSame(3, (int) $second->port);
+
+        $this->patchJson('/gsm-gateways/'.$gateway->id.'/port-remarks', [
+            'sim_type' => 'globe',
+            'sim_id' => $first->id,
+            'port' => 4,
+            'remarks' => 'Moved',
+        ])->assertUnprocessable();
+        $this->assertSame(1, (int) $first->fresh()->port);
+        $this->assertNull($first->fresh()->remarks);
+
+        $this->deleteJson('/gsm-gateways/'.$gateway->id.'/assignments/'.$firstAssignment->id)
+            ->assertOk();
+
+        $this->assertDatabaseHas('media_gateways', ['id' => $gateway->id]);
+        $this->assertDatabaseHas('globe_sims', ['id' => $first->id]);
+        $this->assertDatabaseHas('smart_sims', ['id' => $second->id]);
+        $this->assertDatabaseMissing('gateway_sim_assignments', ['id' => $firstAssignment->id]);
+        $this->assertDatabaseHas('gateway_sim_assignments', [
+            'media_gateway_id' => $gateway->id,
+            'sim_id' => $second->id,
+            'port' => 3,
+        ]);
+        $this->assertSame(3, (int) $second->fresh()->port);
+
+        $payload = collect($this->getJson('/gsm-gateways')->assertOk()->json('records'))
+            ->firstWhere('id', $gateway->id)['assignments'];
+        $this->assertSame([1, 2, 3, 4, 5], array_column($payload, 'port'));
+        $this->assertSame('', $payload[0]['imei']);
+        $this->assertSame('PORT-IMEI-3', $payload[2]['imei']);
+        $this->assertSame('Stay on three', $payload[2]['remarks']);
+
+        $page = $this->get('/gsm-gateways')->assertOk()->getContent();
+        $panelStart = strpos($page, 'id="gsm-panel-'.$gateway->id.'"');
+        $panelEnd = strpos($page, '</table>', $panelStart);
+        $this->assertNotFalse($panelStart);
+        $this->assertNotFalse($panelEnd);
+        $panel = substr($page, $panelStart, $panelEnd - $panelStart);
+        $this->assertSame(5, substr_count($panel, 'data-port-remarks'));
+        $this->assertSame(5, substr_count($panel, 'data-port-number'));
+        $this->assertSame(5, substr_count($panel, 'action-btn edit'));
+        $this->assertSame(5, substr_count($panel, 'action-btn delete'));
+
+        $this->patchJson('/gsm-gateways/'.$gateway->id.'/port-remarks', [
+            'sim_id' => 0,
+            'port' => 2,
+            'remarks' => 'Empty port note',
+        ])->assertOk();
+        $noted = collect($this->getJson('/gsm-gateways')->assertOk()->json('records'))
+            ->firstWhere('id', $gateway->id)['assignments'];
+        $this->assertSame('Empty port note', $noted[1]['remarks']);
+        $this->assertSame('', $noted[1]['imei']);
+        $this->assertSame('PORT-IMEI-3', $noted[2]['imei']);
+        $this->assertSame(3, (int) $second->fresh()->port);
+        $this->assertSame(1, GatewaySimAssignment::query()->where('media_gateway_id', $gateway->id)->count());
+
+        $this->deleteJson('/gsm-gateways/'.$gateway->id.'/ports/2')->assertOk();
+        $this->deleteJson('/gsm-gateways/'.$gateway->id.'/ports/4')->assertOk();
+        $cleared = collect($this->getJson('/gsm-gateways')->assertOk()->json('records'))
+            ->firstWhere('id', $gateway->id)['assignments'];
+        $this->assertSame([1, 2, 3, 4, 5], array_column($cleared, 'port'));
+        $this->assertSame('', $cleared[1]['remarks']);
+        $this->assertSame('', $cleared[3]['imei']);
+        $this->assertSame('PORT-IMEI-3', $cleared[2]['imei']);
+        $this->assertSame('Stay on three', $cleared[2]['remarks']);
+        $this->assertDatabaseHas('media_gateways', ['id' => $gateway->id]);
+        $this->assertDatabaseHas('smart_sims', ['id' => $second->id]);
+
+        $js = file_get_contents(resource_path('js/app.js'));
+        $portKey = strpos($js, "{key:'port', label:'Port'");
+        $imeiKey = strpos($js, "{key:'imei', label:'IMEI'");
+        $remarksKey = strpos($js, "{key:'remarks', label:'Remarks'");
+        $actionsHead = strpos($js, '<th class="actions-column">Actions</th>');
+        $this->assertNotFalse($portKey);
+        $this->assertTrue($portKey < $imeiKey);
+        $this->assertTrue($imeiKey < $remarksKey);
+        $this->assertTrue($remarksKey < $actionsHead);
     }
 
     public function test_sim_inventory_card_opens_a_selection_modal_for_globe_and_smart(): void

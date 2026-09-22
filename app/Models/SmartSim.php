@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\GsmSimInventory;
 use App\Support\InventoryDependentSync;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -18,6 +19,7 @@ class SmartSim extends Model
         'account_number',
         'contract_start',
         'contract_end',
+        'remarks',
         'location',
         'status',
     ];
@@ -31,6 +33,13 @@ class SmartSim extends Model
     public function gatewayAssignment(): HasOne
     {
         return $this->hasOne(GatewaySimAssignment::class, 'sim_id')->where('sim_type', 'smart');
+    }
+
+    public function displayHostname(): string
+    {
+        $hostname = GsmSimInventory::hostnameForSim($this);
+
+        return $hostname !== '' ? $hostname : '—';
     }
 
     public function displayIp(): string
@@ -51,7 +60,7 @@ class SmartSim extends Model
     {
         static::creating(function (SmartSim $sim): void {
             if ($sim->network === null || $sim->network === '') {
-                $sim->network = 'Smart';
+                $sim->network = 'Smart SIM';
             }
         });
         static::saved(function (SmartSim $sim): void {

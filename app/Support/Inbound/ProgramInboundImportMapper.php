@@ -18,7 +18,9 @@ class ProgramInboundImportMapper
             $context->pinLookupReady = true;
         }
         $errors = [];
-        $campaigns = $context->campaigns ??= ChannelAllocationCampaign::keyedByName();
+        // Only Master Campaign values are accepted; never create a missing campaign.
+        $campaigns = $context->campaigns ??= ChannelAllocationCampaign::masterOptionsForDropdown()
+            ->keyBy(static fn (ChannelAllocationCampaign $campaign) => mb_strtolower((string) $campaign->name));
         $seen = $context->numbers ?? [];
 
         $campaignName = trim((string) ($values['campaign'] ?? ''));

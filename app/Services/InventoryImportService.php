@@ -85,8 +85,13 @@ class InventoryImportService
         $mdyDateFields = $config['mdy_date_fields'] ?? [];
         $skipSave = $config['skip_save'] ?? [];
         $noCarry = $config['no_carry'] ?? [];
+        $emptyMarkers = $config['empty_markers'] ?? [];
 
-        $toRecordContext = (object) ['numbers' => []];
+        $toRecordContext = (object) [
+            'numbers' => [],
+            'module' => $config['key'] ?? '',
+            'ports' => [],
+        ];
 
         foreach ($rawRows as $offset => $raw) {
             $excelRow = $offset + 2;
@@ -94,6 +99,9 @@ class InventoryImportService
             $rawValues = [];
             foreach (array_keys($config['fields']) as $field) {
                 $rawValues[$field] = $this->cell($raw, $map, $field);
+                if (in_array(trim($rawValues[$field]), $emptyMarkers, true)) {
+                    $rawValues[$field] = '';
+                }
             }
 
             if ($this->rowIsBlank($rawValues)) {

@@ -3,12 +3,17 @@
 namespace App\Support\Inbound;
 
 use App\Models\ProgramInboundNumber;
+use App\Support\ChannelAllocationRules;
 
 class ProgramInboundNumberValidator
 {
     public const CAMPAIGN_REQUIRED = 'Campaign is required';
 
-    public const CAMPAIGN_MISSING = 'Campaign does not exist';
+    /**
+     * Same Master Campaign message Channel Allocation already shows.
+     * Program Inbound Numbers never creates a campaign.
+     */
+    public const CAMPAIGN_MISSING = ChannelAllocationRules::CAMPAIGN_NOT_IN_MASTER;
 
     public const NEED_NUMBER = 'Enter at least one Mobile or Landline number.';
 

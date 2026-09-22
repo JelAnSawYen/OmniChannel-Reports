@@ -65,7 +65,7 @@ class GsmGatewayWriter
             'ip_address' => $data['ip_address'],
             'channel_count' => (int) $data['channel_count'],
             'device_function' => trim((string) ($data['device_function'] ?? '')),
-            'network' => trim((string) ($data['network'] ?? '')),
+            'network' => GsmSimInventory::canonicalNetwork($data['network'] ?? null) ?? '',
             'username' => $data['username'],
             'password' => $data['password'] ?? $existing?->password,
         ];
@@ -133,23 +133,115 @@ class GsmGatewayWriter
             return false;
         }
 
-        $deleted = GatewaySimAssignment::query()
+        $assignments = GatewaySimAssignment::query()
             ->where('media_gateway_id', $gateway->id)
             ->where('sim_type', $simType)
             ->where('sim_id', $simId)
-            ->delete() > 0;
+            ->get();
+        $ports = $assignments->map(fn (GatewaySimAssignment $row) => (int) $row->port)->all();
+        $deleted = false;
+        foreach ($assignments as $row) {
+            $row->delete();
+            $deleted = true;
+        }
 
         $sim = GsmSimInventory::findSim($simType, $simId);
         if ($sim) {
+            $updates = [];
             $gatewayIp = strtolower(trim((string) $gateway->ip_address));
             $simIp = strtolower(trim((string) $sim->ip_address));
             if ($gatewayIp !== '' && $simIp === $gatewayIp) {
-                $sim->forceFill(['ip_address' => null])->save();
+                $updates['ip_address'] = null;
                 $deleted = true;
+            }
+            $simPort = (int) ($sim->port ?? 0);
+            if ($deleted && $simPort > 0 && ($ports === [] || in_array($simPort, $ports, true))) {
+                $updates['port'] = null;
+            }
+            if ($updates !== []) {
+                $sim->forceFill($updates)->save();
             }
         }
 
         return $deleted;
+    }
+
+    public static function updateLinkedSimRemarks(MediaGateway $gateway, string $simType, int $simId, int $port, ?string $remarks): void
+    {
+        $simType = strtolower(trim($simType));
+        $sim = GsmSimInventory::findSim($simType, $simId);
+        if (! $sim) {
+            throw ValidationException::withMessages([
+                'remarks' => 'The selected SIM does not exist.',
+            ]);
+        }
+
+        $assignment = GatewaySimAssignment::query()
+            ->where('media_gateway_id', $gateway->id)
+            ->where('sim_type', $simType)
+            ->where('sim_id', $simId)
+            ->first();
+        $gatewayIp = strtolower(trim((string) $gateway->ip_address));
+        $simIp = strtolower(trim((string) $sim->ip_address));
+        $ipMatch = $gatewayIp !== '' && $simIp === $gatewayIp;
+        if (! $assignment && ! $ipMatch) {
+            throw ValidationException::withMessages([
+                'remarks' => 'This SIM is not assigned to the selected port.',
+            ]);
+        }
+
+        $linkedPort = $assignment ? (int) $assignment->port : (int) ($sim->port ?? 0);
+        if ($linkedPort !== $port) {
+            throw ValidationException::withMessages([
+                'port' => 'Port cannot be changed from this form.',
+            ]);
+        }
+
+        $sim->forceFill([
+            'remarks' => trim((string) $remarks) === '' ? null : trim((string) $remarks),
+        ])->save();
+    }
+
+    public static function saveEmptyPortRemarks(MediaGateway $gateway, int $port, ?string $remarks): void
+    {
+        self::assertPortWithinChannelCount($gateway, $port);
+
+        $map = is_array($gateway->port_remarks) ? $gateway->port_remarks : [];
+        $value = trim((string) $remarks);
+        if ($value === '') {
+            unset($map[(string) $port]);
+        } else {
+            $map[(string) $port] = $value;
+        }
+
+        $gateway->forceFill([
+            'port_remarks' => $map === [] ? null : $map,
+        ])->saveQuietly();
+    }
+
+    public static function clearEmptyPort(MediaGateway $gateway, int $port): void
+    {
+        self::assertPortWithinChannelCount($gateway, $port);
+
+        $hasAssignment = GatewaySimAssignment::query()
+            ->where('media_gateway_id', $gateway->id)
+            ->where('port', $port)
+            ->exists();
+        if ($hasAssignment) {
+            return;
+        }
+
+        self::saveEmptyPortRemarks($gateway, $port, null);
+    }
+
+    private static function assertPortWithinChannelCount(MediaGateway $gateway, int $port): void
+    {
+        $max = (int) $gateway->channel_count;
+        if ($port < 1 || $max < 1 || $port > $max) {
+            throw ValidationException::withMessages([
+                'port' => 'Port must be within Channel Count.',
+            ]);
+        }
     }
 
     public static function nextPort(MediaGateway $gateway): int
@@ -181,6 +273,8 @@ class GsmGatewayWriter
                 'port' => 'Port must not exceed Channel Count.',
             ]);
         }
+
+        GsmSimInventory::pruneOrphanAssignments($gateway, $port);
 
         $existing = GatewaySimAssignment::query()
             ->where('sim_type', $simType)
@@ -237,12 +331,13 @@ class GsmGatewayWriter
                 (string) $assignment['sim_type'],
                 (int) $assignment['sim_id'],
                 $gateway,
-                (int) $assignment['port']
+                (int) $assignment['port'],
+                isset($assignment['remarks']) ? (string) $assignment['remarks'] : null
             );
         }
     }
 
-    private static function syncLinkedSim(string $simType, int $simId, MediaGateway $gateway, int $port): void
+    private static function syncLinkedSim(string $simType, int $simId, MediaGateway $gateway, int $port, ?string $remarks = null): void
     {
         $sim = GsmSimInventory::findSim($simType, $simId);
         if (! $sim) {
@@ -256,6 +351,13 @@ class GsmGatewayWriter
         $ip = trim((string) $gateway->ip_address);
         if ($ip !== '') {
             $updates['ip_address'] = $ip;
+        }
+        $gatewayNetwork = GsmSimInventory::canonicalNetwork($gateway->network ?? null);
+        if ($gatewayNetwork) {
+            $updates['network'] = $gatewayNetwork;
+        }
+        if ($remarks !== null) {
+            $updates['remarks'] = trim($remarks) === '' ? null : trim($remarks);
         }
         if ($updates === []) {
             return;

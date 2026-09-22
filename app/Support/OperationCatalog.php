@@ -311,7 +311,7 @@ class OperationCatalog
             'imei' => 'IMEI',
             'mobile_number' => 'Mobile Number',
             'plan' => 'Plan',
-            'ip_address' => 'IP',
+            'hostname' => 'Hostname',
             'port' => 'Port',
             'account_number' => 'Account Number',
             'contract_start' => 'Contract Start',
@@ -330,7 +330,8 @@ class OperationCatalog
     }
 
     /**
-     * Globe / Smart SIM add/edit fields. Port is typed on the SIM record.
+     * Globe / Smart SIM add/edit fields. Hostname + Port place the SIM on a GSM Gateway.
+     * Network comes from the linked GSM Gateway (not a SIM form field).
      *
      * @return array<string, string>
      */
@@ -340,7 +341,7 @@ class OperationCatalog
             'imei' => 'IMEI',
             'mobile_number' => 'Mobile Number',
             'plan' => 'Plan',
-            'ip_address' => 'IP',
+            'hostname' => 'Hostname',
             'port' => 'Port',
             'account_number' => 'Account Number',
             'contract_start' => 'Contract Start',
@@ -349,16 +350,13 @@ class OperationCatalog
     }
 
     /**
-     * Globe / Smart SIM import fields. Port is export-only.
+     * Globe / Smart SIM import fields. Hostname must match an existing GSM Gateway.
      *
      * @return array<string, string>
      */
     public static function simImportFields(): array
     {
-        $fields = self::simFormFields();
-        unset($fields['port']);
-
-        return $fields;
+        return self::simFormFields();
     }
 
     public static function isSim(string $module): bool

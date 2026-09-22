@@ -4,7 +4,6 @@ namespace App\Models;
 
 use App\Support\GsmSimInventory;
 use App\Support\InventoryDependentSync;
-use App\Support\NaturalSort;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -30,6 +29,7 @@ class MediaGateway extends Model
 
     protected $casts = [
         'channel_count' => 'integer',
+        'port_remarks' => 'array',
     ];
 
     public function assignments(): HasMany
@@ -39,46 +39,72 @@ class MediaGateway extends Model
 
     public function assignmentPayload(): array
     {
-        $ip = strtolower(trim((string) $this->ip_address));
-        if ($ip === '') {
+        $count = max(0, (int) $this->channel_count);
+        if ($count < 1) {
             return [];
         }
 
+        $filled = [];
         $this->loadMissing('assignments');
-        $ports = [];
-        $assignmentIds = [];
         foreach ($this->assignments as $assignment) {
-            $key = $assignment->sim_type.':'.$assignment->sim_id;
-            $ports[$key] = (int) $assignment->port;
-            $assignmentIds[$key] = (int) $assignment->id;
+            $port = (int) $assignment->port;
+            if ($port < 1 || $port > $count || isset($filled[$port])) {
+                continue;
+            }
+            $sim = GsmSimInventory::findSim((string) $assignment->sim_type, (int) $assignment->sim_id);
+            $row = $sim
+                ? GsmSimInventory::serialize((string) $assignment->sim_type, $sim)
+                : GsmSimInventory::emptyPortRow($port);
+            $row['assignment_id'] = (int) $assignment->id;
+            $row['port'] = $port;
+            $row['ip_address'] = (string) ($this->ip_address ?? '');
+            if ($sim) {
+                $row['network'] = GsmSimInventory::networkForType((string) $assignment->sim_type);
+            }
+            $filled[$port] = $row;
+        }
+
+        $ip = strtolower(trim((string) $this->ip_address));
+        $host = mb_strtolower(trim((string) $this->hostname));
+        if ($ip !== '' || $host !== '') {
+            foreach (['globe' => GlobeSim::class, 'smart' => SmartSim::class] as $type => $model) {
+                $query = $model::query()->with('gatewayAssignment.gateway:id,hostname,ip_address');
+                $query->where(function ($sims) use ($ip, $host): void {
+                    if ($ip !== '') {
+                        $sims->whereRaw('LOWER(TRIM(ip_address)) = ?', [$ip]);
+                    }
+                    if ($host !== '') {
+                        $method = $ip !== '' ? 'orWhereHas' : 'whereHas';
+                        $sims->{$method}('gatewayAssignment.gateway', function ($gateways) use ($host): void {
+                            $gateways->whereRaw('LOWER(TRIM(hostname)) = ?', [$host]);
+                        });
+                    }
+                });
+                foreach ($query->get() as $sim) {
+                    $port = (int) ($sim->port ?? 0);
+                    if ($port < 1 || $port > $count || isset($filled[$port])) {
+                        continue;
+                    }
+                    $row = GsmSimInventory::serialize($type, $sim);
+                    $row['assignment_id'] = (int) ($sim->gatewayAssignment?->id ?? 0);
+                    $row['port'] = $port;
+                    $row['ip_address'] = (string) ($this->ip_address ?? '');
+                    $row['network'] = GsmSimInventory::networkForType($type);
+                    $filled[$port] = $row;
+                }
+            }
         }
 
         $rows = [];
-        foreach (['globe' => GlobeSim::class, 'smart' => SmartSim::class] as $type => $model) {
-            $sims = $model::query()
-                ->whereRaw('LOWER(TRIM(ip_address)) = ?', [$ip]);
-            NaturalSort::apply($sims, 'imei');
-            $sims = $sims->get();
-            foreach ($sims as $sim) {
-                $serialized = GsmSimInventory::serialize($type, $sim);
-                $key = $type.':'.$sim->id;
-                $serialized['assignment_id'] = $assignmentIds[$key] ?? 0;
-                $serialized['port'] = $ports[$key] ?? ($sim->port ?: '');
-                $serialized['ip_address'] = (string) ($this->ip_address ?? '');
-                $serialized['network'] = GsmSimInventory::networkForType($type);
-                $rows[] = $serialized;
+        $portRemarks = is_array($this->port_remarks) ? $this->port_remarks : [];
+        for ($port = 1; $port <= $count; $port++) {
+            $row = $filled[$port] ?? GsmSimInventory::emptyPortRow($port);
+            $hasSim = (int) ($row['id'] ?? 0) > 0 || (int) ($row['assignment_id'] ?? 0) > 0;
+            if (! $hasSim) {
+                $row['remarks'] = trim((string) ($portRemarks[(string) $port] ?? ''));
             }
+            $rows[] = $row;
         }
-
-        usort($rows, function (array $left, array $right): int {
-            $portLeft = $left['port'] === '' || $left['port'] === null ? PHP_INT_MAX : (int) $left['port'];
-            $portRight = $right['port'] === '' || $right['port'] === null ? PHP_INT_MAX : (int) $right['port'];
-            if ($portLeft !== $portRight) {
-                return $portLeft <=> $portRight;
-            }
-
-            return NaturalSort::compare($left['imei'] ?? '', $right['imei'] ?? '');
-        });
 
         return $rows;
     }

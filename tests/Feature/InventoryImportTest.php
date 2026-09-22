@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ChannelAllocationCampaign;
+use App\Models\GatewaySimAssignment;
 use App\Models\GlobeSim;
 use App\Models\MediaGateway;
 use App\Models\PdcGroup;
@@ -91,7 +92,7 @@ class InventoryImportTest extends TestCase
     public function test_gsm_import_allows_duplicate_site_name_username_and_database(): void
     {
         $this->actingAs($this->admin);
-        $headers = ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan'];
+        $headers = ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan', 'Remarks'];
         $path = $this->spreadsheet([
             $headers,
             ['gsm-one', '10.24.28.10', 'ALC-100', '20', 'Inbound', 'Alcar', 'root', 'secret1', '', '', '', '', ''],
@@ -122,7 +123,7 @@ class InventoryImportTest extends TestCase
 
         $template = $this->get('/gsm-gateways/import/template')->assertOk();
         [$headers] = app(XlsxService::class)->read($template->getFile()->getPathname());
-        $this->assertSame(['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan'], $headers);
+        $this->assertSame(['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan', 'Remarks'], $headers);
         $this->assertNotContains('Id', $headers);
         $this->assertNotContains('Hostname IP', $headers);
     }
@@ -148,7 +149,7 @@ class InventoryImportTest extends TestCase
         ]);
 
         $path = $this->spreadsheet([
-            ['Id', 'Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan'],
+            ['Id', 'Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan', 'Remarks'],
             [1, 'gsm-new-a', '10.24.40.10', 'NEW-A', '4', 'Inbound', 'CTN', 'root', 'x', '', '', '', '', ''],
             [2, 'gsm-new-b', '10.24.40.11', 'NEW-B', '4', 'Inbound', 'SC5', 'root', 'x', '', '', '', '', ''],
             [3, 'gsm-new-c', '10.24.40.12', 'NEW-C', '4', 'Inbound', 'WFH', 'root', 'x', '', '', '', '', ''],
@@ -186,7 +187,7 @@ class InventoryImportTest extends TestCase
         ]);
 
         $path = $this->spreadsheet([
-            ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan'],
+            ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan', 'Remarks'],
             ['clash-host', '10.50.50.50', 'ALC-CLASH', '8', 'Inbound', 'Alcar', 'root', 'secret', '', '', '', '', ''],
         ]);
         $preview = $this->postJson('/gsm-gateways/import/preview', [
@@ -202,7 +203,7 @@ class InventoryImportTest extends TestCase
 
         $dup = $this->postJson('/gsm-gateways/import/preview', [
             'file' => $this->upload($this->spreadsheet([
-                ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan'],
+                ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan', 'Remarks'],
                 ['other-host', '10.50.50.50', 'ALC-DUP', '8', 'Inbound', 'Alcar', 'root', 'secret', '', '', '', '', ''],
             ])),
         ])->assertOk()->json();
@@ -229,7 +230,7 @@ class InventoryImportTest extends TestCase
         ]);
 
         $path = $this->spreadsheet([
-            ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan'],
+            ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan', 'Remarks'],
             ['gsm_globe_phq108', '10.5.20.108', 'SN-108', '20', 'Outbound', 'SC5', 'root', 'secret', '1', '123456789012345', '', '', ''],
             ['', '', '', '', '', '', '', '', '2', '987654321098765', '', '', ''],
         ]);
@@ -266,7 +267,7 @@ class InventoryImportTest extends TestCase
         $this->assertSame('', (string) $gateway->network);
     }
 
-    public function test_gsm_import_saves_typed_network_not_globe_or_smart_from_sims(): void
+    public function test_gsm_import_saves_globe_or_smart_network_on_gateway(): void
     {
         $this->actingAs($this->admin);
         $globe = GlobeSim::create([
@@ -278,8 +279,8 @@ class InventoryImportTest extends TestCase
         ]);
 
         $path = $this->spreadsheet([
-            ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan'],
-            ['gsm-east-1', '10.24.50.10', 'EAST-100', '8', 'Inbound', 'Alcar', 'root', 'secret', '', '', '', 'Eastern', ''],
+            ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan', 'Remarks'],
+            ['gsm-east-1', '10.24.50.10', 'EAST-100', '8', 'Inbound', 'Alcar', 'root', 'secret', '', '', '', 'Globe SIM', ''],
             ['', '', '', '', '', '', '', '', '1', '123456789012111', '09170001111', 'Globe SIM', 'Corporate'],
         ]);
 
@@ -293,19 +294,156 @@ class InventoryImportTest extends TestCase
             ->assertJson(['records' => 1]);
 
         $gateway = MediaGateway::where('site_code', 'EAST-100')->firstOrFail();
-        $this->assertSame('Eastern', $gateway->network);
+        $this->assertSame('Globe SIM', $gateway->network);
         $this->assertDatabaseHas('gateway_sim_assignments', [
             'media_gateway_id' => $gateway->id,
             'sim_type' => 'globe',
             'sim_id' => $globe->id,
             'port' => 1,
         ]);
+        $this->assertSame('Globe SIM', $globe->fresh()->network);
 
         $export = $this->get('/gsm-gateways/export')->assertOk();
         [$headers, $rows] = app(XlsxService::class)->read($export->getFile()->getPathname());
         $networkIndex = array_search('Network', $headers, true);
         $this->assertNotFalse($networkIndex);
-        $this->assertSame('Eastern', $rows[0][$networkIndex]);
+        $this->assertSame('Globe SIM', $rows[0][$networkIndex]);
+    }
+
+    public function test_gsm_import_groups_same_ip_allows_empty_imei_and_assigns_sequential_ports(): void
+    {
+        $this->actingAs($this->admin);
+        $globe = GlobeSim::create([
+            'imei' => '111111111111111',
+            'mobile_number' => '09171111111',
+            'plan' => 'Corporate',
+            'network' => 'Globe',
+            'status' => 'Active',
+        ]);
+        $smart = SmartSim::create([
+            'imei' => '222222222222222',
+            'mobile_number' => '09182222222',
+            'plan' => 'Unli Data',
+            'network' => 'Smart',
+            'status' => 'Active',
+        ]);
+
+        $path = $this->spreadsheet([
+            ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan', 'Remarks'],
+            ['gsm-shared', '10.24.60.10', 'SHARED-100', '4', 'Inbound', 'Alcar', 'root', 'secret', '1', '', '', '', '', ''],
+            ['', '10.24.60.10', '', '', '', '', '', '', '2', '', '', '', '', ''],
+            ['', '10.24.60.10', '', '', '', '', '', '', '3', '111111111111111', '', '', '', ''],
+            ['', '10.24.60.10', '', '', '', '', '', '', '', '222222222222222', '', '', '', ''],
+        ]);
+
+        $preview = $this->postJson('/gsm-gateways/import/preview', [
+            'file' => $this->upload($path),
+        ])->assertOk()->json();
+
+        $this->assertTrue($preview['valid'], json_encode($preview['rows']));
+        $this->assertSame(4, $preview['summary']['valid']);
+        $this->assertSame(0, $preview['summary']['errors']);
+
+        $this->postJson('/gsm-gateways/import/confirm', ['token' => $preview['token']])
+            ->assertOk()
+            ->assertJson(['records' => 1]);
+
+        $gateway = MediaGateway::where('site_code', 'SHARED-100')->firstOrFail();
+        $this->assertSame(1, MediaGateway::count());
+        $this->assertSame('10.24.60.10', $gateway->ip_address);
+        $this->assertSame(4, (int) $gateway->channel_count);
+        $this->assertDatabaseHas('gateway_sim_assignments', [
+            'media_gateway_id' => $gateway->id,
+            'sim_type' => 'globe',
+            'sim_id' => $globe->id,
+            'port' => 1,
+        ]);
+        $this->assertDatabaseHas('gateway_sim_assignments', [
+            'media_gateway_id' => $gateway->id,
+            'sim_type' => 'smart',
+            'sim_id' => $smart->id,
+            'port' => 2,
+        ]);
+        $this->assertSame(2, GatewaySimAssignment::count());
+    }
+
+    public function test_gsm_import_rejects_ip_already_in_database_but_allows_two_distinct_ips(): void
+    {
+        $this->actingAs($this->admin);
+        MediaGateway::create([
+            'hostname' => 'existing-gsm',
+            'site_name' => 'Alcar',
+            'site_code' => 'EXIST-IP',
+            'ip_address' => '10.24.70.1',
+            'channel_count' => 8,
+            'username' => 'root',
+        ]);
+
+        $dupPreview = $this->postJson('/gsm-gateways/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan', 'Remarks'],
+                ['new-gsm', '10.24.70.1', 'NEW-DUP', '8', 'Inbound', 'Alcar', 'root', 'secret', '', '', '', '', '', ''],
+            ])),
+        ])->assertOk()->json();
+        $this->assertFalse($dupPreview['valid']);
+        $this->assertStringContainsString('IP already exists', $dupPreview['rows'][0]['error']);
+
+        $twoIps = $this->postJson('/gsm-gateways/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan', 'Remarks'],
+                ['gsm-a', '10.24.71.10', 'TWO-A', '4', 'Inbound', 'Alcar', 'root', 'secret', '', '', '', '', '', ''],
+                ['', '10.24.71.10', '', '', '', '', '', '', '1', '', '', '', '', ''],
+                ['gsm-b', '10.24.71.11', 'TWO-B', '4', 'Inbound', 'Alcar', 'root', 'secret', '', '', '', '', '', ''],
+            ])),
+        ])->assertOk()->json();
+        $this->assertTrue($twoIps['valid'], json_encode($twoIps['rows']));
+        $this->postJson('/gsm-gateways/import/confirm', ['token' => $twoIps['token']])
+            ->assertOk()
+            ->assertJson(['records' => 2]);
+        $this->assertSame(3, MediaGateway::count());
+        $this->assertDatabaseHas('media_gateways', ['site_code' => 'TWO-A', 'ip_address' => '10.24.71.10']);
+        $this->assertDatabaseHas('media_gateways', ['site_code' => 'TWO-B', 'ip_address' => '10.24.71.11']);
+    }
+
+    public function test_gsm_import_rejects_sim_rows_beyond_channel_count(): void
+    {
+        $this->actingAs($this->admin);
+        GlobeSim::create([
+            'imei' => '333333333333333',
+            'mobile_number' => '09173333333',
+            'plan' => 'Corporate',
+            'network' => 'Globe',
+            'status' => 'Active',
+        ]);
+        GlobeSim::create([
+            'imei' => '444444444444444',
+            'mobile_number' => '09174444444',
+            'plan' => 'Corporate',
+            'network' => 'Globe',
+            'status' => 'Active',
+        ]);
+        GlobeSim::create([
+            'imei' => '555555555555555',
+            'mobile_number' => '09175555555',
+            'plan' => 'Corporate',
+            'network' => 'Globe',
+            'status' => 'Active',
+        ]);
+
+        $preview = $this->postJson('/gsm-gateways/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                ['Hostname', 'IP', 'Serial Number', 'Channel Count', 'Function', 'Site', 'User', 'Password', 'Port', 'IMEI', 'Mobile Number', 'Network', 'Plan', 'Remarks'],
+                ['gsm-limit', '10.24.72.10', 'LIMIT-2', '2', 'Inbound', 'Alcar', 'root', 'secret', '', '333333333333333', '', '', '', ''],
+                ['', '10.24.72.10', '', '', '', '', '', '', '', '444444444444444', '', '', '', ''],
+                ['', '10.24.72.10', '', '', '', '', '', '', '', '555555555555555', '', '', '', ''],
+            ])),
+        ])->assertOk()->json();
+
+        $this->assertFalse($preview['valid']);
+        $this->assertTrue($preview['rows'][0]['valid']);
+        $this->assertTrue($preview['rows'][1]['valid']);
+        $this->assertFalse($preview['rows'][2]['valid']);
+        $this->assertStringContainsString('SIM assignments cannot exceed the Channel Count', $preview['rows'][2]['error']);
     }
 
     public function test_program_location_import_and_sample_template(): void
@@ -367,22 +505,25 @@ class InventoryImportTest extends TestCase
     {
         $this->actingAs($this->admin);
 
-        foreach (['10.71.1.1' => 'SIM-IMP-1', '10.71.1.2' => 'SIM-IMP-2'] as $ip => $code) {
+        foreach (['10.71.1.1' => ['SIM-IMP-1', 'host-imp-1'], '10.71.1.2' => ['SIM-IMP-2', 'host-imp-2']] as $ip => $meta) {
             MediaGateway::create([
+                'hostname' => $meta[1],
                 'site_name' => 'Alcar',
-                'site_code' => $code,
+                'site_code' => $meta[0],
                 'ip_address' => $ip,
                 'username' => 'root',
                 'database' => 'asteriskcdrdb',
+                'channel_count' => 16,
             ]);
         }
 
         foreach (['globe-sim' => GlobeSim::class, 'smart-sim' => SmartSim::class] as $module => $model) {
-            $network = $module === 'globe-sim' ? 'Globe' : 'Smart';
+            $network = $module === 'globe-sim' ? 'Globe SIM' : 'Smart SIM';
+            MediaGateway::query()->whereIn('hostname', ['host-imp-1', 'host-imp-2'])->update(['network' => $network]);
             $path = $this->spreadsheet([
-                ['IMEI', 'Mobile Number', 'Plan', 'IP', 'Account Number', 'Contract Start', 'Contract End'],
-                ['356938035643401', '09171110001', 'Unli Surf', '10.71.1.1', 'ACC-1001', '1/15/2026', '12/15/2026'],
-                ['356938035643402', '09171110002', 'Plan B', '10.71.1.2', 'ACC-1002', '1/20/2026', '12/20/2026'],
+                ['IMEI', 'Mobile Number', 'Plan', 'Hostname', 'Port', 'Account Number', 'Contract Start', 'Contract End'],
+                ['356938035643401', '09171110001', 'Unli Surf', 'host-imp-1', '1', 'ACC-1001', '1/15/2026', '12/15/2026'],
+                ['356938035643402', '09171110002', 'Plan B', 'host-imp-2', '2', 'ACC-1002', '1/20/2026', '12/20/2026'],
             ]);
 
             $preview = $this->postJson('/'.$module.'/import/preview', [
@@ -393,13 +534,16 @@ class InventoryImportTest extends TestCase
                 'IMEI',
                 'Mobile Number',
                 'Plan',
-                'IP',
+                'Hostname',
+                'Port',
                 'Account Number',
                 'Contract Start',
                 'Contract End',
             ], $preview['headers']);
             $this->assertNotContains('Id', $preview['headers']);
             $this->assertNotContains('Last Updated', $preview['headers']);
+            $this->assertNotContains('Network', $preview['headers']);
+            $this->assertNotContains('Remarks', $preview['headers']);
             $this->assertSame('1/15/2026', $preview['rows'][0]['contract_start']);
             $this->assertSame('12/15/2026', $preview['rows'][0]['contract_end']);
 
@@ -411,9 +555,12 @@ class InventoryImportTest extends TestCase
             $this->assertSame($network, $imported->network);
             $this->assertSame('Unli Surf', $imported->plan);
             $this->assertSame('10.71.1.1', $imported->ip_address);
+            $this->assertSame(1, (int) $imported->port);
+            $this->assertNull($imported->remarks);
             $this->assertSame('ACC-1001', $imported->account_number);
             $this->assertSame('2026-01-15', $imported->contract_start?->format('Y-m-d'));
             $this->assertSame('2026-12-15', $imported->contract_end?->format('Y-m-d'));
+            $this->assertNull($model::query()->where('imei', '356938035643402')->value('remarks'));
 
             $export = $this->get('/'.$module.'/export')->assertOk()->assertDownload($module.'.xlsx');
             [$exportHeaders, $exportRows] = app(XlsxService::class)->read($export->getFile()->getPathname());
@@ -421,7 +568,7 @@ class InventoryImportTest extends TestCase
                 'IMEI',
                 'Mobile Number',
                 'Plan',
-                'IP',
+                'Hostname',
                 'Port',
                 'Account Number',
                 'Contract Start',
@@ -433,26 +580,39 @@ class InventoryImportTest extends TestCase
             $this->assertSame('1/15/2026', $exported[6] ?? null);
             $this->assertSame('12/15/2026', $exported[7] ?? null);
             $this->assertCount(8, $exported);
+            $model::query()->get()->each->delete();
+            $this->assertSame(0, $model::count());
+            $this->assertSame(0, GatewaySimAssignment::query()->count());
         }
     }
 
-    public function test_sim_import_rejects_invalid_ip_duplicate_mobile_number_and_reversed_contracts(): void
+    public function test_sim_import_rejects_unknown_hostname_invalid_port_and_dates(): void
     {
         $this->actingAs($this->admin);
+        MediaGateway::create([
+            'hostname' => 'host-imp-val',
+            'site_name' => 'Alcar',
+            'site_code' => 'SIM-VAL-1',
+            'ip_address' => '10.72.1.1',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'channel_count' => 4,
+        ]);
         GlobeSim::create([
             'imei' => '356938035643501',
             'mobile_number' => '09172220001',
-            'network' => 'Globe',
+            'network' => 'Globe SIM',
         ]);
 
+        $headers = ['IMEI', 'Mobile Number', 'Plan', 'Hostname', 'Port', 'Account Number', 'Contract Start', 'Contract End'];
         $path = $this->spreadsheet([
-            ['IMEI', 'Mobile Number', 'Plan', 'IP', 'Account Number', 'Contract Start', 'Contract End'],
-            ['', '09172220004', 'Plan A', '10.72.1.4', 'ACC-4', '1/1/2026', '12/1/2026'],
-            ['356938035643502', '09172220001', 'Plan A', '10.72.1.1', 'ACC-1', '1/1/2026', '12/1/2026'],
-            ['356938035643503', '09172220002', 'Plan A', 'not-an-ip', 'ACC-2', '1/1/2026', '12/1/2026'],
-            ['356938035643504', '09172220003', 'Plan A', '10.72.1.3', 'ACC-3', '12/1/2026', '1/1/2026'],
-            ['356938035643505', '09172220005', 'Plan A', '10.72.1.5', 'ACC-5', '9/32/2026', '9/3/2026'],
-            ['356938035643506', '09172220006', 'Plan A', '10.72.1.6', 'ACC-6', '13/3/2026', '9/3/2026'],
+            $headers,
+            ['', '', '', 'host-imp-val', '1', '', '', ''],
+            ['356938035643502', '09172220001', 'Plan A', 'host-imp-val', '1', 'ACC-1', '1/1/2026', '12/1/2026'],
+            ['356938035643503', '09172220002', 'Plan A', 'missing-host', '1', 'ACC-2', '1/1/2026', '12/1/2026'],
+            ['356938035643504', '09172220003', 'Plan A', 'host-imp-val', '9', 'ACC-3', '1/1/2026', '12/1/2026'],
+            ['356938035643506', '09172220006', 'Plan A', 'host-imp-val', '2', 'ACC-6', '12/1/2026', '1/1/2026'],
+            ['356938035643507', '09172220007', 'Plan A', 'host-imp-val', '2', 'ACC-7', '9/32/2026', '9/3/2026'],
         ]);
 
         $preview = $this->postJson('/globe-sim/import/preview', [
@@ -460,12 +620,52 @@ class InventoryImportTest extends TestCase
         ])->assertOk()->json();
 
         $this->assertFalse($preview['valid']);
-        $this->assertStringContainsString('IMEI is required', $preview['rows'][0]['error']);
+        $this->assertStringContainsString('Enter Hostname, Port, and at least one other field.', $preview['rows'][0]['error']);
         $this->assertStringContainsString('already exists', $preview['rows'][1]['error']);
-        $this->assertStringContainsString('valid IPv4', $preview['rows'][2]['error']);
-        $this->assertStringContainsString('Contract end date', $preview['rows'][3]['error']);
-        $this->assertStringContainsString('valid date', $preview['rows'][4]['error']);
+        $this->assertStringContainsString('Hostname must match an existing GSM Gateway', $preview['rows'][2]['error']);
+        $this->assertStringContainsString('Port must not exceed Channel Count', $preview['rows'][3]['error']);
+        $this->assertStringContainsString('Contract end date', $preview['rows'][4]['error']);
         $this->assertStringContainsString('valid date', $preview['rows'][5]['error']);
+    }
+
+    public function test_globe_sim_import_treats_blank_and_dash_as_empty_and_does_not_carry(): void
+    {
+        $this->actingAs($this->admin);
+        MediaGateway::create([
+            'hostname' => 'host-sparse',
+            'site_name' => 'Alcar',
+            'site_code' => 'SIM-SPARSE',
+            'ip_address' => '10.72.9.1',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'channel_count' => 4,
+            'network' => 'Globe SIM',
+        ]);
+
+        $headers = ['IMEI', 'Mobile Number', 'Plan', 'Hostname', 'Port', 'Account Number', 'Contract Start', 'Contract End'];
+        $path = $this->spreadsheet([
+            $headers,
+            ['356938035649001', '09170000901', 'Plan A', 'host-sparse', '1', 'ACC-1', '1/1/2026', '12/1/2026'],
+            ['-', '', '', 'host-sparse', '2', '-', '4/2/2026', '-'],
+        ]);
+
+        $preview = $this->postJson('/globe-sim/import/preview', [
+            'file' => $this->upload($path),
+        ])->assertOk()->json();
+
+        $this->assertTrue($preview['valid'], $preview['rows'][1]['error'] ?? '');
+        $this->assertSame('', $preview['rows'][1]['imei']);
+        $this->assertSame('', $preview['rows'][1]['plan']);
+        $this->assertSame('4/2/2026', $preview['rows'][1]['contract_start']);
+
+        $this->postJson('/globe-sim/import/confirm', ['token' => $preview['token']])->assertOk();
+        $second = GlobeSim::query()->where('port', 2)->firstOrFail();
+        $this->assertNull($second->imei);
+        $this->assertNull($second->plan);
+        $this->assertNull($second->account_number);
+        $this->assertNull($second->contract_end);
+        $this->assertSame('2026-04-02', $second->contract_start?->format('Y-m-d'));
+        $this->assertSame('356938035649001', GlobeSim::query()->where('port', 1)->value('imei'));
     }
 
     public function test_sample_templates_exist_for_manage_modules(): void
