@@ -1691,8 +1691,7 @@ button.nav-item{width:100%;border:0;background:transparent;cursor:pointer;color:
 .nav-icon{width:17.5px;height:17.5px;flex:0 0 17.5px}
 .nav-caret{width:26.25px;height:32.5px;border:0;background:transparent;color:#94a3b8;cursor:pointer;border-radius:6.25px;flex:0 0 26.25px}
 .nav-caret:hover{background:rgba(255,255,255,.07);color:#fff}
-.nav-sub{display:none;flex-direction:column;gap:3.75px;padding:3.75px 0 6.25px 17.5px}
-.nav-group.open .nav-sub{display:flex}
+.nav-sub{display:flex;flex-direction:column;gap:3.75px;padding:3.75px 0 6.25px 17.5px}
 .nav-subitem{min-height:40px;font-size:15px}
 .nav-item.nav-item-wrap {
     white-space: normal;
