@@ -1,6 +1,7 @@
 # OmniChannel Inventory — Developer Guide
 
-This is the existing Laravel 13 OmniChannel Inventory app. URLs, permissions, validation, and database behavior are unchanged. Use this file to find the right place to edit.
+For the order to enter data and how the pages stay connected, see `USER_MANUAL.md`.
+
 
 ## Overall structure
 
@@ -46,12 +47,46 @@ tests/                       PHPUnit feature and unit tests
 | Shared XLSX export/import | `app/Services/XlsxService.php`, `app/Services/InventoryImportService.php` |
 | Module catalog (operations modules, locations) | `app/Support/OperationCatalog.php` |
 | Import column maps | `app/Support/InventoryImportCatalog.php` |
+| Blank cell and dash check | `app/Support/ImportCell.php` |
 | Shared audit writer | `app/Services/Logs/AuditLogger.php` |
 | Routes | `routes/web.php` |
 | Middleware / permissions | `bootstrap/app.php`, `app/Http/Middleware/` |
 | Validation helpers | `app/Support/PasswordRules.php`, Form Requests under `app/Http/Requests/` |
 
 After CSS or JS changes, run `npm run build`.
+
+---
+
+## Excel import
+
+Data Transfer uses the same two cell rules on every page.
+
+- A blank cell copies the last real value from the rows above, but only on the columns listed below as copying.
+- A cell that contains only `-` is saved blank. It does not copy the row above, and the rows below stop copying that column.
+- A required column that is still blank after that fails the row.
+- A row that is only blanks and dashes is skipped.
+
+`InventoryImportService` applies this for Campaigns, GSM Gateway, Program Location, Globe SIM, Smart SIM, Program Inbound Numbers, Signal Boosters, and Defective GSM. Columns in `no_carry`, `unique`, or `ip_fields` in `InventoryImportCatalog` do not copy. The other import services apply the same dash rule themselves.
+
+| Page | Copies a blank from the row above | Does not copy | Dash |
+| --- | --- | --- | --- |
+| Campaigns | FTE, Site | Campaign name | Empty. Name, FTE, and Site are required, so `-` fails that column. |
+| PDC Servers | Campaign, Site, Date Endorse, DNS | Hostname, Source IP, OS, RAM, CPU, Storage, Admin Username, Password, SQL DB Password | Clears a copied column. On the server columns it is saved blank. Hostname and Source IP stay required. |
+| SIP Channels | None | Every column | Empty. A range such as `300-310` is kept. `-` in SIP Name fails the row. |
+| Channel Range | SIP Name | Channel Number | Clears SIP Name. `-` in Channel Number fails the row. |
+| Channel Allocation | Campaign, Caller ID, Prefix, Remarks | Channel, Line Priority | Clears Caller ID, Prefix, and Remarks. `-` in Channel fails the row. `-` in Line Priority is saved blank. Network, Channel Count, and FTE are filled by the system. |
+| Archive Recordings | Campaign | File Name, Call Date & Time, Caller Number, Agent Number, Duration, Location, Storage Path | Empty on the call columns. File Name and Call Date & Time stay required. |
+| GSM Gateway | Hostname, IP, Serial Number, Channel Count, Function, Site, User, Password | Port, IMEI, Mobile Number, Network, Plan, Remarks | Empty. A dash on a copied gateway column stops the copy for the rows below. |
+| Program Inbound Numbers | Campaign | Mobile, Landline, GSM Gateway, Port, Network, Remarks | Empty. |
+| Signal Boosters | Model, Location, Status | Serial Number, Specifications | Empty. `-` in Specifications is saved blank. Serial Number stays required. |
+| Defective GSM | Location | Serial Tag, Issue, Reported On, Status | Empty. `-` in Issue or Reported On is saved blank. Serial Tag and Status stay required. |
+| Program Location | Username, Database | Site Code, IP Address | Empty. Site Name is always the location being imported. Username and Database stay required. |
+| Globe SIM and Smart SIM | None | Every column | Empty, and it is not stored. |
+
+Globe SIM and Smart SIM also cannot share a mobile number. The check is `GsmSimInventory::mobileOwnedByOtherNetwork()`. Excel import calls it from `InventoryImportService`. Add and Edit call it from `OperationsDataController`. A blank mobile number is still allowed. The same number on the same network is still rejected by that network's own unique rule.
+
+To change which columns copy → `no_carry` and `unique` in `InventoryImportCatalog`, or `CARRY_FIELDS` in the module import service.  
+To change what `-` means → `app/Support/ImportCell.php`, then the carry loop in `InventoryImportService` and each module import service.
 
 ---
 
@@ -181,7 +216,7 @@ These modules share one controller and one view. The module list is in `Operatio
   - Defective GSM → `app/Models/DefectiveGsm.php`
   - Telco Cost, Channel Prefix, Channel Port, Network Prefix → matching files in `app/Models/`
 
-To change Globe SIM or Smart SIM → `OperationsDataController`, `operations/index.blade.php`, and the SIM model.
+To change Globe SIM or Smart SIM → `OperationsDataController`, `operations/index.blade.php`, the SIM model, and `GsmSimInventory::mobileOwnedByOtherNetwork()` for the cross-network mobile-number rule.
 
 ---
 

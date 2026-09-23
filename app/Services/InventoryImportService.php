@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\MediaGateway;
+use App\Support\GsmSimInventory;
+use App\Support\ImportCell;
 use App\Support\InventoryImportCatalog;
 use App\Support\PdcEndorseDate;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -86,6 +88,7 @@ class InventoryImportService
         $skipSave = $config['skip_save'] ?? [];
         $noCarry = $config['no_carry'] ?? [];
         $emptyMarkers = $config['empty_markers'] ?? [];
+        $doNotInherit = array_fill_keys(array_merge($noCarry, $unique), true);
 
         $toRecordContext = (object) [
             'numbers' => [],
@@ -97,10 +100,12 @@ class InventoryImportService
             $excelRow = $offset + 2;
             $values = [];
             $rawValues = [];
+            $cleared = [];
             foreach (array_keys($config['fields']) as $field) {
                 $rawValues[$field] = $this->cell($raw, $map, $field);
-                if (in_array(trim($rawValues[$field]), $emptyMarkers, true)) {
+                if (ImportCell::isClear($rawValues[$field]) || in_array($rawValues[$field], $emptyMarkers, true)) {
                     $rawValues[$field] = '';
+                    $cleared[$field] = true;
                 }
             }
 
@@ -110,9 +115,11 @@ class InventoryImportService
 
             foreach (array_keys($config['fields']) as $field) {
                 $value = $rawValues[$field];
-                if (isset($fixed[$field]) && $value === '') {
+                if (isset($cleared[$field])) {
+                    $value = '';
+                } elseif (isset($fixed[$field]) && $value === '') {
                     $value = (string) $fixed[$field];
-                } elseif ($value === '' && ! in_array($field, $ipFields, true) && ! in_array($field, $noCarry, true)) {
+                } elseif ($value === '' && ! in_array($field, $ipFields, true) && ! isset($doNotInherit[$field])) {
                     $value = $carry[$field] ?? '';
                 }
                 $values[$field] = $value;
@@ -181,6 +188,12 @@ class InventoryImportService
                 $exists = $model::query()->whereRaw('LOWER('.$field.') = ?', [$key])->exists();
                 if ($exists) {
                     $errors[] = ($config['fields'][$field] ?? $field).' already exists';
+                }
+                if ($field === 'mobile_number') {
+                    $otherNetwork = GsmSimInventory::mobileOwnedByOtherNetwork($model, $value);
+                    if ($otherNetwork !== null) {
+                        $errors[] = $otherNetwork;
+                    }
                 }
             }
 
@@ -350,6 +363,11 @@ class InventoryImportService
 
             foreach (array_keys($config['fields']) as $field) {
                 if (in_array($field, $skipSave, true) || in_array($field, $ipFields, true)) {
+                    continue;
+                }
+                if (isset($cleared[$field])) {
+                    $carry[$field] = '';
+
                     continue;
                 }
                 if (($values[$field] ?? '') !== '') {

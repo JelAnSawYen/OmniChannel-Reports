@@ -5,6 +5,7 @@ namespace App\Services\ChannelAllocation;
 use App\Models\ChannelAllocationCampaign;
 use App\Support\ChannelAllocationResolver;
 use App\Support\ChannelAllocationRules;
+use App\Support\ImportCell;
 use App\Support\ImportRowValidationException;
 use App\Services\XlsxService;
 use Illuminate\Http\UploadedFile;
@@ -79,20 +80,45 @@ class ChannelAllocationImportService
 
         foreach ($rawRows as $offset => $raw) {
             $excelRow = $offset + 2;
-            $campaignName = $this->cell($raw, $map, 'campaign');
+            $rawCampaign = $this->cell($raw, $map, 'campaign');
             $rawCaller = $this->cell($raw, $map, 'caller_id');
             $rawPrefix = $this->cell($raw, $map, 'prefix');
-            $remarks = $this->cell($raw, $map, 'remarks');
+            $rawRemarks = $this->cell($raw, $map, 'remarks');
             $channel = $this->cell($raw, $map, 'channel');
             $linePriority = $this->cell($raw, $map, 'line_priority');
 
-            if ($campaignName === '') {
+            if (ImportCell::isBlankRow([
+                $rawCampaign,
+                $rawCaller,
+                $rawPrefix,
+                $rawRemarks,
+                $channel,
+                $linePriority,
+            ])) {
+                continue;
+            }
+
+            if (ImportCell::isClear($rawCampaign)) {
+                $campaignName = '';
+            } elseif ($rawCampaign === '') {
                 $campaignName = $carryCampaign;
+            } else {
+                $campaignName = $rawCampaign;
             }
             $callerId = $this->applyCarryForward($carryCaller, $rawCaller);
             $prefix = $this->applyCarryForward($carryPrefix, $rawPrefix);
-            if ($remarks === '' && $campaignName === $carryCampaign) {
+            if (ImportCell::isClear($rawRemarks)) {
+                $remarks = '';
+            } elseif ($rawRemarks === '' && $campaignName !== '' && $campaignName === $carryCampaign) {
                 $remarks = $carryRemarks;
+            } else {
+                $remarks = $rawRemarks;
+            }
+            if (ImportCell::isClear($channel)) {
+                $channel = '';
+            }
+            if (ImportCell::isClear($linePriority)) {
+                $linePriority = '';
             }
 
             $normalizedPriority = $this->normalizeInteger($linePriority);
@@ -171,6 +197,11 @@ class ChannelAllocationImportService
                     } elseif ($callerId !== '') {
                         $payloadCampaigns[$campaignKey]['caller_id'] = $callerId;
                     }
+                    if (ImportCell::isClear($rawRemarks)) {
+                        $payloadCampaigns[$campaignKey]['remarks'] = null;
+                    } elseif ($remarks !== '') {
+                        $payloadCampaigns[$campaignKey]['remarks'] = $remarks;
+                    }
                 }
                 $payloadCampaigns[$campaignKey]['allocations'][] = [
                     'row' => $excelRow,
@@ -182,11 +213,16 @@ class ChannelAllocationImportService
                 ];
             }
 
-            if ($campaignName !== '') {
+            if (ImportCell::isClear($rawCampaign)) {
+                $carryCampaign = '';
+                $carryCaller = '';
+                $carryPrefix = '';
+                $carryRemarks = '';
+            } elseif ($campaignName !== '') {
                 $carryCampaign = $campaignName;
                 $carryCaller = $this->nextCarry($carryCaller, $rawCaller, $callerId);
                 $carryPrefix = $this->nextCarry($carryPrefix, $rawPrefix, $prefix);
-                $carryRemarks = $remarks;
+                $carryRemarks = ImportCell::isClear($rawRemarks) ? '' : $remarks;
             }
         }
 

@@ -500,6 +500,23 @@ class InventoryImportTest extends TestCase
         $this->assertTrue($preview['valid']);
         $this->postJson('/program-location/skyrise/import/confirm', ['token' => $preview['token']])->assertOk();
         $this->assertSame(2, MediaGateway::where('site_name', 'Skyrise')->count());
+
+        $blocked = $this->postJson('/program-location/skyrise/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                ['Site Name', 'Site Code', 'IP Address', 'Username', 'Database'],
+                ['Skyrise', 'SKY-9', '10.60.60.9', 'root', 'asteriskcdrdb'],
+                ['', '', '10.60.60.8', '', ''],
+                ['', 'SKY-8', '10.60.60.7', '-', '-'],
+            ])),
+        ])->assertOk()->json();
+        $this->assertFalse($blocked['valid']);
+        $this->assertSame('', $blocked['rows'][1]['site_code']);
+        $this->assertStringContainsString('Site Code is required', $blocked['rows'][1]['error']);
+        $this->assertSame('root', $blocked['rows'][1]['username']);
+        $this->assertFalse($blocked['rows'][2]['valid']);
+        $this->assertSame('', $blocked['rows'][2]['username']);
+        $this->assertSame('', $blocked['rows'][2]['database']);
+        $this->assertStringContainsString('Username is required', $blocked['rows'][2]['error']);
     }
 
     public function test_sip_channel_import_one_row_one_record_and_template_menu(): void
@@ -692,6 +709,57 @@ class InventoryImportTest extends TestCase
         $this->assertNull($second->contract_end);
         $this->assertSame('2026-04-02', $second->contract_start?->format('Y-m-d'));
         $this->assertSame('356938035649001', GlobeSim::query()->where('port', 1)->value('imei'));
+    }
+
+    public function test_globe_and_smart_sim_import_reject_a_mobile_number_used_by_the_other_network(): void
+    {
+        $this->actingAs($this->admin);
+        MediaGateway::create([
+            'hostname' => 'host-cross',
+            'site_name' => 'Alcar',
+            'site_code' => 'SIM-CROSS',
+            'ip_address' => '10.72.9.9',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'channel_count' => 4,
+            'network' => 'Globe SIM',
+        ]);
+        SmartSim::create([
+            'imei' => '356938035649901',
+            'mobile_number' => '09175550001',
+            'plan' => 'Smart Plan',
+            'network' => 'Smart SIM',
+            'status' => 'Active',
+        ]);
+
+        $headers = ['IMEI', 'Mobile Number', 'Plan', 'Hostname', 'Port', 'Account Number', 'Contract Start', 'Contract End'];
+        $preview = $this->postJson('/globe-sim/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                $headers,
+                ['356938035649902', '09175550001', 'Plan A', 'host-cross', '1', 'ACC-1', '1/1/2026', '12/1/2026'],
+                ['356938035649903', '09175550002', 'Plan B', 'host-cross', '2', 'ACC-2', '1/1/2026', '12/1/2026'],
+            ])),
+        ])->assertOk()->json();
+
+        $this->assertFalse($preview['valid']);
+        $this->assertStringContainsString('Mobile Number already exists on Smart SIM', $preview['rows'][0]['error']);
+        $this->assertTrue($preview['rows'][1]['valid'], $preview['rows'][1]['error'] ?? '');
+
+        GlobeSim::create([
+            'imei' => '356938035649904',
+            'mobile_number' => '09175550002',
+            'plan' => 'Globe Plan',
+            'network' => 'Globe SIM',
+            'status' => 'Active',
+        ]);
+        $smartPreview = $this->postJson('/smart-sim/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                $headers,
+                ['356938035649905', '09175550002', 'Plan C', 'host-cross', '3', 'ACC-3', '1/1/2026', '12/1/2026'],
+            ])),
+        ])->assertOk()->json();
+        $this->assertFalse($smartPreview['valid']);
+        $this->assertStringContainsString('Mobile Number already exists on Globe SIM', $smartPreview['rows'][0]['error']);
     }
 
     public function test_sample_templates_exist_for_manage_modules(): void

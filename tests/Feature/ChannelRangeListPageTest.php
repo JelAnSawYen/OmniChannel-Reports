@@ -484,6 +484,22 @@ class ChannelRangeListPageTest extends TestCase
         $this->assertFalse($dup['valid']);
         $this->assertStringContainsString('already exists', $dup['rows'][0]['error']);
 
+        $cleared = $this->postJson('/channel-range-list/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                ['SIP Name', 'Channel Number'],
+                ['SIP_ATOME_01', '253235330'],
+                ['-', '253235331'],
+                ['', '253235332'],
+            ])),
+        ])->assertOk()->json();
+        $this->assertTrue($cleared['rows'][0]['valid'], $cleared['rows'][0]['error'] ?? '');
+        $this->assertFalse($cleared['rows'][1]['valid']);
+        $this->assertSame('', $cleared['rows'][1]['sip_name']);
+        $this->assertStringContainsString('SIP Name is required', $cleared['rows'][1]['error']);
+        $this->assertFalse($cleared['rows'][2]['valid']);
+        $this->assertSame('', $cleared['rows'][2]['sip_name']);
+        $this->assertStringContainsString('SIP Name is required', $cleared['rows'][2]['error']);
+
         $export = $this->get('/channel-range-list/export')->assertOk()->assertDownload('channel-range-list.xlsx');
         [$exportHeaders, $exportRows] = app(XlsxService::class)->read($export->getFile()->getPathname());
         $this->assertSame(['SIP Name', 'Channel Range', 'Channel Numbers/Range Entries'], $exportHeaders);

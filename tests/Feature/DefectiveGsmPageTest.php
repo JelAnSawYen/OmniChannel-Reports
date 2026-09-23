@@ -128,4 +128,59 @@ class DefectiveGsmPageTest extends TestCase
         $this->assertSame($issue, $exported[3] ?? null);
         $this->assertSame('8/1/2026', $exported[4] ?? null);
     }
+
+    public function test_import_does_not_copy_serial_tag_issue_or_status_and_treats_a_dash_as_empty(): void
+    {
+        $this->actingAs($this->admin);
+        $blocked = $this->postJson('/defective-gsm/import/preview', [
+            'file' => new UploadedFile(
+                app(XlsxService::class)->export(
+                    ['Serial Tag', 'Location', 'Issue', 'Reported On', 'Status'],
+                    [
+                        ['GSM-A', 'Alcar', 'Port down', '8/1/2026', 'Open'],
+                        ['', '', 'New issue', '-', ''],
+                    ],
+                    'defective-gsm-import.xlsx'
+                ),
+                'import.xlsx',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                null,
+                true
+            ),
+        ])->assertOk()->json();
+
+        $this->assertFalse($blocked['valid']);
+        $this->assertSame('', $blocked['rows'][1]['asset_code']);
+        $this->assertSame('Alcar', $blocked['rows'][1]['location']);
+        $this->assertSame('New issue', $blocked['rows'][1]['issue']);
+        $this->assertSame('', $blocked['rows'][1]['reported_on']);
+        $this->assertSame('', $blocked['rows'][1]['status']);
+        $this->assertStringContainsString('Serial Tag is required', $blocked['rows'][1]['error']);
+        $this->assertStringContainsString('Status is required', $blocked['rows'][1]['error']);
+
+        $preview = $this->postJson('/defective-gsm/import/preview', [
+            'file' => new UploadedFile(
+                app(XlsxService::class)->export(
+                    ['Serial Tag', 'Location', 'Issue', 'Reported On', 'Status'],
+                    [
+                        ['GSM-A', 'Alcar', 'Port down', '8/1/2026', 'Open'],
+                        ['GSM-B', '', '-', '-', 'Open'],
+                    ],
+                    'defective-gsm-import.xlsx'
+                ),
+                'import.xlsx',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                null,
+                true
+            ),
+        ])->assertOk()->json();
+
+        $this->assertTrue($preview['valid'], $preview['rows'][1]['error'] ?? '');
+        $this->postJson('/defective-gsm/import/confirm', ['token' => $preview['token']])->assertOk();
+        $saved = DefectiveGsm::query()->where('asset_code', 'GSM-B')->firstOrFail();
+        $this->assertSame('Alcar', $saved->location);
+        $this->assertNull($saved->issue);
+        $this->assertNull($saved->reported_on);
+        $this->assertSame('Open', $saved->status);
+    }
 }

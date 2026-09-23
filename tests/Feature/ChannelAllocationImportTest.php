@@ -519,7 +519,7 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertSame('555111000', ChannelAllocationCampaign::where('name', 'Caller Import')->value('caller_id'));
     }
 
-    public function test_dash_clears_carry_forward_fields_but_not_remarks_and_auto_network(): void
+    public function test_dash_clears_carry_forward_fields_including_remarks_and_auto_network(): void
     {
         $this->actingAs($this->admin);
         $this->sip('CH-D1', 'DITO SIM', 5);
@@ -560,7 +560,7 @@ class ChannelAllocationImportTest extends TestCase
         $this->assertNull($campaign->fte);
         $this->assertSame('222', $campaign->caller_id);
         $this->assertSame('200', $campaign->prefix);
-        $this->assertSame('-', $campaign->remarks);
+        $this->assertSame('note', $campaign->remarks);
         $this->assertNull($campaign->allocations()->where('channel_allocation', 'CH-D1')->value('media_gateway'));
         $this->assertSame('DITO SIM', $campaign->allocations()->where('channel_allocation', 'CH-D1')->value('network'));
         $this->assertSame('Globe SIM', $campaign->allocations()->where('channel_allocation', 'CH-D2')->value('network'));
@@ -574,7 +574,7 @@ class ChannelAllocationImportTest extends TestCase
             ])),
         ])->assertOk()->json();
         $this->assertFalse($blockedAllocation['valid']);
-        $this->assertStringContainsString('Channel cannot be -', $blockedAllocation['rows'][0]['error']);
+        $this->assertStringContainsString('Channel is required', $blockedAllocation['rows'][0]['error']);
     }
 
     public function test_blank_campaign_rows_stay_on_the_same_campaign_with_unique_allocations(): void

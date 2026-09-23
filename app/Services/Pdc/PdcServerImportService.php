@@ -7,6 +7,7 @@ use App\Models\PdcGroup;
 use App\Models\PdcServer;
 use App\Services\InventoryImportService;
 use App\Services\XlsxService;
+use App\Support\ImportCell;
 use App\Support\OperationCatalog;
 use App\Support\PdcEndorseDate;
 use Illuminate\Http\UploadedFile;
@@ -120,7 +121,7 @@ class PdcServerImportService
                     $values[$field] = $resolved;
                     $carry[$field] = $next;
                 } else {
-                    $values[$field] = $rawValues[$field];
+                    $values[$field] = ImportCell::isClear($rawValues[$field]) ? '' : $rawValues[$field];
                 }
             }
 
@@ -440,13 +441,7 @@ class PdcServerImportService
      */
     private function rowIsBlank(array $values): bool
     {
-        foreach ($values as $value) {
-            if (trim((string) $value) !== '') {
-                return false;
-            }
-        }
-
-        return true;
+        return ImportCell::isBlankRow($values);
     }
 
     /**

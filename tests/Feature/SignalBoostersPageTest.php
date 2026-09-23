@@ -131,4 +131,58 @@ class SignalBoostersPageTest extends TestCase
         $exported = collect($exportRows)->first(fn ($row) => ($row[3] ?? '') === 'SB-A-1');
         $this->assertSame($specs, $exported[2] ?? null);
     }
+
+    public function test_import_does_not_copy_serial_number_and_treats_a_dash_as_empty(): void
+    {
+        $this->actingAs($this->admin);
+        $blocked = $this->postJson('/signal-boosters/import/preview', [
+            'file' => new UploadedFile(
+                app(XlsxService::class)->export(
+                    ['Model', 'Specifications', 'Serial Number', 'Location', 'Status'],
+                    [
+                        ['SB-A', 'Band A', 'SB-A-1', 'Alcar', 'Active'],
+                        ['', 'Band B', '', '', ''],
+                    ],
+                    'signal-boosters-import.xlsx'
+                ),
+                'import.xlsx',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                null,
+                true
+            ),
+        ])->assertOk()->json();
+
+        $this->assertFalse($blocked['valid']);
+        $this->assertSame('SB-A', $blocked['rows'][1]['model']);
+        $this->assertSame('Band B', $blocked['rows'][1]['specs']);
+        $this->assertSame('', $blocked['rows'][1]['serial_number']);
+        $this->assertSame('Alcar', $blocked['rows'][1]['location']);
+        $this->assertSame('Active', $blocked['rows'][1]['status']);
+        $this->assertStringContainsString('Serial Number is required', $blocked['rows'][1]['error']);
+
+        $preview = $this->postJson('/signal-boosters/import/preview', [
+            'file' => new UploadedFile(
+                app(XlsxService::class)->export(
+                    ['Model', 'Specifications', 'Serial Number', 'Location', 'Status'],
+                    [
+                        ['SB-A', 'Band A', 'SB-A-1', 'Alcar', 'Active'],
+                        ['SB-B', '-', 'SB-B-1', '', ''],
+                    ],
+                    'signal-boosters-import.xlsx'
+                ),
+                'import.xlsx',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                null,
+                true
+            ),
+        ])->assertOk()->json();
+
+        $this->assertTrue($preview['valid'], $preview['rows'][1]['error'] ?? '');
+        $this->assertSame('', $preview['rows'][1]['specs']);
+        $this->assertSame('Alcar', $preview['rows'][1]['location']);
+        $this->assertSame('Active', $preview['rows'][1]['status']);
+        $this->postJson('/signal-boosters/import/confirm', ['token' => $preview['token']])->assertOk();
+        $this->assertNull(SignalBooster::query()->where('serial_number', 'SB-B-1')->value('specs'));
+        $this->assertSame('Alcar', SignalBooster::query()->where('serial_number', 'SB-B-1')->value('location'));
+    }
 }

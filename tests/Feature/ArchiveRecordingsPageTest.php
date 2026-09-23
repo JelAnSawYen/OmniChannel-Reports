@@ -461,6 +461,36 @@ class ArchiveRecordingsPageTest extends TestCase
         @unlink($secret);
     }
 
+    public function test_excel_import_treats_a_dash_as_empty_and_still_copies_campaign(): void
+    {
+        $this->actingAs($this->admin);
+        ChannelAllocationCampaign::create(['name' => 'Atome']);
+        $path = app(XlsxService::class)->export(
+            ['Campaign', 'File Name', 'Call Date & Time', 'Caller Number', 'Agent Number', 'Duration', 'Location', 'Storage Path'],
+            [
+                ['Atome', 'call.wav', '09/01/2026 10:00:00', '-', '-', '-', '-', '-'],
+                ['', 'call-two.wav', '09/01/2026 11:00:00', '09170001111', '', '', '', ''],
+            ],
+            'archive-import.xlsx'
+        );
+
+        $preview = $this->postJson('/archive-recordings/import/preview', [
+            'file' => new UploadedFile($path, 'import.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+        ])->assertOk()->json();
+
+        $this->assertTrue($preview['valid'], $preview['rows'][0]['error'] ?? '');
+        $this->assertSame('', $preview['rows'][0]['caller_number']);
+        $this->assertSame('Atome', $preview['rows'][1]['campaign']);
+        $this->postJson('/archive-recordings/import/confirm', ['token' => $preview['token']])->assertOk();
+
+        $first = ArchiveRecording::query()->where('file_name', 'call.wav')->firstOrFail();
+        $this->assertNull($first->caller_number);
+        $this->assertNull($first->agent_number);
+        $this->assertNull($first->duration);
+        $this->assertNull($first->location);
+        $this->assertSame('Atome', ArchiveRecording::query()->where('file_name', 'call-two.wav')->firstOrFail()->campaign?->name);
+    }
+
     private function silentWav(int $seconds): string
     {
         $sampleRate = 8000;

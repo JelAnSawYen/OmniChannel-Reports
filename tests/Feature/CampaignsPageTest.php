@@ -308,6 +308,46 @@ class CampaignsPageTest extends TestCase
         $this->assertNotContains('Id', $exportHeaders);
     }
 
+    public function test_campaign_import_does_not_copy_the_name_and_treats_a_dash_as_empty(): void
+    {
+        $this->actingAs($this->admin);
+        $preview = $this->postJson('/campaigns/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                ['Campaigns', 'FTE', 'Site'],
+                ['Mynt', '10', 'WFH'],
+                ['Chinabank', '', ''],
+                ['', '8', 'Alcar'],
+                ['Dash Site', '6', '-'],
+                ['After Dash', '4', ''],
+            ])),
+        ])->assertOk()->json();
+
+        $this->assertTrue($preview['rows'][0]['valid']);
+        $this->assertTrue($preview['rows'][1]['valid'], $preview['rows'][1]['error'] ?? '');
+        $this->assertSame('10', (string) $preview['rows'][1]['fte']);
+        $this->assertSame('WFH', $preview['rows'][1]['location']);
+        $this->assertFalse($preview['rows'][2]['valid']);
+        $this->assertSame('', $preview['rows'][2]['name']);
+        $this->assertStringContainsString('Campaigns is required', $preview['rows'][2]['error']);
+        $this->assertFalse($preview['rows'][3]['valid']);
+        $this->assertSame('', $preview['rows'][3]['location']);
+        $this->assertStringContainsString('Site is required', $preview['rows'][3]['error']);
+        $this->assertFalse($preview['rows'][4]['valid']);
+        $this->assertSame('', $preview['rows'][4]['location']);
+        $this->assertStringContainsString('Site is required', $preview['rows'][4]['error']);
+
+        $valid = $this->postJson('/campaigns/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                ['Campaigns', 'FTE', 'Site'],
+                ['Mynt', '10', 'WFH'],
+                ['Chinabank', '', ''],
+            ])),
+        ])->assertOk()->json();
+        $this->assertTrue($valid['valid'], $valid['rows'][1]['error'] ?? '');
+        $this->postJson('/campaigns/import/confirm', ['token' => $valid['token']])->assertOk();
+        $this->assertDatabaseHas('channel_allocation_campaigns', ['name' => 'Chinabank', 'fte' => 10, 'location' => 'WFH']);
+    }
+
     /**
      * @param  list<list<string|int>>  $rows
      */

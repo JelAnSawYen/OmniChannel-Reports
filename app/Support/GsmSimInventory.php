@@ -268,6 +268,32 @@ class GsmSimInventory
     }
 
     /**
+     * Globe SIM and Smart SIM cannot share a mobile number.
+     * $owner is a module key (globe-sim, smart-sim) or the SIM model class being saved.
+     */
+    public static function mobileOwnedByOtherNetwork(string $owner, mixed $mobile): ?string
+    {
+        $mobile = self::blankSimValue($mobile);
+        if ($mobile === null) {
+            return null;
+        }
+
+        $checkingGlobe = $owner === 'globe-sim' || $owner === GlobeSim::class;
+        $checkingSmart = $owner === 'smart-sim' || $owner === SmartSim::class;
+        if (! $checkingGlobe && ! $checkingSmart) {
+            return null;
+        }
+
+        $other = $checkingGlobe ? SmartSim::class : GlobeSim::class;
+        $label = $checkingGlobe ? 'Smart SIM' : 'Globe SIM';
+        $taken = $other::query()
+            ->whereRaw('LOWER(mobile_number) = ?', [mb_strtolower($mobile)])
+            ->exists();
+
+        return $taken ? 'Mobile Number already exists on '.$label : null;
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      */
     public static function hasCompanionValue(array $data): bool

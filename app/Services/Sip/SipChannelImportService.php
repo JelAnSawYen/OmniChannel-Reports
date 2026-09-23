@@ -6,6 +6,7 @@ use App\Models\SipChannel;
 use App\Models\SipChannelNumber;
 use App\Services\InventoryImportService;
 use App\Services\XlsxService;
+use App\Support\ImportCell;
 use App\Support\ImportRowValidationException;
 use App\Support\PdcEndorseDate;
 use Illuminate\Http\UploadedFile;
@@ -101,7 +102,7 @@ class SipChannelImportService
 
             $values = [];
             foreach (array_keys($this->fields()) as $field) {
-                $values[$field] = $rawValues[$field];
+                $values[$field] = ImportCell::isClear($rawValues[$field]) ? '' : $rawValues[$field];
             }
 
             $errors = [];
@@ -419,13 +420,7 @@ class SipChannelImportService
      */
     private function rowIsBlank(array $values): bool
     {
-        foreach ($values as $value) {
-            if (trim((string) $value) !== '') {
-                return false;
-            }
-        }
-
-        return true;
+        return ImportCell::isBlankRow($values);
     }
 
     /**

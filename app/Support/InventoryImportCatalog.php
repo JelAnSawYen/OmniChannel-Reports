@@ -254,6 +254,7 @@ class InventoryImportCatalog
                 'required' => ['asset_code', 'status'],
                 'mdy_date_fields' => ['reported_on'],
                 'status_options' => ['Open', 'In Repair', 'Replaced', 'Closed'],
+                'no_carry' => ['asset_code', 'issue', 'reported_on', 'status'],
             ],
             default => [],
         };

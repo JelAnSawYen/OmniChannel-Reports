@@ -551,4 +551,53 @@ class SimInventoryFieldsTest extends TestCase
         ])->assertSessionHasErrors('imei');
         $this->assertSame(1, $model::query()->count());
     }
+
+    public function test_globe_and_smart_sim_forms_reject_the_same_mobile_number(): void
+    {
+        $this->actingAs($this->admin);
+        MediaGateway::create([
+            'hostname' => 'cross-gw',
+            'site_name' => 'Alcar',
+            'site_code' => 'CROSS-GW',
+            'ip_address' => '10.73.9.9',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'channel_count' => 4,
+            'network' => 'Smart SIM',
+        ]);
+        SmartSim::create([
+            'imei' => '356938035640001',
+            'mobile_number' => '09176660001',
+            'network' => 'Smart SIM',
+            'status' => 'Active',
+        ]);
+
+        $this->post('/globe-sim', [
+            'hostname' => 'cross-gw',
+            'port' => 1,
+            'imei' => '356938035640002',
+            'mobile_number' => '09176660001',
+            'plan' => 'Plan A',
+        ])->assertSessionHasErrors('mobile_number');
+        $this->assertSame(0, GlobeSim::query()->count());
+
+        $this->post('/globe-sim', [
+            'hostname' => 'cross-gw',
+            'port' => 1,
+            'imei' => '356938035640002',
+            'mobile_number' => '09176660002',
+            'plan' => 'Plan A',
+        ])->assertRedirect();
+        $this->assertSame(1, GlobeSim::query()->count());
+
+        $globe = GlobeSim::query()->firstOrFail();
+        $this->put('/globe-sim/'.$globe->id, [
+            'hostname' => 'cross-gw',
+            'port' => 1,
+            'imei' => '356938035640002',
+            'mobile_number' => '09176660001',
+            'plan' => 'Plan A',
+        ])->assertSessionHasErrors('mobile_number');
+        $this->assertSame('09176660002', $globe->fresh()->mobile_number);
+    }
 }

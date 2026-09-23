@@ -7,6 +7,7 @@ use App\Models\ChannelAllocationCampaign;
 use App\Services\InventoryImportService;
 use App\Services\XlsxService;
 use App\Support\Archive\AudioDuration;
+use App\Support\ImportCell;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -98,7 +99,7 @@ class ArchiveRecordingImportService
                     $values[$field] = $resolved;
                     $carry[$field] = $next;
                 } else {
-                    $values[$field] = $rawValues[$field];
+                    $values[$field] = ImportCell::isClear($rawValues[$field]) ? '' : $rawValues[$field];
                 }
             }
 
@@ -287,13 +288,7 @@ class ArchiveRecordingImportService
      */
     private function rowIsBlank(array $values): bool
     {
-        foreach ($values as $value) {
-            if (trim((string) $value) !== '') {
-                return false;
-            }
-        }
-
-        return true;
+        return ImportCell::isBlankRow($values);
     }
 
     /**

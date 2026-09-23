@@ -318,11 +318,16 @@ class OperationsDataController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function simRules(string $table, ?int $id = null): array
+    private function simRules(string $module, string $table, ?int $id = null): array
     {
         return [
             'imei' => ['nullable', 'string', 'max:50', Rule::unique($table, 'imei')->ignore($id)],
-            'mobile_number' => ['nullable', 'string', 'max:50', Rule::unique($table, 'mobile_number')->ignore($id)],
+            'mobile_number' => ['nullable', 'string', 'max:50', Rule::unique($table, 'mobile_number')->ignore($id), function (string $attribute, mixed $value, \Closure $fail) use ($module): void {
+                $message = GsmSimInventory::mobileOwnedByOtherNetwork($module, $value);
+                if ($message !== null) {
+                    $fail($message.'.');
+                }
+            }],
             'plan' => ['nullable', 'string', 'max:255'],
             'hostname' => ['required', 'string', 'max:255'],
             'port' => ['required', 'integer', 'min:1'],
@@ -549,8 +554,8 @@ class OperationsDataController extends Controller
                 'location' => ['nullable', 'string', Rule::in(OperationCatalog::locationNames())], 'role' => 'nullable|string|max:255', 'status' => ['required', Rule::in($this->statusOptions($module))],
             ],
             'archive-recordings' => [],
-            'globe-sim' => $this->simRules('globe_sims', $id),
-            'smart-sim' => $this->simRules('smart_sims', $id),
+            'globe-sim' => $this->simRules('globe-sim', 'globe_sims', $id),
+            'smart-sim' => $this->simRules('smart-sim', 'smart_sims', $id),
             'program-inbound-numbers' => [
                 'campaign' => 'required|string|max:255',
                 'network' => 'nullable|string|max:255',

@@ -706,6 +706,34 @@ class PdcServersPageTest extends TestCase
         $this->get('/sip-channels')->assertOk()->assertSee('SIP Channels');
     }
 
+    public function test_excel_import_treats_a_dash_on_server_fields_as_empty(): void
+    {
+        $this->actingAs($this->admin);
+        ChannelAllocationCampaign::create(['name' => 'BPI Collection']);
+        $preview = $this->postJson('/pdc-servers/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                ['Campaign', 'Location', 'Date Endorse', 'DNS', 'Hostname', 'Source IP', 'OS', 'RAM', 'CPU', 'Storage', 'Admin Username', 'Password', 'SQL DB Password'],
+                ['BPI Collection', 'Estancia', '9/3/2026', 'dns.example.com', 'pdc-dash', '10.24.28.61', '-', '-', '-', '-', '-', '-', '-'],
+                ['', '', '', '', 'pdc-next', '10.24.28.62', '', '', '', '', '', '', ''],
+            ])),
+        ])->assertOk()->json();
+
+        $this->assertTrue($preview['valid'], $preview['rows'][0]['error'] ?? '');
+        $this->assertSame('', $preview['rows'][0]['os']);
+        $this->assertSame('', $preview['rows'][0]['password']);
+        $this->assertSame('Estancia', $preview['rows'][1]['location']);
+        $this->postJson('/pdc-servers/import/confirm', ['token' => $preview['token']])->assertOk();
+
+        $server = PdcServer::query()->where('hostname', 'pdc-dash')->firstOrFail();
+        $this->assertNull($server->os);
+        $this->assertNull($server->ram);
+        $this->assertNull($server->cpu);
+        $this->assertNull($server->storage);
+        $this->assertNull($server->admin_username);
+        $this->assertNull($server->password);
+        $this->assertNull($server->sql_db_password);
+    }
+
     /**
      * @return array{0: PdcGroup, 1: PdcServer}
      */

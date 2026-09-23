@@ -444,6 +444,32 @@ class SipChannelsPageTest extends TestCase
         $this->assertSame('360 - 370', SipChannel::where('etpi_sip_name', 'RANGE_D')->value('channel_range'));
     }
 
+    public function test_import_treats_a_lone_dash_as_empty_and_keeps_a_real_channel_range(): void
+    {
+        $this->actingAs($this->admin);
+        $preview = $this->postJson('/sip-channels/import/preview', [
+            'file' => $this->upload($this->spreadsheet([
+                ['SIP Name', 'Pilot Number', 'Channel Count', 'Channel Range', 'Network', 'Date Activation'],
+                ['DASH_SIP', '-', '-', '-', '-', '-'],
+                ['RANGE_KEEP', '', '', '300-310', '', ''],
+            ])),
+        ])->assertOk()->json();
+
+        $this->assertTrue($preview['valid'], $preview['rows'][0]['error'] ?? '');
+        $this->assertSame('', $preview['rows'][0]['pilot_number']);
+        $this->assertSame('', $preview['rows'][0]['channel_range']);
+        $this->assertSame('300-310', $preview['rows'][1]['channel_range']);
+        $this->postJson('/sip-channels/import/confirm', ['token' => $preview['token']])->assertOk();
+
+        $cleared = SipChannel::where('etpi_sip_name', 'DASH_SIP')->firstOrFail();
+        $this->assertNull($cleared->pilot_number);
+        $this->assertNull($cleared->channel_count);
+        $this->assertNull($cleared->channel_range);
+        $this->assertNull($cleared->network);
+        $this->assertNull($cleared->date_activation);
+        $this->assertSame('300 - 310', SipChannel::where('etpi_sip_name', 'RANGE_KEEP')->value('channel_range'));
+    }
+
     public function test_standard_user_cannot_access_sip_channels(): void
     {
         $this->actingAs($this->standard)->get('/sip-channels')->assertForbidden();
