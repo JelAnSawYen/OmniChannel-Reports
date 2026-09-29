@@ -58,6 +58,7 @@ class ChannelAllocationController extends Controller
         }
 
         $campaigns = $query->paginate($perPage)->withQueryString();
+        $sharedChannels = $this->sharedChannelCampaigns();
         $masterCampaigns = ChannelAllocationCampaign::masterOptionsForDropdown();
         $sipChannelQuery = SipChannel::query()
             ->whereNotNull('etpi_sip_name')
@@ -86,12 +87,50 @@ class ChannelAllocationController extends Controller
 
         return view('channel-allocations.index', [
             'campaigns' => $campaigns,
+            'sharedChannels' => $sharedChannels,
             'masterCampaigns' => $masterCampaigns,
             'sipChannelOptions' => $sipChannelOptions,
             'gsmChannelOptions' => $gsmChannelOptions,
             'search' => $search,
             'perPage' => $perPage,
         ]);
+    }
+
+    /**
+     * Channel label => campaign names, only when more than one campaign uses it.
+     *
+     * @return array<string, list<string>>
+     */
+    private function sharedChannelCampaigns(): array
+    {
+        $grouped = [];
+        ChannelAllocation::query()
+            ->whereHas('campaign', fn ($campaigns) => $campaigns->listedInChannelAllocation())
+            ->with('campaign:id,name')
+            ->get()
+            ->each(function (ChannelAllocation $allocation) use (&$grouped) {
+                $label = $allocation->channelLabel();
+                if ($label === '' || $label === '—') {
+                    return;
+                }
+                $campaignName = trim((string) $allocation->campaign?->name);
+                if ($campaignName === '') {
+                    return;
+                }
+                $grouped[mb_strtolower($label)][$allocation->campaign_id] = $campaignName;
+            });
+
+        $shared = [];
+        foreach ($grouped as $key => $names) {
+            if (count($names) < 2) {
+                continue;
+            }
+            $values = array_values($names);
+            usort($values, 'strnatcasecmp');
+            $shared[$key] = $values;
+        }
+
+        return $shared;
     }
 
     public function store(Request $request): RedirectResponse

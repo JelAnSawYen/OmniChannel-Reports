@@ -146,8 +146,38 @@
                             'total_channel_allocated' => $allocation->total_channel_allocated,
                         ];
                     ?>
+                    <?php
+                        $channelKey = mb_strtolower($allocation->channelLabel());
+                        $sharedWith = array_values(array_filter(
+                            $sharedChannels[$channelKey] ?? [],
+                            fn ($name) => strcasecmp($name, $campaign->name) !== 0
+                        ));
+                    ?>
                     <tr <?php if(auth()->user()->hasPermission('media.delete')): ?> data-bulk-row="nested" data-bulk-id="<?php echo e($allocation->id); ?>" data-bulk-url="<?php echo e(route('channel-allocation.allocations.bulk-destroy', $campaign)); ?>" <?php endif; ?>>
-                        <td><span class="num-align" data-label="Channel"><?php echo e($allocation->channelLabel()); ?></span></td>
+                        <td>
+                            <span class="ca-channel-line">
+                                <span class="num-align" data-label="Channel"><?php echo e($allocation->channelLabel()); ?></span>
+                                <?php if($sharedWith !== []): ?>
+                                    <span class="ca-shared-badge">Shared</span>
+                                    <span class="ca-shared-pop">
+                                        <button type="button" class="ca-shared-info" aria-expanded="false" aria-label="Show campaigns sharing <?php echo e($allocation->channelLabel()); ?>">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5" stroke-linecap="round"/><circle cx="12" cy="8" r=".9" fill="currentColor" stroke="none"/></svg>
+                                        </button>
+                                        <div class="ca-shared-card" hidden>
+                                            <span class="ca-shared-arrow" aria-hidden="true"></span>
+                                            <strong>Shared Channel</strong>
+                                            <p>This channel is also allocated to:</p>
+                                            <ul>
+                                                <?php $__currentLoopData = $sharedWith; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $sharedName): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                                    <li><?php echo e($sharedName); ?></li>
+                                                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                                            </ul>
+                                            <div class="ca-shared-foot">Total: <?php echo e(count($sharedWith)); ?> <?php echo e(count($sharedWith) === 1 ? 'campaign' : 'campaigns'); ?></div>
+                                        </div>
+                                    </span>
+                                <?php endif; ?>
+                            </span>
+                        </td>
                         <td><span class="num-align" data-label="Network"><?php echo e($allocation->network ?: '—'); ?></span></td>
                         <td class="num-col"><span class="num-align" data-label="Line Priority"><?php echo e($allocation->line_priority ?? '—'); ?></span></td>
                         <td class="num-col"><span class="num-align" data-label="Channel Count"><?php echo e($allocation->total_channel_allocated ?? '—'); ?></span></td>
@@ -381,6 +411,71 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    let openSharedPop = null;
+    const closeSharedPops = () => {
+        if (!openSharedPop) return;
+        const card = openSharedPop.querySelector('.ca-shared-card')
+            || document.querySelector('.ca-shared-card[data-shared-open]');
+        if (card) {
+            card.setAttribute('hidden', '');
+            card.removeAttribute('data-shared-open');
+            openSharedPop.appendChild(card);
+        }
+        openSharedPop.classList.remove('open');
+        openSharedPop.querySelector('.ca-shared-info')?.setAttribute('aria-expanded', 'false');
+        openSharedPop = null;
+    };
+    const placeSharedCard = (button, card) => {
+        const rect = button.getBoundingClientRect();
+        const width = 248;
+        let left = rect.left - 16;
+        left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+        card.style.position = 'fixed';
+        card.style.width = width + 'px';
+        card.style.left = left + 'px';
+        card.style.top = (rect.bottom + 10) + 'px';
+        const arrow = card.querySelector('.ca-shared-arrow');
+        if (arrow) {
+            const arrowLeft = rect.left + (rect.width / 2) - left - 6;
+            arrow.style.left = Math.max(18, Math.min(arrowLeft, width - 28)) + 'px';
+        }
+    };
+    document.addEventListener('click', (event) => {
+        if (!(event.target instanceof Element)) return;
+        const button = event.target.closest('.ca-shared-info');
+        if (!button) {
+            if (!event.target.closest('.ca-shared-card')) closeSharedPops();
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const pop = button.closest('.ca-shared-pop');
+        const card = pop?.querySelector('.ca-shared-card')
+            || (openSharedPop === pop ? document.querySelector('.ca-shared-card[data-shared-open]') : null);
+        if (!pop || !card) return;
+        const willOpen = openSharedPop !== pop;
+        closeSharedPops();
+        if (!willOpen) return;
+        document.body.appendChild(card);
+        card.setAttribute('data-shared-open', 'true');
+        card.removeAttribute('hidden');
+        pop.classList.add('open');
+        button.setAttribute('aria-expanded', 'true');
+        openSharedPop = pop;
+        placeSharedCard(button, card);
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeSharedPops();
+    });
+    window.addEventListener('scroll', (event) => {
+        if (!openSharedPop) return;
+        const card = document.querySelector('.ca-shared-card[data-shared-open]');
+        const button = openSharedPop.querySelector('.ca-shared-info');
+        if (!card || !button) return;
+        if (event.target instanceof Element && card.contains(event.target)) return;
+        placeSharedCard(button, card);
+    }, true);
+
     document.addEventListener('click', (event) => {
         if (!(event.target instanceof Element)) return;
         const button = event.target.closest('[data-ca-toggle]');

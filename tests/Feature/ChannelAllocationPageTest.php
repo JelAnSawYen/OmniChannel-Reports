@@ -555,6 +555,47 @@ class ChannelAllocationPageTest extends TestCase
         $this->get('/campaigns')->assertOk()->assertDontSee('PDC Only Campaign');
     }
 
+    public function test_shared_channel_badge_lists_the_other_campaigns(): void
+    {
+        $this->actingAs($this->admin);
+        $this->createSipChannel('SIP_MAIN_01', 'Smart SIM', 1);
+        $this->createSipChannel('GSM-PORT_5', 'TNT', 4);
+
+        $ids = [];
+        foreach (['Apple', 'Samsung', 'BPO Inbound', 'Test Campaign'] as $index => $name) {
+            $ids[$name] = ChannelAllocationCampaign::create([
+                'name' => $name,
+                'fte' => 23,
+                'listed_in_campaigns' => true,
+                'listed_in_channel_allocation' => true,
+                'sort_order' => $index + 1,
+            ])->id;
+            $this->post('/channel-allocation/'.$ids[$name].'/allocations', [
+                'channel_type' => 'sip',
+                'channel' => 'SIP_MAIN_01',
+                'line_priority' => 1,
+            ])->assertRedirect();
+        }
+        $this->post('/channel-allocation/'.$ids['Apple'].'/allocations', [
+            'channel_type' => 'sip',
+            'channel' => 'GSM-PORT_5',
+            'line_priority' => 1,
+        ])->assertRedirect();
+
+        $html = $this->get('/channel-allocation')->assertOk()->getContent();
+        $this->assertSame(4, substr_count($html, 'class="ca-shared-badge"'));
+        $apple = Str::between($html, 'data-label="Channel">SIP_MAIN_01</span>', 'data-label="Channel">GSM-PORT_5</span>');
+        $this->assertStringContainsString('>Shared</span>', $apple);
+        $this->assertStringContainsString('Shared Channel', $apple);
+        $this->assertStringContainsString('This channel is also allocated to:', $apple);
+        $this->assertStringContainsString('<li>Samsung</li>', $apple);
+        $this->assertStringContainsString('<li>BPO Inbound</li>', $apple);
+        $this->assertStringContainsString('<li>Test Campaign</li>', $apple);
+        $this->assertStringNotContainsString('<li>Apple</li>', $apple);
+        $this->assertStringContainsString('Total: 3 campaigns', $apple);
+        $this->assertDoesNotMatchRegularExpression('/data-label="Channel">GSM-PORT_5<\/span>\s*<span class="ca-shared-badge">/', $html);
+    }
+
     private function createSipChannel(string $name, string $network, int $count): SipChannel
     {
         return SipChannel::create([
