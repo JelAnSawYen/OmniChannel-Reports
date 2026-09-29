@@ -138,6 +138,7 @@ button,input,select,textarea {
 .main {
     flex:1;
     min-width:0;
+    margin-left:var(--sidebar);
     background:var(--canvas);
 }
 
@@ -1043,6 +1044,9 @@ textarea.form-control {
     width:70px;
     flex-basis:70px;
 }
+.sidebar-collapsed .main {
+    margin-left:70px;
+}
 
 .sidebar-collapsed .brand-title,.sidebar-collapsed .brand-subtitle,.sidebar-collapsed .section-label,.sidebar-collapsed .nav-item span:last-child {
     display:none;
@@ -1079,6 +1083,10 @@ textarea.form-control {
         transform:translateX(-100%);
         width:216.25px;
         box-shadow:13.75px 0 37.5px rgba(15,23,42,.15);
+    }
+    .main,
+    .sidebar-collapsed .main {
+        margin-left:0;
     }
     .sidebar.mobile-open {
         transform:translateX(0);
@@ -1575,10 +1583,13 @@ td.loc-records-col { vertical-align:middle; }
 .sidebar {
     display: flex;
     flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
     height: 100vh;
     max-height: 100vh;
     min-height: 100vh;
-    align-self: stretch;
+    align-self: flex-start;
     overflow: hidden;
     overscroll-behavior: contain;
     scrollbar-width: none;
@@ -2245,9 +2256,9 @@ table[aria-label="Channel Utilization"] td.num-col{text-align:center}
 .ca-shared-card { position: fixed; z-index: 80; width: 248px; padding: 14px 16px 12px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; box-shadow: 0 10px 28px rgba(15,23,42,.12); text-align: left; color: #0f172a; }
 .ca-shared-card strong { display: block; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
 .ca-shared-card p { margin: 0 0 8px; font-size: 13px; font-weight: 500; color: #334155; }
-.ca-shared-card ul { margin: 0 0 10px; padding: 0 0 0 18px; max-height: 110px; overflow-y: auto; }
-.ca-shared-card li { margin: 0; height: 22px; line-height: 22px; font-size: 13px; font-weight: 600; color: #334155; }
-.ca-shared-foot { border-top: 1px solid #e2e8f0; padding-top: 8px; font-size: 13px; font-weight: 700; color: var(--blue); }
+.ca-shared-card ul { margin: 0 0 10px; padding: 0; max-height: 110px; overflow-y: auto; list-style: none; }
+.ca-shared-card li { margin: 0; height: 22px; line-height: 22px; font-size: 13px; font-weight: 600; color: var(--blue); }
+.ca-shared-foot { border-top: 1px solid #e2e8f0; padding-top: 8px; font-size: 13px; font-weight: 700; color: #0f172a; }
 .ca-shared-arrow { position: absolute; top: -6px; width: 12px; height: 12px; background: #fff; border-left: 1px solid #e2e8f0; border-top: 1px solid #e2e8f0; transform: rotate(45deg); }
 .ca-actions-head {
     display: inline-flex;

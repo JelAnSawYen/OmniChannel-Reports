@@ -420,6 +420,7 @@ document.addEventListener('DOMContentLoaded', () => {
             card.setAttribute('hidden', '');
             card.removeAttribute('data-shared-open');
             openSharedPop.appendChild(card);
+            document.body.style.paddingBottom = '';
         }
         openSharedPop.classList.remove('open');
         openSharedPop.querySelector('.ca-shared-info')?.setAttribute('aria-expanded', 'false');
@@ -430,15 +431,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const width = 248;
         let left = rect.left - 16;
         left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
-        card.style.position = 'fixed';
+        card.style.position = 'absolute';
         card.style.width = width + 'px';
-        card.style.left = left + 'px';
-        card.style.top = (rect.bottom + 10) + 'px';
+        card.style.left = (left + window.scrollX) + 'px';
+        card.style.top = (rect.bottom + window.scrollY + 10) + 'px';
         const arrow = card.querySelector('.ca-shared-arrow');
         if (arrow) {
             const arrowLeft = rect.left + (rect.width / 2) - left - 6;
             arrow.style.left = Math.max(18, Math.min(arrowLeft, width - 28)) + 'px';
         }
+        const cardBottom = rect.bottom + window.scrollY + 10 + card.offsetHeight + 24;
+        const currentPad = parseFloat(document.body.style.paddingBottom) || 0;
+        const shortfall = cardBottom - (document.documentElement.scrollHeight - currentPad);
+        document.body.style.paddingBottom = shortfall > 0 ? Math.ceil(shortfall) + 'px' : '';
     };
     document.addEventListener('click', (event) => {
         if (!(event.target instanceof Element)) return;
