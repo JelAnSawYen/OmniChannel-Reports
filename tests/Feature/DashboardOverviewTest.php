@@ -117,7 +117,7 @@ class DashboardOverviewTest extends TestCase
 
         $json = $this->actingAs($this->admin)->getJson('/dashboard/snapshot')->assertOk();
         $json->assertJsonPath('kpis.campaigns.value', 2)
-            ->assertJsonPath('kpis.gateways.value', 240)
+            ->assertJsonPath('kpis.gateways.value', 0)
             ->assertJsonPath('kpis.channels.value', 500)
             ->assertJsonPath('kpis.sims.value', 3)
             ->assertJsonPath('kpis.globe.value', 2)
@@ -217,7 +217,7 @@ class DashboardOverviewTest extends TestCase
         $this->assertSame(50, $payload['trend']['total'][29]);
     }
 
-    public function test_gsm_gateway_kpi_sums_channel_allocation_gsm_channel_counts(): void
+    public function test_gsm_gateway_kpi_counts_hostnames_on_the_gsm_gateway_tab(): void
     {
         $campaign = ChannelAllocationCampaign::create(['name' => 'GSM KPI']);
         ChannelAllocation::create([
@@ -234,12 +234,6 @@ class DashboardOverviewTest extends TestCase
             'network' => 'Smart SIM',
             'total_channel_allocated' => 10,
         ]);
-        ChannelAllocation::create([
-            'campaign_id' => $campaign->id,
-            'channel_allocation' => 'ETPI_SIP',
-            'network' => 'Eastern SIP',
-            'total_channel_allocated' => 8,
-        ]);
         MediaGateway::create([
             'hostname' => 'pas-one',
             'site_name' => 'Estancia',
@@ -249,17 +243,34 @@ class DashboardOverviewTest extends TestCase
             'database' => 'asteriskcdrdb',
             'port' => '99',
         ]);
+        MediaGateway::create([
+            'hostname' => 'pas-two',
+            'site_name' => 'Alcar',
+            'site_code' => 'PAS-KPI-2',
+            'ip_address' => '10.28.240.32',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'port' => '99',
+        ]);
+        MediaGateway::create([
+            'hostname' => '   ',
+            'site_name' => 'CTN',
+            'site_code' => 'PAS-BLANK',
+            'ip_address' => '10.28.240.33',
+            'username' => 'root',
+            'database' => 'asteriskcdrdb',
+            'port' => '99',
+        ]);
 
         $payload = app(DashboardOverviewService::class)->payload();
 
-        $this->assertSame(42, $payload['kpis']['gateways']['value']);
-        $this->assertSame('42', $payload['kpis']['gateways']['display']);
+        $this->assertSame(2, $payload['kpis']['gateways']['value']);
+        $this->assertSame('2', $payload['kpis']['gateways']['display']);
 
-        ChannelAllocation::query()->where('media_gateway', 'PAS-KPI-2')->delete();
-        $campaign->refreshTotalChannelsAllocated();
+        MediaGateway::query()->where('hostname', 'pas-two')->delete();
 
         $afterDelete = app(DashboardOverviewService::class)->payload();
-        $this->assertSame(32, $afterDelete['kpis']['gateways']['value']);
+        $this->assertSame(1, $afterDelete['kpis']['gateways']['value']);
     }
 
     public function test_inbound_kpis_count_every_phone_number_not_database_rows(): void

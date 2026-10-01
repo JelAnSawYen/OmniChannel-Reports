@@ -6,6 +6,7 @@ use App\Models\ChannelAllocation;
 use App\Models\ChannelAllocationCampaign;
 use App\Models\DefectiveGsm;
 use App\Models\GlobeSim;
+use App\Models\MediaGateway;
 use App\Models\ProgramInboundNumber;
 use App\Models\SipChannel;
 use App\Models\SmartSim;
@@ -39,8 +40,7 @@ class DashboardOverviewService
         $trend = $this->trend($allocations);
 
         $campaignCount = ChannelAllocationCampaign::count();
-        $typedCounts = $this->summedChannelCountsByType($allocations);
-        $gatewayChannels = $typedCounts['gsm'];
+        $gatewayCount = $this->gsmHostnameCount();
         $sipChannels = (int) SipChannel::query()->sum('channel_count');
         $globeCount = GlobeSim::count();
         $smartCount = SmartSim::count();
@@ -54,8 +54,8 @@ class DashboardOverviewService
                 'display' => number_format($campaignCount),
             ],
             'gateways' => [
-                'value' => $gatewayChannels,
-                'display' => number_format($gatewayChannels),
+                'value' => $gatewayCount,
+                'display' => number_format($gatewayCount),
             ],
             'channels' => [
                 'value' => $sipChannels,
@@ -124,6 +124,16 @@ class DashboardOverviewService
         $payload['fingerprint'] = $this->fingerprint($payload);
 
         return $payload;
+    }
+
+    /**
+     * Hostnames shown on the GSM Gateway tab. A blank hostname is shown as a dash and is not counted.
+     */
+    private function gsmHostnameCount(): int
+    {
+        return MediaGateway::query()
+            ->whereRaw("TRIM(COALESCE(hostname, '')) <> ''")
+            ->count();
     }
 
     /**

@@ -53,10 +53,16 @@ class AppServiceProvider extends ServiceProvider
 
         View::composer('layouts.app', AppLayoutComposer::class);
 
-        if (! $this->app->environment('testing') && Schema::hasTable('mail_settings')) {
-            $settings = MailSetting::query()->first();
-            if ($settings && filled($settings->username)) {
-                $settings->applyToConfig();
+        if (! $this->app->environment('testing') && $this->databasePortIsOpen()) {
+            try {
+                if (Schema::hasTable('mail_settings')) {
+                    $settings = MailSetting::query()->first();
+                    if ($settings && filled($settings->username)) {
+                        $settings->applyToConfig();
+                    }
+                }
+            } catch (\Throwable) {
+                // Artisan and the site still start when MySQL is down or slow.
             }
         }
 
@@ -73,5 +79,28 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('sensitive', function (Request $request) {
             return Limit::perMinute(6)->by(($request->user()?->id ?? $request->ip()).'|sensitive|'.$request->path());
         });
+    }
+
+    private function databasePortIsOpen(): bool
+    {
+        $name = (string) config('database.default');
+        $config = config("database.connections.{$name}");
+        if (! is_array($config) || ($config['driver'] ?? '') === 'sqlite') {
+            return true;
+        }
+
+        $host = (string) ($config['host'] ?? '127.0.0.1');
+        if ($host === 'localhost') {
+            $host = '127.0.0.1';
+        }
+        $port = (int) ($config['port'] ?? 3306);
+        $socket = @fsockopen($host, $port, $errno, $errstr, 1.5);
+        if ($socket === false) {
+            return false;
+        }
+
+        fclose($socket);
+
+        return true;
     }
 }
